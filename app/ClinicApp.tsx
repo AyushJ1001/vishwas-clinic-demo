@@ -400,11 +400,20 @@ function BloodPressureInput({
 
 function Shell({
   active,
+  doctorName = "Dr. M. V. Apte",
+  onDoctorChange,
   children,
 }: {
   active: RouteName;
+  doctorName?: string;
+  onDoctorChange?: (doctor: string) => void;
   children: React.ReactNode;
 }) {
+  const doctors = [
+    "Dr. M. V. Apte",
+    "Dr. Shreya Kulkarni",
+    "Dr. Rohan Deshmukh",
+  ];
   return (
     <main className="w-full max-w-full overflow-x-hidden bg-[#f4f1e9] text-[#15362f]">
       <nav className="sticky top-0 z-50 border-b border-[#15362f]/10 bg-[#f4f1e9]/92 backdrop-blur-xl">
@@ -433,9 +442,23 @@ function Shell({
               </Link>
             ))}
           </div>
-          <button className="flex items-center gap-2 rounded-full border border-[#15362f]/15 bg-white px-4 py-2 text-xs font-semibold">
-            Dr. M. V. Apte <CaretDown size={13} />
-          </button>
+          <label className="relative flex items-center rounded-full border border-[#15362f]/15 bg-white px-4 py-2 text-xs font-semibold">
+            <span className="sr-only">Select doctor</span>
+            <select
+              aria-label="Select doctor"
+              value={doctorName}
+              onChange={(event) => onDoctorChange?.(event.target.value)}
+              className="appearance-none bg-transparent pr-5 outline-none"
+            >
+              {doctors.map((doctor) => (
+                <option key={doctor}>{doctor}</option>
+              ))}
+            </select>
+            <CaretDown
+              className="pointer-events-none absolute right-3"
+              size={13}
+            />
+          </label>
         </div>
         <div className="flex gap-2 overflow-x-auto px-5 pb-3 md:hidden">
           {routes.map((route) => (
@@ -467,6 +490,7 @@ function PrescriptionPage() {
   const [systolic, setSystolic] = useState("118");
   const [diastolic, setDiastolic] = useState("76");
   const [spo2, setSpo2] = useState("98");
+  const [doctorName, setDoctorName] = useState("Dr. M. V. Apte");
   const [complaints, setComplaints] = useState<string[]>([
     "Low-grade fever",
     "Dry cough",
@@ -484,6 +508,13 @@ function PrescriptionPage() {
     "Paracetamol 500 mg tablet",
     "Levocetirizine 5 mg tablet",
   ]);
+  const [drugDirections, setDrugDirections] = useState<Record<string, string>>(
+    {},
+  );
+  const [drugDurations, setDrugDurations] = useState<Record<string, string>>(
+    {},
+  );
+  const [drugMethods, setDrugMethods] = useState<Record<string, string>>({});
   const [visitType, setVisitType] = useState<"new" | "followup" | null>(null);
   useGSAP(
     () => {
@@ -505,7 +536,11 @@ function PrescriptionPage() {
     { scope: root },
   );
   return (
-    <Shell active="prescription">
+    <Shell
+      active="prescription"
+      doctorName={doctorName}
+      onDoctorChange={setDoctorName}
+    >
       <div ref={root}>
         <header className="mx-auto grid max-w-[1500px] gap-8 px-5 pb-14 pt-14 lg:grid-cols-[1.1fr_.9fr] lg:px-10 lg:pb-20 lg:pt-20">
           <div>
@@ -685,7 +720,7 @@ function PrescriptionPage() {
                 {drugs.map((drug, i) => (
                   <div
                     key={drug}
-                    className="grid gap-3 rounded-2xl border border-[#15362f]/10 bg-white p-4 sm:grid-cols-[1fr_110px_100px_auto]"
+                    className="grid gap-3 rounded-2xl border border-[#15362f]/10 bg-white p-4 sm:grid-cols-[1fr_110px_100px_120px_auto]"
                   >
                     <div>
                       <b className="text-sm">
@@ -696,12 +731,73 @@ function PrescriptionPage() {
                           "Composition from medicine catalog"}
                       </p>
                     </div>
-                    <div className="select-field min-h-10 py-2 text-xs">
-                      1–0–1 <CaretDown size={12} />
-                    </div>
-                    <div className="select-field min-h-10 py-2 text-xs">
-                      5 days <CaretDown size={12} />
-                    </div>
+                    <select
+                      aria-label={`${drug} dose`}
+                      className="input-field min-h-10 py-2 text-xs"
+                      value={drugDirections[drug] ?? "1–0–1"}
+                      onChange={(event) =>
+                        setDrugDirections({
+                          ...drugDirections,
+                          [drug]: event.target.value,
+                        })
+                      }
+                    >
+                      {[
+                        "1–0–1",
+                        "1–0–0",
+                        "0–0–1",
+                        "1–1–1",
+                        "0–1–0",
+                        "As needed",
+                      ].map((option) => (
+                        <option key={option}>{option}</option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label={`${drug} duration`}
+                      className="input-field min-h-10 py-2 text-xs"
+                      value={drugDurations[drug] ?? "5 days"}
+                      onChange={(event) =>
+                        setDrugDurations({
+                          ...drugDurations,
+                          [drug]: event.target.value,
+                        })
+                      }
+                    >
+                      {[
+                        "1 day",
+                        "3 days",
+                        "5 days",
+                        "7 days",
+                        "10 days",
+                        "14 days",
+                        "Until review",
+                      ].map((option) => (
+                        <option key={option}>{option}</option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label={`${drug} method`}
+                      className="input-field min-h-10 py-2 text-xs"
+                      value={drugMethods[drug] ?? "After food"}
+                      onChange={(event) =>
+                        setDrugMethods({
+                          ...drugMethods,
+                          [drug]: event.target.value,
+                        })
+                      }
+                    >
+                      {[
+                        "After food",
+                        "Before food",
+                        "With water",
+                        "At bedtime",
+                        "As needed",
+                        "As directed",
+                      ].map((option) => (
+                        <option key={option}>{option}</option>
+                      ))}
+                    </select>
                     <button
                       onClick={() =>
                         setDrugs(drugs.filter((item) => item !== drug))
@@ -735,6 +831,10 @@ function PrescriptionPage() {
               pulse={pulse}
               bloodPressure={`${systolic}/${diastolic}`}
               spo2={spo2}
+              doctorName={doctorName}
+              drugDirections={drugDirections}
+              drugDurations={drugDurations}
+              drugMethods={drugMethods}
             />
           </div>
         </section>
@@ -755,6 +855,10 @@ function PrescriptionPreview({
   pulse,
   bloodPressure,
   spo2,
+  doctorName,
+  drugDirections,
+  drugDurations,
+  drugMethods,
 }: {
   complaints: string[];
   diagnosis: string;
@@ -767,6 +871,10 @@ function PrescriptionPreview({
   pulse: string;
   bloodPressure: string;
   spo2: string;
+  doctorName: string;
+  drugDirections: Record<string, string>;
+  drugDurations: Record<string, string>;
+  drugMethods: Record<string, string>;
 }) {
   return (
     <div className="rounded-[30px] bg-[#123930] p-5 text-white shadow-[0_30px_80px_rgba(21,54,47,.2)]">
@@ -785,7 +893,7 @@ function PrescriptionPreview({
           </h2>
           <div className="mt-2 grid grid-cols-[1fr_auto] items-start border-b-2 border-[#202c29] pb-2 text-left">
             <div>
-              <b className="text-[11px]">Dr Makarand Vishwas Apte</b>
+              <b className="text-[11px]">{doctorName}</b>
               <p className="text-[8px]">MBBS, MD (Anatomy) · Reg. No. 87352</p>
               <b className="text-[9px]">Mobile: 9730034907</b>
             </div>
@@ -861,7 +969,11 @@ function PrescriptionPreview({
                     {ingredientByMedicine[drug] ||
                       "Composition from medicine catalog"}
                   </p>
-                  <p className="mt-1">1–0–1 · after food · 5 days</p>
+                  <p className="mt-1">
+                    {drugDirections[drug] ?? "1–0–1"} ·{" "}
+                    {drugMethods[drug] ?? "After food"} ·{" "}
+                    {drugDurations[drug] ?? "5 days"}
+                  </p>
                 </div>
               ))}
             </div>
