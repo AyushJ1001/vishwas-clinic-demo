@@ -980,7 +980,7 @@ function PrescriptionPreview({
           <section className="p-3">
             <div className="flex items-start justify-between">
               <span className="rx-mark" aria-label="Prescription">
-                Rx
+                ℞
               </span>
               <span className="text-[6px]">
                 Read the instructions carefully

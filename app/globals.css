@@ -166,12 +166,12 @@ button {
   display: inline-block;
   color: #202c29;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 3.5rem;
+  font-size: 4rem;
   font-style: italic;
   font-weight: 400;
-  letter-spacing: -0.16em;
+  letter-spacing: normal;
   line-height: 0.72;
-  transform: translateY(-0.08em) scaleX(0.92);
+  transform: translateY(-0.04em) scaleX(0.95);
   transform-origin: left center;
 }
 .primary-action {
