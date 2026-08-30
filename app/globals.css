@@ -12,4 +12,10 @@ button { cursor: pointer; }
 .tag-field { justify-content: flex-start; gap: .4rem; }
 .tag-field span { display: inline-flex; align-items: center; gap: .3rem; border-radius: 999px; background: #e9e4d8; padding: .35rem .55rem; font-size: .72rem; font-weight: 600; }
 .paper { position: relative; border-radius: 2px; background-image: linear-gradient(rgba(21,54,47,.018) 1px, transparent 1px); background-size: 100% 16px; }
+.eyebrow { margin-bottom: 1rem; font-size: .7rem; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; color: #b85a36; }
+.picker-trigger { display: flex; min-height: 50px; width: 100%; align-items: center; justify-content: space-between; border: 1px solid rgba(21,54,47,.13); border-radius: 15px; background: #fff; padding: .85rem 1rem; text-align: left; font-size: .875rem; }
+.picker-panel { position: absolute; left: 0; right: 0; top: calc(100% + .45rem); z-index: 80; overflow: hidden; border: 1px solid rgba(21,54,47,.15); border-radius: 18px; background: #fffef9; box-shadow: 0 22px 60px rgba(21,54,47,.18); }
+.selected-chip { display: inline-flex; align-items: center; gap: .35rem; border-radius: 999px; background: #e9e4d8; padding: .35rem .6rem; font-size: .7rem; font-weight: 700; }
+.small-input { width: 100%; min-width: 0; border: 1px solid rgba(21,54,47,.12); border-radius: 12px; background: #fff; padding: .7rem .6rem; font-size: .77rem; outline: none; }
+.primary-action { display: flex; width: fit-content; align-items: center; gap: .55rem; border-radius: 999px; background: #d85f39; padding: .85rem 1.3rem; color: white; font-size: .85rem; font-weight: 800; box-shadow: 0 12px 28px rgba(216,95,57,.2); }
 @media (max-width: 640px) { .paper { min-height: 560px; } }
