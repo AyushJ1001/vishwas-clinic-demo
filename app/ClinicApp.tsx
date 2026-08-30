@@ -400,7 +400,7 @@ function BloodPressureInput({
 
 function Shell({
   active,
-  doctorName = "Dr. M. V. Apte",
+  doctorName = "Dr. Makarand V. Apte",
   onDoctorChange,
   children,
 }: {
@@ -409,11 +409,7 @@ function Shell({
   onDoctorChange?: (doctor: string) => void;
   children: React.ReactNode;
 }) {
-  const doctors = [
-    "Dr. M. V. Apte",
-    "Dr. Shreya Kulkarni",
-    "Dr. Rohan Deshmukh",
-  ];
+  const doctors = ["Dr. Makarand V. Apte", "Dr. Gauri M. Apte"];
   return (
     <main className="w-full max-w-full overflow-x-hidden bg-[#f4f1e9] text-[#15362f]">
       <nav className="sticky top-0 z-50 border-b border-[#15362f]/10 bg-[#f4f1e9]/92 backdrop-blur-xl">
@@ -490,7 +486,7 @@ function PrescriptionPage() {
   const [systolic, setSystolic] = useState("118");
   const [diastolic, setDiastolic] = useState("76");
   const [spo2, setSpo2] = useState("98");
-  const [doctorName, setDoctorName] = useState("Dr. M. V. Apte");
+  const [doctorName, setDoctorName] = useState("Dr. Makarand V. Apte");
   const [complaints, setComplaints] = useState<string[]>([
     "Low-grade fever",
     "Dry cough",
@@ -1038,7 +1034,7 @@ function ReceiptPage() {
             </p>
             <div className="mt-20 flex justify-between border-t pt-4 text-xs">
               <span>Receipt VC-R-0862</span>
-              <span>Dr. M. V. Apte</span>
+              <span>Dr. Makarand V. Apte</span>
             </div>
           </A5Document>
         }
@@ -1123,7 +1119,9 @@ function CertificatePage() {
               On examination today, I found her {isFit ? "fit" : "not fit"} to
               resume duties from the next working day.
             </p>
-            <p className="mt-24 text-right text-sm font-bold">Dr. M. V. Apte</p>
+            <p className="mt-24 text-right text-sm font-bold">
+              Dr. Makarand V. Apte
+            </p>
           </A5Document>
         }
       />
