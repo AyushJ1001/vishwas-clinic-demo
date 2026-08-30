@@ -76,6 +76,19 @@ function CatalogPicker({
   );
   const values = Array.isArray(value) ? value : value ? [value] : [];
   useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        setAdding(false);
+        setQuery("");
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
+  useEffect(() => {
     let active = true;
     fetch(`/api/catalog?catalog=${catalogName}`)
       .then((response) => (response.ok ? response.json() : Promise.reject()))
@@ -310,6 +323,81 @@ function CatalogPicker({
   );
 }
 
+function UnitInput({
+  label,
+  value,
+  unit,
+  onChange,
+  step = "any",
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  onChange: (value: string) => void;
+  step?: string;
+}) {
+  return (
+    <label>
+      <span className="mb-1.5 block text-[10px] uppercase tracking-[.12em] text-[#6d7e77]">
+        {label}
+      </span>
+      <span className="unit-input-wrap">
+        <input
+          className="small-input unit-input"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          inputMode="decimal"
+          step={step}
+          aria-label={label}
+        />
+        <span className="unit-suffix" aria-hidden="true">
+          {unit}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function BloodPressureInput({
+  systolic,
+  diastolic,
+  onSystolicChange,
+  onDiastolicChange,
+}: {
+  systolic: string;
+  diastolic: string;
+  onSystolicChange: (value: string) => void;
+  onDiastolicChange: (value: string) => void;
+}) {
+  return (
+    <label>
+      <span className="mb-1.5 block text-[10px] uppercase tracking-[.12em] text-[#6d7e77]">
+        BP
+      </span>
+      <span className="bp-input-wrap">
+        <input
+          className="small-input"
+          value={systolic}
+          onChange={(event) => onSystolicChange(event.target.value)}
+          inputMode="numeric"
+          aria-label="Systolic blood pressure"
+        />
+        <span className="bp-divider" aria-hidden="true">
+          /
+        </span>
+        <input
+          className="small-input"
+          value={diastolic}
+          onChange={(event) => onDiastolicChange(event.target.value)}
+          inputMode="numeric"
+          aria-label="Diastolic blood pressure"
+        />
+      </span>
+      <span className="mt-1 block text-[10px] text-[#7b8b85]">mmHg</span>
+    </label>
+  );
+}
+
 function Shell({
   active,
   children,
@@ -335,6 +423,10 @@ function Shell({
               <Link
                 key={route.key}
                 href={route.href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  window.location.assign(route.href);
+                }}
                 className={`rounded-full px-4 py-2 text-xs font-semibold transition ${active === route.key ? "bg-[#15362f] text-white" : "hover:bg-[#ece7dc]"}`}
               >
                 {route.label}
@@ -350,6 +442,10 @@ function Shell({
             <Link
               key={route.key}
               href={route.href}
+              onClick={(event) => {
+                event.preventDefault();
+                window.location.assign(route.href);
+              }}
               className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold ${active === route.key ? "bg-[#15362f] text-white" : "bg-white"}`}
             >
               {route.label}
@@ -364,6 +460,13 @@ function Shell({
 
 function PrescriptionPage() {
   const root = useRef<HTMLDivElement>(null);
+  const [patientName, setPatientName] = useState("Ananya Deshmukh");
+  const [weight, setWeight] = useState("62");
+  const [temperature, setTemperature] = useState("100.2");
+  const [pulse, setPulse] = useState("88");
+  const [systolic, setSystolic] = useState("118");
+  const [diastolic, setDiastolic] = useState("76");
+  const [spo2, setSpo2] = useState("98");
   const [complaints, setComplaints] = useState<string[]>([
     "Low-grade fever",
     "Dry cough",
@@ -468,7 +571,11 @@ function PrescriptionPage() {
             <div className="grid gap-5 sm:grid-cols-2">
               <label>
                 <span className="field-label">Patient</span>
-                <input className="input-field" defaultValue="Ananya Deshmukh" />
+                <input
+                  className="input-field"
+                  value={patientName}
+                  onChange={(event) => setPatientName(event.target.value)}
+                />
               </label>
               <label>
                 <span className="field-label">Visit type</span>
@@ -489,20 +596,36 @@ function PrescriptionPage() {
               </label>
             </div>
             <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-5">
-              {[
-                ["Weight", "62 kg"],
-                ["Temperature", "100.2 °F"],
-                ["Pulse", "88 /min"],
-                ["BP", "118/76"],
-                ["SpO₂", "98%"],
-              ].map(([label, value]) => (
-                <label key={label}>
-                  <span className="mb-1.5 block text-[10px] uppercase tracking-[.12em] text-[#6d7e77]">
-                    {label}
-                  </span>
-                  <input className="small-input" defaultValue={value} />
-                </label>
-              ))}
+              <UnitInput
+                label="Weight"
+                value={weight}
+                unit="kg"
+                onChange={setWeight}
+              />
+              <UnitInput
+                label="Temperature"
+                value={temperature}
+                unit="°F"
+                onChange={setTemperature}
+              />
+              <UnitInput
+                label="Pulse"
+                value={pulse}
+                unit="/min"
+                onChange={setPulse}
+              />
+              <BloodPressureInput
+                systolic={systolic}
+                diastolic={diastolic}
+                onSystolicChange={setSystolic}
+                onDiastolicChange={setDiastolic}
+              />
+              <UnitInput
+                label="SpO₂"
+                value={spo2}
+                unit="%"
+                onChange={setSpo2}
+              />
             </div>
             <div className="mt-8 grid gap-6 sm:grid-cols-2">
               <CatalogPicker
@@ -606,6 +729,12 @@ function PrescriptionPage() {
               adviceItems={selectedAdvice}
               tests={tests}
               drugs={drugs}
+              patientName={patientName}
+              weight={weight}
+              temperature={temperature}
+              pulse={pulse}
+              bloodPressure={`${systolic}/${diastolic}`}
+              spo2={spo2}
             />
           </div>
         </section>
@@ -620,12 +749,24 @@ function PrescriptionPreview({
   adviceItems,
   tests,
   drugs,
+  patientName,
+  weight,
+  temperature,
+  pulse,
+  bloodPressure,
+  spo2,
 }: {
   complaints: string[];
   diagnosis: string;
   adviceItems: string[];
   tests: string[];
   drugs: string[];
+  patientName: string;
+  weight: string;
+  temperature: string;
+  pulse: string;
+  bloodPressure: string;
+  spo2: string;
 }) {
   return (
     <div className="rounded-[30px] bg-[#123930] p-5 text-white shadow-[0_30px_80px_rgba(21,54,47,.2)]">
@@ -670,17 +811,17 @@ function PrescriptionPreview({
         </header>
         <div className="mt-3 grid grid-cols-[1.4fr_.6fr_.6fr] text-[8px]">
           <span>
-            Name: <b>Ananya Deshmukh</b>
+            Name: <b>{patientName || "—"}</b>
           </span>
           <span>Age/Sex: 32/F</span>
           <span>Date: 30/08/26</span>
         </div>
         <div className="mt-3 grid grid-cols-5 text-[8px]">
-          <span>Wt: 62</span>
-          <span>Temp: 100.2</span>
-          <span>Pulse: 88</span>
-          <span>BP: 118/76</span>
-          <span>SpO₂: 98%</span>
+          <span>Wt: {weight || "—"}</span>
+          <span>Temp: {temperature || "—"} °F</span>
+          <span>Pulse: {pulse || "—"} /min</span>
+          <span>BP: {bloodPressure || "—"}</span>
+          <span>SpO₂: {spo2 || "—"}%</span>
         </div>
         <p className="mt-4 text-[8px]">
           <b>Major complaints:</b> {complaints.join(", ")}
@@ -737,6 +878,7 @@ function PrescriptionPreview({
 
 function ReceiptPage() {
   const [amount, setAmount] = useState("600");
+  const [patientName, setPatientName] = useState("Ananya Deshmukh");
   return (
     <Shell active="receipts">
       <RouteHeader
@@ -749,7 +891,11 @@ function ReceiptPage() {
           <>
             <label>
               <span className="field-label">Patient</span>
-              <input className="input-field" defaultValue="Ananya Deshmukh" />
+              <input
+                className="input-field"
+                value={patientName}
+                onChange={(event) => setPatientName(event.target.value)}
+              />
             </label>
             <label>
               <span className="field-label">Receipt number</span>
@@ -776,7 +922,7 @@ function ReceiptPage() {
           <A5Document title="RECEIPT">
             <p className="mt-12 text-center text-sm leading-9">
               Received with thanks a sum of rupees <b>₹{amount || "0"}</b> from{" "}
-              <b>Ms. Ananya Deshmukh</b> for consultation charges today.
+              <b>Ms. {patientName || "—"}</b> for consultation charges today.
             </p>
             <div className="mt-20 flex justify-between border-t pt-4 text-xs">
               <span>Receipt VC-R-0862</span>
@@ -790,6 +936,13 @@ function ReceiptPage() {
 }
 
 function CertificatePage() {
+  const [patientName, setPatientName] = useState("Ananya Deshmukh");
+  const [diagnosis, setDiagnosis] = useState(
+    "Viral upper respiratory tract infection",
+  );
+  const [treatmentDate, setTreatmentDate] = useState("26/08/26");
+  const [restDays, setRestDays] = useState("4 days");
+  const [isFit, setIsFit] = useState(true);
   return (
     <Shell active="certificate">
       <RouteHeader
@@ -802,28 +955,44 @@ function CertificatePage() {
           <>
             <label>
               <span className="field-label">Patient</span>
-              <input className="input-field" defaultValue="Ananya Deshmukh" />
+              <input
+                className="input-field"
+                value={patientName}
+                onChange={(event) => setPatientName(event.target.value)}
+              />
             </label>
             <CatalogPicker
               label="Diagnosis"
               catalogName="diagnoses"
               groups={diagnoses}
-              value="Viral upper respiratory tract infection"
-              onChange={() => {}}
+              value={diagnosis}
+              onChange={(value) => setDiagnosis(value as string)}
             />
             <div className="grid grid-cols-2 gap-4">
               <label>
                 <span className="field-label">Under treatment since</span>
-                <input className="input-field" defaultValue="26/08/26" />
+                <input
+                  className="input-field"
+                  value={treatmentDate}
+                  onChange={(event) => setTreatmentDate(event.target.value)}
+                />
               </label>
               <label>
                 <span className="field-label">Rest advised</span>
-                <input className="input-field" defaultValue="4 days" />
+                <input
+                  className="input-field"
+                  value={restDays}
+                  onChange={(event) => setRestDays(event.target.value)}
+                />
               </label>
             </div>
             <label className="flex items-center gap-3 rounded-2xl border border-[#15362f]/10 bg-white p-4 text-sm">
-              <input type="checkbox" defaultChecked /> Fit to resume duties from
-              next working day
+              <input
+                type="checkbox"
+                checked={isFit}
+                onChange={(event) => setIsFit(event.target.checked)}
+              />{" "}
+              Fit to resume duties from next working day
             </label>
             <button className="primary-action">
               <SealCheck size={18} /> Generate medical certificate
@@ -833,14 +1002,14 @@ function CertificatePage() {
         preview={
           <A5Document title="FITNESS CERTIFICATE">
             <p className="mt-10 text-sm leading-8">
-              This is to certify that <b>Ms. Ananya Deshmukh</b> has been under
-              my treatment since <b>26/08/26</b>. She was suffering from{" "}
-              <b>viral upper respiratory tract infection</b> and was advised
-              rest for <b>4 days</b>.
+              This is to certify that <b>Ms. {patientName || "—"}</b> has been
+              under my treatment since <b>{treatmentDate || "—"}</b>. She was
+              suffering from <b>{diagnosis || "—"}</b> and was advised rest for{" "}
+              <b>{restDays || "—"}</b>.
             </p>
             <p className="mt-5 text-sm leading-8">
-              On examination today, I found her fit to resume duties from the
-              next working day.
+              On examination today, I found her {isFit ? "fit" : "not fit"} to
+              resume duties from the next working day.
             </p>
             <p className="mt-24 text-right text-sm font-bold">Dr. M. V. Apte</p>
           </A5Document>
@@ -964,7 +1133,7 @@ function A5Document({
   children: React.ReactNode;
 }) {
   return (
-    <article className="mx-auto aspect-[148/210] w-full max-w-[470px] bg-[#fffef9] p-8 text-[#202c29] shadow-2xl">
+    <article className="mx-auto min-h-[667px] w-full max-w-[470px] bg-[#fffef9] p-8 text-[#202c29] shadow-2xl">
       <header className="text-center">
         <h2 className="text-2xl font-black tracking-[.04em]">VISHWAS CLINIC</h2>
         <p className="mt-1 text-[9px]">
