@@ -165,10 +165,10 @@ button {
 .rx-mark {
   display: inline-block;
   color: #202c29;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 4rem;
+  font-family: "URW Bookman", "Noto Serif", Georgia, serif;
+  font-size: 4.4rem;
   font-style: italic;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: normal;
   line-height: 0.72;
   transform: translateY(-0.04em) scaleX(0.95);
