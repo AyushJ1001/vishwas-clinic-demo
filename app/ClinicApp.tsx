@@ -43,6 +43,24 @@ const routes: { href: string; label: string; key: RouteName }[] = [
   { href: "/summaries", label: "Summaries", key: "summaries" },
 ];
 
+const clinicDoctors = {
+  "Dr. Makarand Vishwas Apte": {
+    name: "Dr. Makarand Vishwas Apte",
+    qualifications: "MBBS, MD (Anatomy)",
+    registration: "Reg. No. 87352",
+    mobile: "9730034907",
+    specialty: "",
+  },
+  "Dr. Gauri Makarand Apte": {
+    name: "Dr. Gauri Makarand Apte",
+    qualifications: "MBBS, MD (Physiology)",
+    registration: "Reg. No. 2000/31891",
+    mobile: "",
+    specialty: "CC EBDM, CCMTD · Diabetes & Thyroid Consultation",
+  },
+} as const;
+type ClinicDoctorName = keyof typeof clinicDoctors;
+
 function CatalogPicker({
   label,
   catalogName,
@@ -400,16 +418,16 @@ function BloodPressureInput({
 
 function Shell({
   active,
-  doctorName = "Dr. Makarand V. Apte",
+  doctorName = "Dr. Makarand Vishwas Apte",
   onDoctorChange,
   children,
 }: {
   active: RouteName;
-  doctorName?: string;
-  onDoctorChange?: (doctor: string) => void;
+  doctorName?: ClinicDoctorName;
+  onDoctorChange?: (doctor: ClinicDoctorName) => void;
   children: React.ReactNode;
 }) {
-  const doctors = ["Dr. Makarand V. Apte", "Dr. Gauri M. Apte"];
+  const doctors = Object.keys(clinicDoctors) as ClinicDoctorName[];
   return (
     <main className="w-full max-w-full overflow-x-hidden bg-[#f4f1e9] text-[#15362f]">
       <nav className="sticky top-0 z-50 border-b border-[#15362f]/10 bg-[#f4f1e9]/92 backdrop-blur-xl">
@@ -443,7 +461,9 @@ function Shell({
             <select
               aria-label="Select doctor"
               value={doctorName}
-              onChange={(event) => onDoctorChange?.(event.target.value)}
+              onChange={(event) =>
+                onDoctorChange?.(event.target.value as ClinicDoctorName)
+              }
               className="appearance-none bg-transparent pr-5 outline-none"
             >
               {doctors.map((doctor) => (
@@ -486,7 +506,9 @@ function PrescriptionPage() {
   const [systolic, setSystolic] = useState("118");
   const [diastolic, setDiastolic] = useState("76");
   const [spo2, setSpo2] = useState("98");
-  const [doctorName, setDoctorName] = useState("Dr. Makarand V. Apte");
+  const [doctorName, setDoctorName] = useState<ClinicDoctorName>(
+    "Dr. Makarand Vishwas Apte",
+  );
   const [complaints, setComplaints] = useState<string[]>([
     "Low-grade fever",
     "Dry cough",
@@ -827,7 +849,7 @@ function PrescriptionPage() {
               pulse={pulse}
               bloodPressure={`${systolic}/${diastolic}`}
               spo2={spo2}
-              doctorName={doctorName}
+              doctor={clinicDoctors[doctorName]}
               drugDirections={drugDirections}
               drugDurations={drugDurations}
               drugMethods={drugMethods}
@@ -851,7 +873,7 @@ function PrescriptionPreview({
   pulse,
   bloodPressure,
   spo2,
-  doctorName,
+  doctor,
   drugDirections,
   drugDurations,
   drugMethods,
@@ -867,7 +889,7 @@ function PrescriptionPreview({
   pulse: string;
   bloodPressure: string;
   spo2: string;
-  doctorName: string;
+  doctor: (typeof clinicDoctors)[ClinicDoctorName];
   drugDirections: Record<string, string>;
   drugDurations: Record<string, string>;
   drugMethods: Record<string, string>;
@@ -889,9 +911,16 @@ function PrescriptionPreview({
           </h2>
           <div className="mt-2 grid grid-cols-[1fr_auto] items-start border-b-2 border-[#202c29] pb-2 text-left">
             <div>
-              <b className="text-[11px]">{doctorName}</b>
-              <p className="text-[8px]">MBBS, MD (Anatomy) · Reg. No. 87352</p>
-              <b className="text-[9px]">Mobile: 9730034907</b>
+              <b className="text-[11px]">{doctor.name}</b>
+              <p className="text-[8px]">
+                {doctor.qualifications} · {doctor.registration}
+              </p>
+              {doctor.mobile && (
+                <b className="text-[9px]">Mobile: {doctor.mobile}</b>
+              )}
+              {doctor.specialty && (
+                <p className="text-[7px]">{doctor.specialty}</p>
+              )}
             </div>
             <Pulse size={27} weight="duotone" />
           </div>
