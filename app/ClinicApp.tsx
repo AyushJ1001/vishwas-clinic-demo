@@ -904,7 +904,7 @@ function PrescriptionPreview({
           <Printer size={16} />
         </button>
       </div>
-      <article className="document-preview mx-auto min-h-[667px] w-full max-w-[470px] bg-[#fffef9] p-6 text-[#202c29] shadow-2xl sm:p-8">
+      <article className="document-preview mx-auto aspect-[148/210] h-auto w-full max-w-[470px] overflow-visible bg-[#fffef9] p-6 text-[#202c29] shadow-2xl sm:p-8">
         <header className="text-center">
           <h2 className="text-2xl font-black tracking-[.04em]">
             VISHWAS CLINIC
@@ -929,9 +929,6 @@ function PrescriptionPreview({
               Shop No. 6, Amrapali Apartments, Right Bhusari Colony, Paud Road,
               Kothrud, Pune 411038
             </p>
-            <p className="font-bold">
-              Associate Panel Consultant: Deenanath Mangeshkar Hospital
-            </p>
             <p>
               Time: 6.30 pm to 9.30 pm, Monday to Saturday · Sunday by
               appointment only
@@ -953,7 +950,7 @@ function PrescriptionPreview({
           <span>Wt: {weight || "—"}</span>
           <span>Temp: {temperature || "—"} °F</span>
           <span>Pulse: {pulse || "—"} /min</span>
-          <span>BP: {bloodPressure || "—"}</span>
+          <span>BP: {bloodPressure || "—"} mmHg</span>
           <span>SpO₂: {spo2 || "—"}%</span>
         </div>
         <p className="mt-4 text-[8px]">
@@ -979,9 +976,11 @@ function PrescriptionPreview({
           </aside>
           <section className="p-3">
             <div className="flex items-start justify-between">
-              <span className="rx-mark" aria-label="Prescription">
-                ℞
-              </span>
+              <img
+                src="/icons/prescription-fill.svg"
+                alt="Prescription"
+                className="rx-logo"
+              />
               <span className="text-[6px]">
                 Read the instructions carefully
               </span>
@@ -1274,7 +1273,7 @@ function A5Document({
   children: React.ReactNode;
 }) {
   return (
-    <article className="mx-auto min-h-[667px] w-full max-w-[470px] bg-[#fffef9] p-8 text-[#202c29] shadow-2xl">
+    <article className="mx-auto aspect-[148/210] h-auto w-full max-w-[470px] overflow-visible bg-[#fffef9] p-8 text-[#202c29] shadow-2xl">
       <header className="text-center">
         <h2 className="text-2xl font-black tracking-[.04em]">VISHWAS CLINIC</h2>
         <p className="mt-1 text-[9px]">

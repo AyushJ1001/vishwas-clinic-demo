@@ -162,17 +162,10 @@ button {
   font-size: 1rem;
   font-weight: 800;
 }
-.rx-mark {
-  display: inline-block;
-  color: #202c29;
-  font-family: "URW Bookman", "Noto Serif", Georgia, serif;
-  font-size: 4.4rem;
-  font-style: italic;
-  font-weight: 700;
-  letter-spacing: normal;
-  line-height: 0.72;
-  transform: translateY(-0.04em) scaleX(0.95);
-  transform-origin: left center;
+.rx-logo {
+  width: 3.5rem;
+  height: 3.5rem;
+  object-fit: contain;
 }
 .primary-action {
   display: flex;
