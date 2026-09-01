@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-01T04:42:15Z",
+  "title": "Design System: Vishwas Clinic",
+  "extensions": {
+    "colorMeta": {
+      "consultation-green": {
+        "role": "primary",
+        "displayName": "Consultation Green",
+        "canonical": "#15362f",
+        "tonalRamp": ["oklch(15% 0.045 168)", "oklch(26% 0.045 168)", "oklch(38% 0.045 168)", "oklch(50% 0.045 168)", "oklch(62% 0.045 168)", "oklch(74% 0.040 168)", "oklch(86% 0.025 168)", "oklch(95% 0.012 168)"]
+      },
+      "preview-green": {
+        "role": "primary",
+        "displayName": "Preview Green",
+        "canonical": "#123930",
+        "tonalRamp": ["oklch(15% 0.050 168)", "oklch(26% 0.050 168)", "oklch(38% 0.050 168)", "oklch(50% 0.050 168)", "oklch(62% 0.045 168)", "oklch(74% 0.038 168)", "oklch(86% 0.024 168)", "oklch(95% 0.012 168)"]
+      },
+      "warm-signal": {
+        "role": "secondary",
+        "displayName": "Warm Signal",
+        "canonical": "#d85f39",
+        "tonalRamp": ["oklch(15% 0.145 38)", "oklch(26% 0.145 38)", "oklch(38% 0.145 38)", "oklch(50% 0.145 38)", "oklch(62% 0.140 38)", "oklch(74% 0.115 38)", "oklch(86% 0.070 38)", "oklch(95% 0.025 38)"]
+      },
+      "warm-signal-deep": {
+        "role": "secondary",
+        "displayName": "Warm Signal Deep",
+        "canonical": "#b85a36",
+        "tonalRamp": ["oklch(15% 0.125 40)", "oklch(26% 0.125 40)", "oklch(38% 0.125 40)", "oklch(50% 0.125 40)", "oklch(62% 0.118 40)", "oklch(74% 0.095 40)", "oklch(86% 0.055 40)", "oklch(95% 0.022 40)"]
+      },
+      "clinic-linen": {
+        "role": "neutral",
+        "displayName": "Clinic Linen",
+        "canonical": "#f4f1e9",
+        "tonalRamp": ["oklch(15% 0.015 90)", "oklch(26% 0.015 90)", "oklch(38% 0.015 90)", "oklch(50% 0.015 90)", "oklch(62% 0.015 90)", "oklch(74% 0.014 90)", "oklch(86% 0.012 90)", "oklch(95% 0.010 90)"]
+      },
+      "work-surface": {
+        "role": "neutral",
+        "displayName": "Work Surface",
+        "canonical": "#fbfaf5",
+        "tonalRamp": ["oklch(15% 0.010 90)", "oklch(26% 0.010 90)", "oklch(38% 0.010 90)", "oklch(50% 0.010 90)", "oklch(62% 0.010 90)", "oklch(74% 0.009 90)", "oklch(86% 0.008 90)", "oklch(95% 0.006 90)"]
+      },
+      "prescription-paper": {
+        "role": "neutral",
+        "displayName": "Prescription Paper",
+        "canonical": "#fffef9",
+        "tonalRamp": ["oklch(15% 0.008 90)", "oklch(26% 0.008 90)", "oklch(38% 0.008 90)", "oklch(50% 0.008 90)", "oklch(62% 0.008 90)", "oklch(74% 0.007 90)", "oklch(86% 0.006 90)", "oklch(95% 0.004 90)"]
+      },
+      "pure-white": {
+        "role": "neutral",
+        "displayName": "Pure White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(62% 0 0)", "oklch(74% 0 0)", "oklch(86% 0 0)", "oklch(95% 0 0)"]
+      },
+      "paper-ink": {
+        "role": "neutral",
+        "displayName": "Paper Ink",
+        "canonical": "#202c29",
+        "tonalRamp": ["oklch(15% 0.022 166)", "oklch(26% 0.022 166)", "oklch(38% 0.022 166)", "oklch(50% 0.022 166)", "oklch(62% 0.020 166)", "oklch(74% 0.017 166)", "oklch(86% 0.011 166)", "oklch(95% 0.006 166)"]
+      },
+      "muted-text": {
+        "role": "neutral",
+        "displayName": "Muted Text",
+        "canonical": "#60736c",
+        "tonalRamp": ["oklch(15% 0.025 164)", "oklch(26% 0.025 164)", "oklch(38% 0.025 164)", "oklch(50% 0.025 164)", "oklch(62% 0.023 164)", "oklch(74% 0.019 164)", "oklch(86% 0.012 164)", "oklch(95% 0.006 164)"]
+      },
+      "soft-surface": {
+        "role": "neutral",
+        "displayName": "Soft Surface",
+        "canonical": "#ece7dc",
+        "tonalRamp": ["oklch(15% 0.018 85)", "oklch(26% 0.018 85)", "oklch(38% 0.018 85)", "oklch(50% 0.018 85)", "oklch(62% 0.017 85)", "oklch(74% 0.015 85)", "oklch(86% 0.012 85)", "oklch(95% 0.007 85)"]
+      },
+      "chip-surface": {
+        "role": "neutral",
+        "displayName": "Chip Surface",
+        "canonical": "#e9e4d8",
+        "tonalRamp": ["oklch(15% 0.020 85)", "oklch(26% 0.020 85)", "oklch(38% 0.020 85)", "oklch(50% 0.020 85)", "oklch(62% 0.019 85)", "oklch(74% 0.016 85)", "oklch(86% 0.012 85)", "oklch(95% 0.007 85)"]
+      },
+      "alert-surface": {
+        "role": "neutral",
+        "displayName": "Alert Surface",
+        "canonical": "#fff7f0",
+        "tonalRamp": ["oklch(15% 0.022 60)", "oklch(26% 0.022 60)", "oklch(38% 0.022 60)", "oklch(50% 0.022 60)", "oklch(62% 0.020 60)", "oklch(74% 0.016 60)", "oklch(86% 0.011 60)", "oklch(95% 0.007 60)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Route titles and the primary prescription statement." },
+      "headline": { "displayName": "Headline", "purpose": "Major titles inside summary and workspace regions." },
+      "title": { "displayName": "Title", "purpose": "Clinic and generated document headings." },
+      "body": { "displayName": "Body", "purpose": "Form content, descriptions, and interface copy." },
+      "label": { "displayName": "Label", "purpose": "Uppercase field labels, eyebrows, navigation, and preview metadata." }
+    },
+    "shadows": [
+      { "name": "workspace-ambient", "value": "0 24px 70px rgba(21, 54, 47, 0.08)", "purpose": "Lifts the main consultation form from Clinic Linen." },
+      { "name": "picker-ambient", "value": "0 22px 60px rgba(21, 54, 47, 0.18)", "purpose": "Separates open catalog pickers from the form below." },
+      { "name": "preview-ambient", "value": "0 30px 80px rgba(21, 54, 47, 0.20)", "purpose": "Gives the dark document preview shell a clear working layer." },
+      { "name": "paper-lift", "value": "0 25px 50px -12px rgba(0, 0, 0, 0.25)", "purpose": "Makes an A5 document read as physical paper inside its shell." },
+      { "name": "action-glow", "value": "0 12px 28px rgba(216, 95, 57, 0.20)", "purpose": "Supports the single Warm Signal primary action." }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "200ms ease", "purpose": "Input focus, hover fills, and compact state changes." },
+      { "name": "metric-lift", "value": "700ms ease-out", "purpose": "Slow hover lift for summary metric cards." },
+      { "name": "preview-scroll", "value": "scrubbed scale 0.9 to 1 and opacity 0.55 to 1", "purpose": "Brings the prescription preview into focus as its workspace enters view." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The next meaningful action in a document workflow.",
+      "html": "<button class=\"ds-btn-primary\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3h12v18H6zM9 7h6M9 11h6M9 15h4\"/></svg><span>Generate and print receipt</span></button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 0.55rem; border: 0; border-radius: 999px; background: #d85f39; color: #fff; padding: 0.85rem 1.3rem; font-family: Outfit, Arial, sans-serif; font-size: 0.85rem; font-weight: 800; box-shadow: 0 12px 28px rgba(216,95,57,.2); cursor: pointer; transition: transform .2s ease, box-shadow .2s ease; } .ds-btn-primary svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; } .ds-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 15px 32px rgba(216,95,57,.24); } .ds-btn-primary:focus-visible { outline: 3px solid rgba(216,95,57,.28); outline-offset: 3px; } .ds-btn-primary:active { transform: translateY(0); }"
+    },
+    {
+      "name": "Route Navigation",
+      "kind": "nav",
+      "refersTo": "nav-active",
+      "description": "Compact pill navigation for the four clinic workflows.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-active\" href=\"#\">Prescription</a><a class=\"ds-nav-item\" href=\"#\">Receipts</a><a class=\"ds-nav-item\" href=\"#\">Medical certificate</a><a class=\"ds-nav-item\" href=\"#\">Summaries</a></nav>",
+      "css": ".ds-nav { display: inline-flex; align-items: center; gap: 2px; border: 1px solid rgba(21,54,47,.1); border-radius: 999px; background: rgba(255,255,255,.7); padding: 4px; font-family: Outfit, Arial, sans-serif; } .ds-nav-item { border-radius: 999px; padding: 8px 16px; color: #15362f; font-size: 12px; font-weight: 600; text-decoration: none; transition: background .2s ease, color .2s ease; } .ds-nav-item:hover { background: #ece7dc; } .ds-nav-item:focus-visible { outline: 3px solid rgba(216,95,57,.18); outline-offset: 1px; } .ds-nav-active, .ds-nav-active:hover { background: #15362f; color: #fff; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "The standard field used for patient and document details.",
+      "html": "<label class=\"ds-field\"><span>Patient</span><input value=\"Ananya Deshmukh\" aria-label=\"Patient\"></label>",
+      "css": ".ds-field { display: grid; gap: .55rem; width: 320px; color: #15362f; font-family: Outfit, Arial, sans-serif; } .ds-field span { color: #6d7e77; font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; } .ds-field input { min-height: 50px; border: 1px solid rgba(21,54,47,.13); border-radius: 15px; background: #fff; color: #15362f; padding: .85rem 1rem; font: inherit; font-size: .875rem; outline: none; transition: border-color .2s ease, box-shadow .2s ease; } .ds-field input:hover { border-color: rgba(21,54,47,.3); } .ds-field input:focus { border-color: #d85f39; box-shadow: 0 0 0 3px rgba(216,95,57,.1); }"
+    },
+    {
+      "name": "Catalog Picker",
+      "kind": "custom",
+      "refersTo": "input",
+      "description": "An input-sized trigger for searchable clinical catalogs.",
+      "html": "<button class=\"ds-picker\"><span>2 selected</span><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></button>",
+      "css": ".ds-picker { display: flex; min-height: 50px; width: 320px; align-items: center; justify-content: space-between; border: 1px solid rgba(21,54,47,.13); border-radius: 15px; background: #fff; color: #15362f; padding: .85rem 1rem; font-family: Outfit, Arial, sans-serif; font-size: .875rem; text-align: left; cursor: pointer; transition: border-color .2s ease, box-shadow .2s ease; } .ds-picker svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } .ds-picker:hover { border-color: rgba(21,54,47,.35); } .ds-picker:focus-visible { border-color: #d85f39; box-shadow: 0 0 0 3px rgba(216,95,57,.1); outline: none; }"
+    },
+    {
+      "name": "Selected Clinical Term",
+      "kind": "chip",
+      "refersTo": "chip-selected",
+      "description": "A removable term selected from a clinical catalog.",
+      "html": "<button class=\"ds-chip\"><span>Low-grade fever</span><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 7l10 10M17 7 7 17\"/></svg></button>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: .35rem; border: 0; border-radius: 999px; background: #e9e4d8; color: #15362f; padding: .35rem .6rem; font-family: Outfit, Arial, sans-serif; font-size: .7rem; font-weight: 700; cursor: pointer; transition: background .2s ease; } .ds-chip svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; } .ds-chip:hover { background: #ddd6c7; } .ds-chip:focus-visible { outline: 3px solid rgba(216,95,57,.18); outline-offset: 2px; }"
+    },
+    {
+      "name": "Consultation Decision",
+      "kind": "card",
+      "description": "A mutually exclusive consultation type choice before prescribing.",
+      "html": "<button class=\"ds-decision\"><span class=\"ds-decision-title\">New prescription<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m5 12 4 4L19 6\"/></svg></span><span class=\"ds-decision-copy\">Create a new consultation record</span></button>",
+      "css": ".ds-decision { display: grid; gap: 4px; width: 300px; border: 1px solid #15362f; border-radius: 16px; background: #15362f; color: #fff; padding: 16px; font-family: Outfit, Arial, sans-serif; text-align: left; cursor: pointer; transition: transform .2s ease, box-shadow .2s ease; } .ds-decision-title { display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 700; } .ds-decision-title svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; } .ds-decision-copy { color: rgba(255,255,255,.7); font-size: 12px; } .ds-decision:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(21,54,47,.14); } .ds-decision:focus-visible { outline: 3px solid rgba(216,95,57,.25); outline-offset: 3px; }"
+    },
+    {
+      "name": "Workspace Card",
+      "kind": "card",
+      "refersTo": "workspace-card",
+      "description": "The primary form region where active consultation work happens.",
+      "html": "<section class=\"ds-workspace-card\"><span class=\"ds-workspace-label\">Consultation details</span><h3>Build the prescription</h3><p>Patient details and clinical selections stay together in one working layer.</p></section>",
+      "css": ".ds-workspace-card { width: 420px; border: 1px solid rgba(21,54,47,.1); border-radius: 30px; background: #fbfaf5; color: #15362f; padding: 36px; box-shadow: 0 24px 70px rgba(21,54,47,.08); font-family: Outfit, Arial, sans-serif; } .ds-workspace-label { color: #b85a36; font-size: .7rem; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; } .ds-workspace-card h3 { margin: 16px 0 8px; font-size: 28px; font-weight: 500; letter-spacing: -.03em; } .ds-workspace-card p { margin: 0; max-width: 34ch; color: #60736c; font-size: 14px; line-height: 1.6; }"
+    },
+    {
+      "name": "A5 Document Preview",
+      "kind": "custom",
+      "refersTo": "preview-shell",
+      "description": "The signature paper document presented inside a dark clinical shell.",
+      "html": "<section class=\"ds-preview-shell\"><header><span>A5 prescription preview</span><button aria-label=\"Print\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8V3h10v5M7 17h10v4H7zM5 9h14a2 2 0 0 1 2 2v6h-4v-3H7v3H3v-6a2 2 0 0 1 2-2Z\"/></svg></button></header><article class=\"ds-paper\"><h3>VISHWAS CLINIC</h3><p>Dr. Makarand Vishwas Apte</p><div class=\"ds-paper-rule\"></div><p class=\"ds-paper-copy\">Name: Ananya Deshmukh</p><p class=\"ds-paper-copy\">Provisional diagnosis: Viral upper respiratory tract infection</p></article></section>",
+      "css": ".ds-preview-shell { width: 340px; border-radius: 30px; background: #123930; color: #fff; padding: 20px; box-shadow: 0 30px 80px rgba(21,54,47,.2); font-family: Outfit, Arial, sans-serif; } .ds-preview-shell > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; } .ds-preview-shell > header span { color: rgba(255,255,255,.6); font-size: 12px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; } .ds-preview-shell button { display: grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 999px; background: #fff; color: #15362f; cursor: pointer; } .ds-preview-shell button:hover { background: #f4f1e9; } .ds-preview-shell button:focus-visible { outline: 3px solid rgba(216,95,57,.35); outline-offset: 2px; } .ds-preview-shell svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; } .ds-paper { min-height: 360px; border-radius: 0; background: #fffef9; color: #202c29; padding: 28px; box-shadow: 0 25px 50px -12px rgba(0,0,0,.25); } .ds-paper h3 { margin: 0; text-align: center; font-size: 22px; font-weight: 900; letter-spacing: .04em; } .ds-paper > p { margin: 6px 0; text-align: center; font-size: 9px; } .ds-paper-rule { margin: 10px 0 28px; border-top: 2px solid #202c29; } .ds-paper .ds-paper-copy { margin: 10px 0; text-align: left; font-size: 9px; line-height: 1.5; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Calm Clinical Workbench",
+    "overview": "The system turns a familiar clinic desk into a focused digital workspace. Warm linen surrounds the work, paper previews stay visually literal, and deep green gives the interface a steady clinical anchor. The result should feel composed and useful during a consultation, not ornamental.\n\nControls are quiet and clinical. Generous type and rounded work areas keep dense form entry from feeling cramped, while rust appears only when an action or status needs attention. The interface avoids the chill and visual overload of hospital enterprise software without drifting into lifestyle branding.",
+    "keyCharacteristics": [
+      "Warm, composed, and pragmatic.",
+      "Desktop-first density with complete mobile usability.",
+      "Paper-aware document previews beside structured form work.",
+      "Quiet controls with clear selected, focused, and active states.",
+      "No cold hospital enterprise styling or generic SaaS dashboard language."
+    ],
+    "rules": [
+      { "name": "The Work-and-Paper Rule", "body": "Clinic Linen owns the environment, Consultation Green owns structure, and Prescription Paper owns generated documents. Keep those roles stable.", "section": "colors" },
+      { "name": "The Warm Signal Rule", "body": "Warm Signal is reserved for actions, focus, and meaningful change. It should not become a decorative wash across a screen.", "section": "colors" },
+      { "name": "The One-Family Rule", "body": "Outfit carries interface text and document previews. Build hierarchy with scale and weight instead of introducing a second font family.", "section": "typography" },
+      { "name": "The Working Layer Rule", "body": "Keep resting surfaces flat. Add ambient shadow only when a surface contains active work, opens above another layer, or represents a physical document.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep Clinic Linen visible around major work areas so the interface retains warmth.",
+      "Do use Consultation Green for structure, selections, and dependable contrast.",
+      "Do reserve Warm Signal for primary actions, focus, warnings, and meaningful change.",
+      "Do maintain the seven-column form and five-column preview relationship on desktop.",
+      "Do preserve square A5 document sheets inside rounded dark preview shells.",
+      "Do keep every consultation workflow usable on a phone without hiding core actions."
+    ],
+    "donts": [
+      "Don't turn the interface into cold hospital enterprise software with blue-gray chrome, cramped tables, or dense toolbars.",
+      "Don't use generic SaaS dashboard patterns when the clinic workflow and paper document are the clearer organizing ideas.",
+      "Don't spread Warm Signal across large decorative areas or use it as a second background system.",
+      "Don't add shadows to every card or control. Depth belongs where work happens.",
+      "Don't introduce another font family merely to create hierarchy.",
+      "Don't round the A5 paper previews or make them look like ordinary interface cards."
+    ]
+  }
+}
