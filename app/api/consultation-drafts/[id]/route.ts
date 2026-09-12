@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import type { Consultation } from "../../../consultation-model";
+import type {
+  Consultation,
+  PriorVisitSnapshot,
+} from "../../../consultation-model";
 import {
   getConsultationDraft,
   saveConsultationDraft,
 } from "../../../../db/consultation-drafts";
+import { listCompletedDemoVisits } from "../../../../db/prior-visits";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -20,6 +24,22 @@ function isDraftId(value: string) {
   return /^[a-zA-Z0-9-]{8,120}$/.test(value);
 }
 
+function isPriorVisit(value: unknown): value is PriorVisitSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const visit = value as Partial<PriorVisitSnapshot>;
+  return Boolean(
+    typeof visit.id === "string" &&
+      visit.patient &&
+      typeof visit.patient.name === "string" &&
+      typeof visit.patient.age === "string" &&
+      ["Female", "Male", "Other"].includes(visit.patient.sex) &&
+      typeof visit.consultationDate === "string" &&
+      visit.doctorName &&
+      doctorNames.has(visit.doctorName) &&
+      typeof visit.clinicalSummary === "string",
+  );
+}
+
 function isConsultation(value: unknown): value is Consultation {
   if (!value || typeof value !== "object") return false;
   const draft = value as Partial<Consultation>;
@@ -27,6 +47,8 @@ function isConsultation(value: unknown): value is Consultation {
     (draft.visitType === null ||
       draft.visitType === "new" ||
       draft.visitType === "followup") &&
+      (draft.linkedPriorVisit === null ||
+        isPriorVisit(draft.linkedPriorVisit)) &&
       draft.doctorName &&
       doctorNames.has(draft.doctorName) &&
       draft.patient &&
@@ -60,6 +82,19 @@ function isConsultation(value: unknown): value is Consultation {
   );
 }
 
+async function canonicalizeConsultation(
+  consultation: Consultation,
+): Promise<Consultation | null> {
+  if (!consultation.linkedPriorVisit) return consultation;
+  if (consultation.visitType !== "followup") return null;
+
+  const canonicalVisit = (await listCompletedDemoVisits()).find(
+    (visit) => visit.id === consultation.linkedPriorVisit?.id,
+  );
+  if (!canonicalVisit) return null;
+  return { ...consultation, linkedPriorVisit: canonicalVisit };
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const { id } = await context.params;
   if (!isDraftId(id)) {
@@ -90,11 +125,18 @@ export async function PUT(request: Request, context: RouteContext) {
       { status: 400 },
     );
   }
+  const consultation = await canonicalizeConsultation(body.consultation);
+  if (!consultation) {
+    return NextResponse.json(
+      { error: "Linked prior visit must be a completed demo visit" },
+      { status: 400 },
+    );
+  }
   return NextResponse.json(
     await saveConsultationDraft(
       id,
       body.revision as number,
-      body.consultation,
+      consultation,
     ),
   );
 }

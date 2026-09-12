@@ -1,5 +1,7 @@
 import type {
   Consultation,
+  ListPriorVisitsResult,
+  PriorVisitSnapshot,
   SaveConsultationDraftResult,
   SavedConsultationDraft,
 } from "./consultation-model";
@@ -8,6 +10,7 @@ export const demoDraftIdStorageKey = "vishwas-clinic-demo-draft-id";
 
 export interface ConsultationDraftRepository {
   load(): Promise<SavedConsultationDraft | null>;
+  listPriorVisits(): Promise<PriorVisitSnapshot[]>;
   save(
     consultation: Consultation,
     revision: number,
@@ -43,6 +46,10 @@ export function createConsultationDraftRepository(): ConsultationDraftRepository
       }
       const body = (await response.json()) as { draft: SavedConsultationDraft };
       return body.draft;
+    },
+    async listPriorVisits() {
+      const body = await request<ListPriorVisitsResult>("/api/prior-visits");
+      return body.visits;
     },
     async save(consultation, revision) {
       return request<SaveConsultationDraftResult>(

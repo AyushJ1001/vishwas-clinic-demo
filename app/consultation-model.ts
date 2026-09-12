@@ -26,8 +26,17 @@ export type PrescribedMedicine = {
   method: string;
 };
 
+export type PriorVisitSnapshot = {
+  id: string;
+  patient: PatientDemographics;
+  consultationDate: string;
+  doctorName: ClinicDoctorName;
+  clinicalSummary: string;
+};
+
 export type Consultation = {
   visitType: "new" | "followup" | null;
+  linkedPriorVisit: PriorVisitSnapshot | null;
   doctorName: ClinicDoctorName;
   patient: PatientDemographics;
   consultationDate: string;
@@ -53,9 +62,14 @@ export type SaveConsultationDraftResult = {
   draft: SavedConsultationDraft;
 };
 
+export type ListPriorVisitsResult = {
+  visits: PriorVisitSnapshot[];
+};
+
 export function createDemoConsultation(): Consultation {
   return {
     visitType: null,
+    linkedPriorVisit: null,
     doctorName: "Dr. Makarand Vishwas Apte",
     patient: {
       name: "Demo Patient Ananya Deshmukh",
@@ -101,4 +115,15 @@ export function toLocalDateInputValue(date: Date) {
 export function formatConsultationDate(value: string) {
   const [year, month, day] = value.split("-");
   return year && month && day ? `${day}/${month}/${year}` : "—";
+}
+
+export function formatPriorVisitDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return "Date unavailable";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
 }

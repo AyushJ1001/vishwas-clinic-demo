@@ -31,6 +31,7 @@ import {
 } from "./clinic-data";
 import {
   formatConsultationDate,
+  formatPriorVisitDate,
   type ClinicDoctorName,
   type Consultation,
   type PatientSex,
@@ -796,7 +797,14 @@ function PrescriptionPage() {
     savedAt,
     hasUnconfirmedChanges,
     saveDraft,
+    priorVisits,
+    priorVisitsState,
+    reloadPriorVisits,
   } = useConsultationDraft();
+  const clinicalEntryBlocked =
+    saveState === "loading" ||
+    (consultation.visitType === "followup" &&
+      !consultation.linkedPriorVisit);
   const updatePatient = (
     field: keyof Consultation["patient"],
     value: string,
@@ -874,10 +882,12 @@ function PrescriptionPage() {
           <div>
             <p className="eyebrow">
               {consultation.visitType === "followup"
-                ? "Follow-up consultation · VC-1048"
+                ? consultation.linkedPriorVisit
+                  ? "Follow-up consultation · prior visit linked"
+                  : "Follow-up consultation · prior visit required"
                 : consultation.visitType === "new"
-                  ? "New consultation · VC-1048"
-                  : "Consultation type required · VC-1048"}
+                  ? "New consultation · no prior visit linked"
+                  : "Choose a prescription type to begin"}
             </p>
             <h1 className="max-w-6xl text-[clamp(2.8rem,5vw,5.5rem)] font-medium leading-[.94] tracking-[-.055em]">
               Write the prescription. See the paper take shape.
@@ -898,13 +908,17 @@ function PrescriptionPage() {
               onSave={saveDraft}
             />
             <fieldset
+              role="radiogroup"
+              aria-labelledby="prescription-type-label"
               disabled={saveState === "loading"}
               aria-busy={saveState === "loading"}
-              className="m-0 min-w-0 border-0 p-0 disabled:opacity-70"
+              className="mb-8 min-w-0 rounded-[24px] border border-[#b85a36]/25 bg-[#fff7f0] p-5 disabled:opacity-70"
             >
-              <fieldset className="mb-8 rounded-[24px] border border-[#b85a36]/25 bg-[#fff7f0] p-5">
-              <legend className="px-2 text-xs font-extrabold uppercase tracking-[.12em] text-[#9b492f]">
-                Required before prescribing
+              <legend
+                id="prescription-type-label"
+                className="px-2 text-xs font-extrabold uppercase tracking-[.12em] text-[#9b492f]"
+              >
+                Prescription type
               </legend>
               <p className="text-base font-bold">
                 Is this a new prescription or a follow-up?
@@ -914,40 +928,189 @@ function PrescriptionPage() {
                   [
                     "new",
                     "New prescription",
-                    "Create a new consultation record",
+                    "Start without a prior visit link",
                   ],
                   [
                     "followup",
                     "Follow-up prescription",
-                    "Link this visit to prior clinical history",
+                    "Choose and link a completed demo visit",
                   ],
-                ].map(([key, title, copy]) => (
-                  <button
-                    type="button"
-                    key={key}
-                    onClick={() =>
+                ].map(([key, title, copy]) => {
+                  const selected = consultation.visitType === key;
+                  return (
+                    <label key={key} className="relative block">
+                      <input
+                        className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                        type="radio"
+                        name="prescription-type"
+                        value={key}
+                        checked={selected}
+                        onChange={() =>
+                          setConsultation((current) => ({
+                            ...current,
+                            visitType: key as "new" | "followup",
+                            linkedPriorVisit:
+                              key === "new" ? null : current.linkedPriorVisit,
+                          }))
+                        }
+                      />
+                      <span
+                        className={`block min-h-24 rounded-2xl border p-4 text-left transition peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#d85f39] ${selected ? "border-[#15362f] bg-[#15362f] text-white" : "border-[#15362f]/15 bg-white hover:border-[#15362f]/45"}`}
+                      >
+                        <span className="flex items-center justify-between text-sm font-bold">
+                          {title}
+                          {selected && <Check size={16} weight="bold" />}
+                        </span>
+                        <span
+                          className={`mt-1 block text-xs ${selected ? "text-white/75" : "text-[#60736c]"}`}
+                        >
+                          {copy}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            {consultation.visitType === "followup" && (
+              <div className="mb-8 rounded-[24px] border border-[#15362f]/15 bg-[#ece7dc] p-5">
+                <label>
+                  <span className="field-label">Prior demo visit</span>
+                  <select
+                    className="input-field"
+                    value={consultation.linkedPriorVisit?.id ?? ""}
+                    aria-describedby={
+                      !consultation.linkedPriorVisit &&
+                      priorVisitsState !== "failed"
+                        ? "prior-visit-required"
+                        : undefined
+                    }
+                    disabled={
+                      saveState === "loading" ||
+                      priorVisitsState !== "ready"
+                    }
+                    onChange={(event) => {
+                      const linkedPriorVisit = priorVisits.find(
+                        (visit) => visit.id === event.target.value,
+                      );
                       setConsultation((current) => ({
                         ...current,
-                        visitType: key as "new" | "followup",
-                      }))
-                    }
-                    className={`rounded-2xl border p-4 text-left transition ${consultation.visitType === key ? "border-[#15362f] bg-[#15362f] text-white" : "border-[#15362f]/15 bg-white hover:border-[#15362f]/45"}`}
+                        linkedPriorVisit: linkedPriorVisit ?? null,
+                      }));
+                    }}
                   >
-                    <span className="flex items-center justify-between text-sm font-bold">
-                      {title}{" "}
-                      {consultation.visitType === key && (
-                        <Check size={16} weight="bold" />
-                      )}
-                    </span>
-                    <span
-                      className={`mt-1 block text-xs ${consultation.visitType === key ? "text-white/70" : "text-[#6d7e77]"}`}
+                    <option value="">
+                      {priorVisitsState === "loading"
+                        ? "Loading completed demo visits…"
+                        : "Choose a completed demo visit"}
+                    </option>
+                    {priorVisits.map((visit) => (
+                      <option key={visit.id} value={visit.id}>
+                        {visit.patient.name} ·{` `}
+                        {formatPriorVisitDate(visit.consultationDate)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {priorVisitsState === "failed" && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-red-900">
+                    <p role="alert">
+                      Completed demo visits could not be loaded.
+                    </p>
+                    <button
+                      type="button"
+                      className="min-h-11 rounded-full bg-white px-4 py-2 font-bold text-[#15362f] transition hover:bg-[#fbfaf5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
+                      onClick={() => void reloadPriorVisits()}
                     >
-                      {copy}
-                    </span>
-                  </button>
-                ))}
+                      Try again
+                    </button>
+                  </div>
+                )}
+                {!consultation.linkedPriorVisit &&
+                  priorVisitsState !== "failed" && (
+                    <p
+                      id="prior-visit-required"
+                      className="mt-3 text-sm font-semibold text-[#9b492f]"
+                    >
+                      Choose a prior demo visit to continue.
+                    </p>
+                  )}
+                {consultation.linkedPriorVisit && (
+                  <section
+                    aria-labelledby="linked-prior-visit-heading"
+                    className="mt-4 min-w-0 rounded-2xl bg-white p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2
+                          id="linked-prior-visit-heading"
+                          className="text-sm font-extrabold"
+                        >
+                          Linked prior visit
+                        </h2>
+                        <p className="mt-1 break-words text-base font-bold">
+                          {consultation.linkedPriorVisit.patient.name}
+                        </p>
+                        <p className="mt-1 text-sm text-[#60736c]">
+                          Age {consultation.linkedPriorVisit.patient.age} ·{` `}
+                          {consultation.linkedPriorVisit.patient.sex}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Remove prior visit link"
+                        className="min-h-11 rounded-full bg-[#f0ece3] px-4 py-2 text-sm font-bold text-[#15362f] transition hover:bg-[#e4ded2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
+                        onClick={() =>
+                          setConsultation((current) => ({
+                            ...current,
+                            linkedPriorVisit: null,
+                          }))
+                        }
+                      >
+                        Remove link
+                      </button>
+                    </div>
+                    <dl className="mt-4 grid min-w-0 gap-3 text-sm sm:grid-cols-2">
+                      <div>
+                        <dt className="field-label">Date</dt>
+                        <dd className="font-semibold tabular-nums">
+                          {formatPriorVisitDate(
+                            consultation.linkedPriorVisit.consultationDate,
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="field-label">Doctor</dt>
+                        <dd className="font-semibold">
+                          {consultation.linkedPriorVisit.doctorName}
+                        </dd>
+                      </div>
+                      <div className="min-w-0 sm:col-span-2">
+                        <dt className="field-label">Clinical summary</dt>
+                        <dd className="break-words leading-relaxed text-[#435c54]">
+                          {consultation.linkedPriorVisit.clinicalSummary}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+                )}
               </div>
-              </fieldset>
+            )}
+            <fieldset
+              disabled={clinicalEntryBlocked}
+              aria-describedby={
+                clinicalEntryBlocked && saveState !== "loading"
+                  ? "followup-link-required"
+                  : undefined
+              }
+              className="m-0 min-w-0 border-0 p-0 disabled:opacity-55"
+            >
+              {clinicalEntryBlocked && saveState !== "loading" && (
+                <span id="followup-link-required" className="sr-only">
+                  Clinical entry is unavailable until a prior demo visit is
+                  linked.
+                </span>
+              )}
             <div className="grid gap-5 sm:grid-cols-2">
               <label>
                 <span className="field-label">Patient name</span>
@@ -958,26 +1121,6 @@ function PrescriptionPage() {
                     updatePatient("name", event.target.value)
                   }
                 />
-              </label>
-              <label>
-                <span className="field-label">Visit type</span>
-                <select
-                  className="input-field"
-                  value={consultation.visitType ?? ""}
-                  onChange={(event) =>
-                    setConsultation((current) => ({
-                      ...current,
-                      visitType: event.target.value as "new" | "followup",
-                    }))
-                  }
-                  required
-                >
-                  <option value="" disabled>
-                    Select visit type
-                  </option>
-                  <option value="new">New prescription</option>
-                  <option value="followup">Follow-up prescription</option>
-                </select>
               </label>
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-[.6fr_1fr_1.2fr]">
