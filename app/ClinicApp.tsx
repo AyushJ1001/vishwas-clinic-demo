@@ -140,16 +140,6 @@ function CatalogPicker({
   const values = Array.isArray(value) ? value : value ? [value] : [];
   useEffect(() => {
     if (!open) return;
-    const dismissPicker = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setOpen(false);
-        setAdding(false);
-        setQuery("");
-        setActiveOption("");
-        requestAnimationFrame(() => triggerRef.current?.focus());
-      }
-    };
     const dismissOnOutsidePress = (event: PointerEvent) => {
       if (!pickerRef.current?.contains(event.target as Node)) {
         setOpen(false);
@@ -158,10 +148,8 @@ function CatalogPicker({
         setActiveOption("");
       }
     };
-    window.addEventListener("keydown", dismissPicker);
     window.addEventListener("pointerdown", dismissOnOutsidePress);
     return () => {
-      window.removeEventListener("keydown", dismissPicker);
       window.removeEventListener("pointerdown", dismissOnOutsidePress);
     };
   }, [open]);
@@ -233,6 +221,10 @@ function CatalogPicker({
     const itemIndex = mergedGroups[groupIndex]?.items.indexOf(item) ?? -1;
     return `${pickerId}-option-${groupIndex}-${itemIndex}`;
   };
+  const categoryId = (group: string) =>
+    `${pickerId}-category-${mergedGroups.findIndex((entry) => entry.group === group)}`;
+  const groupId = (group: string) =>
+    `${pickerId}-group-${mergedGroups.findIndex((entry) => entry.group === group)}`;
   const activeOptionValue = visibleOptions.find(
     ({ group, item }) => optionKey(group, item) === activeOption,
   );
@@ -283,6 +275,7 @@ function CatalogPicker({
     const itemName = query.trim();
     const groupName = newGroup.trim() || selectedGroup;
     if (!itemName || !groupName) return;
+    searchRef.current?.focus();
     setSaveState("saving");
     try {
       const response = await fetch("/api/catalog", {
@@ -306,12 +299,29 @@ function CatalogPicker({
       setQuery("");
       setNewGroup("");
       setSaveState("idle");
+      if (multiple) requestAnimationFrame(() => searchRef.current?.focus());
     } catch {
       setSaveState("error");
     }
   };
   return (
-    <div className="relative" ref={pickerRef}>
+    <div
+      className="relative"
+      ref={pickerRef}
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (open && (!nextTarget || !event.currentTarget.contains(nextTarget))) {
+          closePicker();
+        }
+      }}
+      onKeyDown={(event) => {
+        if (open && event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          closePicker(true);
+        }
+      }}
+    >
       <span className="field-label" id={labelId}>
         {label}
       </span>
@@ -349,7 +359,7 @@ function CatalogPicker({
             : undefined
         }
       >
-        <span className={values.length ? "" : "text-[#7b8b85]"}>
+        <span className={values.length ? "" : "text-[#536760]"}>
           {multiple
             ? values.length
               ? `${values.length} selected`
@@ -363,11 +373,20 @@ function CatalogPicker({
       )}
       {multiple && values.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
-          {values.map((item) => (
+          {values.map((item, index) => (
             <button
               type="button"
               key={item}
-              onClick={() => select(item)}
+              onClick={() => {
+                select(item);
+                requestAnimationFrame(() => {
+                  const remaining = pickerRef.current?.querySelectorAll<HTMLButtonElement>(
+                    ".selected-chip",
+                  );
+                  remaining?.[Math.min(index, remaining.length - 1)]?.focus();
+                  if (!remaining?.length) triggerRef.current?.focus();
+                });
+              }}
               className="selected-chip"
               aria-label={`Remove ${item} from ${label}`}
             >
@@ -419,13 +438,7 @@ function CatalogPicker({
               }
             />
           </div>
-          <div
-            className="max-h-72 overflow-y-auto p-2"
-            id={listboxId}
-            role="listbox"
-            aria-label={`${label} options`}
-            aria-multiselectable={multiple || undefined}
-          >
+          <div className="max-h-72 overflow-y-auto p-2">
             {loadState === "loading" && (
               <p className="catalog-status catalog-loading" role="status">
                 Loading clinic terms for {label}…
@@ -448,6 +461,7 @@ function CatalogPicker({
                   onClick={() => {
                     setLoadState("loading");
                     setLoadAttempt((attempt) => attempt + 1);
+                    requestAnimationFrame(() => searchRef.current?.focus());
                   }}
                   aria-label={`Retry loading clinic terms for ${label}`}
                 >
@@ -455,14 +469,19 @@ function CatalogPicker({
                 </button>
               </div>
             )}
-            {filtered.map((group) => (
-              <div key={group.group} className="mb-1">
+            {!query && (
+              <div role="group" aria-label={`${label} categories`}>
+                {filtered.map((group) => (
                 <button
                   type="button"
+                  key={group.group}
+                  id={categoryId(group.group)}
                   onClick={() =>
                     setExpanded(expanded === group.group ? "" : group.group)
                   }
-                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold uppercase tracking-[.11em] text-[#60736c] hover:bg-[#ece7dc]"
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold uppercase tracking-[.11em] text-[#536760] hover:bg-[#ece7dc]"
+                  aria-expanded={expanded === group.group}
+                  aria-controls={groupId(group.group)}
                 >
                   <span>{group.group}</span>
                   <CaretDown
@@ -470,6 +489,23 @@ function CatalogPicker({
                     size={13}
                   />
                 </button>
+                ))}
+              </div>
+            )}
+            <div
+              id={listboxId}
+              role="listbox"
+              aria-label={`${label} options`}
+              aria-multiselectable={multiple || undefined}
+            >
+            {filtered.map((group) => (
+              <div
+                key={group.group}
+                id={groupId(group.group)}
+                role="group"
+                aria-label={group.group}
+                className="mb-1"
+              >
                 {(expanded === group.group || query) && (
                   <div className="grid gap-1 py-1">
                     {group.items.map((item) => (
@@ -496,6 +532,7 @@ function CatalogPicker({
                 )}
               </div>
             ))}
+            </div>
             {query.trim() && filtered.length === 0 && (
               <p className="catalog-status">No matching catalog choices.</p>
             )}
@@ -517,7 +554,7 @@ function CatalogPicker({
                 <p className="text-xs font-bold text-[#15362f]">
                   Where should this term live?
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-[#6d7e77]">
+                <p className="mt-1 text-[11px] leading-relaxed text-[#536760]">
                   Custom terms are saved for this clinic and kept distinct from
                   the standard catalog.
                 </p>
@@ -574,7 +611,7 @@ function CatalogPicker({
                       setAdding(false);
                       setSaveState("idle");
                     }}
-                    className="rounded-full px-3 py-2 text-xs font-bold text-[#60736c]"
+                    className="rounded-full px-3 py-2 text-xs font-bold text-[#536760]"
                   >
                     Cancel
                   </button>
@@ -607,7 +644,7 @@ function UnitInput({
 }) {
   return (
     <label>
-      <span className="mb-1.5 block text-[10px] uppercase tracking-[.12em] text-[#6d7e77]">
+      <span className="mb-1.5 block text-[10px] uppercase tracking-[.12em] text-[#536760]">
         {label}
       </span>
       <span className="unit-input-wrap">
@@ -648,7 +685,7 @@ function BloodPressureInput({
 }) {
   return (
     <label>
-      <span className="mb-1.5 block text-[10px] uppercase tracking-[.12em] text-[#6d7e77]">
+      <span className="mb-1.5 block text-[10px] uppercase tracking-[.12em] text-[#536760]">
         BP
       </span>
       <span className="bp-input-wrap">
@@ -680,7 +717,7 @@ function BloodPressureInput({
           }
         />
       </span>
-      <span className="mt-1 block text-[10px] text-[#7b8b85]">mmHg</span>
+      <span className="mt-1 block text-[10px] text-[#536760]">mmHg</span>
       {systolicError && (
         <FieldError id="systolic-blood-pressure-error">
           {systolicError}
@@ -697,7 +734,7 @@ function BloodPressureInput({
 
 function FieldError({ id, children }: { id: string; children: string }) {
   return (
-    <span id={id} className="mt-2 block text-sm font-semibold text-[#b85a36]">
+    <span id={id} className="mt-2 block text-sm font-semibold text-[#9b492f]">
       {children}
     </span>
   );
@@ -780,7 +817,7 @@ function Shell({
             </span>
             <span>
               <b className="block text-sm">Vishwas Clinic</b>
-              <small className="text-[#6d7e77]">Doctor workspace</small>
+              <small className="text-[#536760]">Doctor workspace</small>
             </span>
           </Link>
           <div className="hidden items-center rounded-full border border-[#15362f]/10 bg-white/70 p-1 md:flex">
@@ -904,6 +941,7 @@ function DraftSaveBar({
 
 function PrescriptionPage() {
   const root = useRef<HTMLDivElement>(null);
+  const reviewButtonRef = useRef<HTMLButtonElement>(null);
   const {
     consultation,
     setConsultation,
@@ -928,6 +966,10 @@ function PrescriptionPage() {
     reviewAttempted
       ? reviewProblems.find((problem) => problem.fieldId === fieldId)?.message
       : undefined;
+  const closeReview = () => {
+    setReviewOpen(false);
+    window.requestAnimationFrame(() => reviewButtonRef.current?.focus());
+  };
   const focusProblem = (problem: ConsultationProblem) => {
     setReviewOpen(false);
     window.requestAnimationFrame(() => {
@@ -982,13 +1024,16 @@ function PrescriptionPage() {
   };
   useGSAP(
     () => {
-      if (completedSnapshot) return;
+      if (
+        completedSnapshot ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      )
+        return;
       gsap.fromTo(
         ".document-preview",
-        { scale: 0.9, opacity: 0.55 },
+        { scale: 0.9 },
         {
           scale: 1,
-          opacity: 1,
           scrollTrigger: {
             trigger: ".workspace-grid",
             start: "top 74%",
@@ -1037,7 +1082,7 @@ function PrescriptionPage() {
             </h1>
           </div>
           <div className="flex items-end">
-            <p className="max-w-xl text-lg leading-relaxed text-[#60736c]">
+            <p className="max-w-xl text-lg leading-relaxed text-[#536760]">
               The digital form follows the clinic’s printed sheet, while
               searchable clinical catalogs make repeated work faster.
             </p>
@@ -1112,7 +1157,7 @@ function PrescriptionPage() {
                           {selected && <Check size={16} weight="bold" />}
                         </span>
                         <span
-                          className={`mt-1 block text-xs ${selected ? "text-white/75" : "text-[#60736c]"}`}
+                          className={`mt-1 block text-xs ${selected ? "text-white/75" : "text-[#536760]"}`}
                         >
                           {copy}
                         </span>
@@ -1183,7 +1228,13 @@ function PrescriptionPage() {
                     <button
                       type="button"
                       className="min-h-11 rounded-full bg-white px-4 py-2 font-bold text-[#15362f] transition hover:bg-[#fbfaf5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
-                      onClick={() => void reloadPriorVisits()}
+                      onClick={() => {
+                        void reloadPriorVisits().then(() =>
+                          window.requestAnimationFrame(() =>
+                            document.getElementById("prior-visit")?.focus(),
+                          ),
+                        );
+                      }}
                     >
                       Try again
                     </button>
@@ -1215,7 +1266,7 @@ function PrescriptionPage() {
                         <p className="mt-1 break-words text-base font-bold">
                           {consultation.linkedPriorVisit.patient.name}
                         </p>
-                        <p className="mt-1 text-sm text-[#60736c]">
+                        <p className="mt-1 text-sm text-[#536760]">
                           Age {consultation.linkedPriorVisit.patient.age} ·{` `}
                           {consultation.linkedPriorVisit.patient.sex}
                         </p>
@@ -1224,12 +1275,15 @@ function PrescriptionPage() {
                         type="button"
                         aria-label="Remove prior visit link"
                         className="min-h-11 rounded-full bg-[#f0ece3] px-4 py-2 text-sm font-bold text-[#15362f] transition hover:bg-[#e4ded2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
-                        onClick={() =>
+                        onClick={() => {
                           setConsultation((current) => ({
                             ...current,
                             linkedPriorVisit: null,
-                          }))
-                        }
+                          }));
+                          window.requestAnimationFrame(() =>
+                            document.getElementById("prior-visit")?.focus(),
+                          );
+                        }}
                       >
                         Remove link
                       </button>
@@ -1519,7 +1573,7 @@ function PrescriptionPage() {
                       <b className="text-sm">
                         {i + 1}. {medicine.name}
                       </b>
-                      <p className="mt-1 text-[10px] text-[#6d7e77]">
+                      <p className="mt-1 text-[10px] text-[#536760]">
                         {ingredientByMedicine[medicine.name] ||
                           "Composition from medicine catalog"}
                       </p>
@@ -1581,14 +1635,20 @@ function PrescriptionPage() {
                     />
                     <button
                       type="button"
+                      id={`medicine-${i}-remove`}
                       aria-label={`Remove ${medicine.name}`}
-                      onClick={() =>
-                        selectMedicines(
-                          consultation.medicines
-                            .filter((item) => item.name !== medicine.name)
-                            .map((item) => item.name),
-                        )
-                      }
+                      onClick={() => {
+                        const remaining = consultation.medicines
+                          .filter((item) => item.name !== medicine.name)
+                          .map((item) => item.name);
+                        selectMedicines(remaining);
+                        window.requestAnimationFrame(() => {
+                          const nextRemove = document.getElementById(
+                            `medicine-${Math.min(i, remaining.length - 1)}-remove`,
+                          );
+                          (nextRemove ?? document.getElementById("medicines"))?.focus();
+                        });
+                      }}
                       className="grid h-10 w-10 place-items-center rounded-xl bg-[#f0ece3]"
                     >
                       <X size={14} />
@@ -1597,7 +1657,7 @@ function PrescriptionPage() {
                 ))}
               </div>
             </div>
-            <div className="mt-8 rounded-2xl bg-[#ece7dc] px-4 py-3 text-[11px] leading-relaxed text-[#60736c]">
+            <div className="mt-8 rounded-2xl bg-[#ece7dc] px-4 py-3 text-[11px] leading-relaxed text-[#536760]">
               <b className="text-[#15362f]">Demo workspace:</b> use fictional
               patient details only. Search or use the categories above to
               record this consultation. If the right term is missing, type it
@@ -1606,11 +1666,12 @@ function PrescriptionPage() {
             </div>
             </fieldset>
             <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-[#15362f]/10 pt-7">
-              <p className="max-w-md text-sm leading-relaxed text-[#60736c]">
+              <p className="max-w-md text-sm leading-relaxed text-[#536760]">
                 Review every patient, clinical, and medicine detail before the
                 prescription is locked.
               </p>
               <button
+                ref={reviewButtonRef}
                 type="button"
                 className="primary-action min-h-11"
                 disabled={saveState === "loading"}
@@ -1632,7 +1693,7 @@ function PrescriptionPage() {
             consultation={consultation}
             problems={reviewProblems}
             completionState={completionState}
-            onClose={() => setReviewOpen(false)}
+            onClose={closeReview}
             onFixProblem={focusProblem}
             onComplete={() => void completePrescription()}
           />
@@ -1909,7 +1970,7 @@ function PrescriptionReviewDocument({
               {consultation.advice.length ? (
                 consultation.advice.map((item) => <li key={item}>{item}</li>)
               ) : (
-                <li className="list-none text-[#60736c]">None entered</li>
+                <li className="list-none text-[#536760]">None entered</li>
               )}
             </ul>
           </section>
@@ -1923,7 +1984,7 @@ function PrescriptionReviewDocument({
                   <li key={item}>{item}</li>
                 ))
               ) : (
-                <li className="list-none text-[#60736c]">None entered</li>
+                <li className="list-none text-[#536760]">None entered</li>
               )}
             </ul>
           </section>
@@ -1954,7 +2015,7 @@ function PrescriptionReviewDocument({
               ))}
             </ol>
           ) : (
-            <p className="mt-2 text-sm text-[#60736c]">No medicines selected</p>
+            <p className="mt-2 text-sm text-[#536760]">No medicines selected</p>
           )}
         </section>
       </div>
@@ -1978,9 +2039,16 @@ function PrescriptionReviewDialog({
   onComplete: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const firstProblemRef = useRef<HTMLButtonElement>(null);
+  const completeButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
+    if (dialog && !dialog.open) {
+      dialog.showModal();
+      requestAnimationFrame(() => {
+        (firstProblemRef.current ?? completeButtonRef.current)?.focus();
+      });
+    }
     return () => {
       if (dialog?.open) dialog.close();
     };
@@ -1989,6 +2057,9 @@ function PrescriptionReviewDialog({
   const isFailed = completionState === "failed";
   const requiresPriorVisit =
     consultation.visitType === "followup" && !consultation.linkedPriorVisit;
+  useEffect(() => {
+    if (isFailed) requestAnimationFrame(() => completeButtonRef.current?.focus());
+  }, [isFailed]);
 
   return (
     <dialog
@@ -2005,7 +2076,7 @@ function PrescriptionReviewDialog({
           <h2 id="review-prescription-heading" className="text-2xl font-bold">
             Review prescription
           </h2>
-          <p className="mt-1 text-sm text-[#60736c]">
+          <p className="mt-1 text-sm text-[#536760]">
             Check the final paper before locking this prescription.
           </p>
         </div>
@@ -2026,7 +2097,10 @@ function PrescriptionReviewDialog({
           </h3>
           {problems.length ? (
             <>
-              <p className="mt-2 text-sm leading-relaxed text-[#60736c]">
+              <p
+                role="alert"
+                className="mt-2 text-sm leading-relaxed text-[#536760]"
+              >
                 Fix {problems.length}{" "}
                 {problems.length === 1 ? "problem" : "problems"} before
                 completion.
@@ -2041,6 +2115,7 @@ function PrescriptionReviewDialog({
                   return (
                     <li key={problem.key}>
                       <button
+                        ref={problem === problems[0] ? firstProblemRef : undefined}
                         type="button"
                         onClick={() => onFixProblem(correction)}
                         className="flex min-h-11 w-full items-start justify-between gap-4 rounded-xl bg-white px-4 py-3 text-left text-sm font-semibold transition hover:bg-[#ece7dc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
@@ -2078,6 +2153,7 @@ function PrescriptionReviewDialog({
           )}
           <div className="mt-5 flex flex-wrap gap-3">
             <button
+              ref={completeButtonRef}
               type="button"
               onClick={onComplete}
               disabled={problems.length > 0 || isCompleting}
@@ -2129,14 +2205,33 @@ function CompletedPrescriptionView({
     text: string;
   } | null>(null);
   const [sharing, setSharing] = useState(false);
-  const preparePdf = () => {
+  const completedStatusRef = useRef<HTMLDivElement>(null);
+  const downloadButtonRef = useRef<HTMLButtonElement>(null);
+  const retryPdfButtonRef = useRef<HTMLButtonElement>(null);
+  const restorePdfFocusRef = useRef(false);
+  const preparePdf = (restoreFocus = false) => {
+    restorePdfFocusRef.current = restoreFocus;
     setPdfState({ status: "preparing" });
     setOutputMessage(null);
     void retryPrescriptionPdf(document).then(
-      (file) => setPdfState({ status: "ready", file }),
-      () => setPdfState({ status: "failed" }),
+      (file) => {
+        setPdfState({ status: "ready", file });
+      },
+      () => {
+        restorePdfFocusRef.current = false;
+        setPdfState({ status: "failed" });
+        requestAnimationFrame(() => retryPdfButtonRef.current?.focus());
+      },
     );
   };
+  useEffect(() => {
+    completedStatusRef.current?.focus();
+  }, []);
+  useEffect(() => {
+    if (pdfState.status !== "ready" || !restorePdfFocusRef.current) return;
+    restorePdfFocusRef.current = false;
+    downloadButtonRef.current?.focus();
+  }, [pdfState.status]);
   useEffect(() => {
     let active = true;
     void preparePrescriptionPdf(document).then(
@@ -2144,7 +2239,10 @@ function CompletedPrescriptionView({
         if (active) setPdfState({ status: "ready", file });
       },
       () => {
-        if (active) setPdfState({ status: "failed" });
+        if (active) {
+          setPdfState({ status: "failed" });
+          requestAnimationFrame(() => retryPdfButtonRef.current?.focus());
+        }
       },
     );
     return () => {
@@ -2242,8 +2340,10 @@ function CompletedPrescriptionView({
     <section className="completed-prescription-layout mx-auto grid max-w-[1200px] gap-6 px-5 py-12 lg:grid-cols-[.65fr_1.35fr] lg:px-10 lg:py-16">
       <div className="min-w-0">
         <div
+          ref={completedStatusRef}
           role="status"
           aria-label="Prescription completed"
+          tabIndex={-1}
           className="rounded-[24px] bg-[#15362f] p-6 text-white"
         >
           <SealCheck size={30} weight="fill" />
@@ -2272,7 +2372,7 @@ function CompletedPrescriptionView({
           <h2 id="prescription-output-heading" className="text-lg font-bold">
             Use this prescription
           </h2>
-          <p className="mt-1 text-sm leading-relaxed text-[#60736c]">
+          <p className="mt-1 text-sm leading-relaxed text-[#536760]">
             Print the locked A5 document, save its PDF, or share that same PDF.
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
@@ -2285,6 +2385,7 @@ function CompletedPrescriptionView({
               Print prescription
             </button>
             <button
+              ref={downloadButtonRef}
               type="button"
               onClick={downloadPdf}
               disabled={pdfState.status !== "ready"}
@@ -2311,7 +2412,11 @@ function CompletedPrescriptionView({
                 The PDF could not be prepared. The completed prescription is
                 still available.
               </p>
-              <button type="button" onClick={preparePdf}>
+              <button
+                ref={retryPdfButtonRef}
+                type="button"
+                onClick={() => preparePdf(true)}
+              >
                 <ArrowClockwise size={16} weight="bold" />
                 Retry PDF preparation
               </button>
@@ -2562,7 +2667,7 @@ function RouteHeader({
           {title}
         </h1>
       </div>
-      <p className="self-end max-w-xl text-lg leading-relaxed text-[#60736c]">
+      <p className="self-end max-w-xl text-lg leading-relaxed text-[#536760]">
         {copy}
       </p>
     </header>

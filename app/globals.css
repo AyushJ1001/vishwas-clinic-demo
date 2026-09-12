@@ -22,6 +22,10 @@ input {
 button {
   cursor: pointer;
 }
+:where(a, button, input, select, [tabindex]):focus-visible {
+  outline: 3px solid #b85a36;
+  outline-offset: 3px;
+}
 .field-label {
   display: block;
   margin-bottom: 0.55rem;
@@ -29,7 +33,7 @@ button {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #6d7e77;
+  color: #536760;
 }
 .input-field,
 .select-field,
@@ -85,7 +89,7 @@ button {
   font-weight: 800;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #b85a36;
+  color: #9b492f;
 }
 .picker-trigger {
   display: flex;
@@ -224,7 +228,7 @@ button {
   align-items: center;
   gap: 0.55rem;
   border-radius: 999px;
-  background: #d85f39;
+  background: #b85a36;
   padding: 0.85rem 1.3rem;
   color: white;
   font-size: 0.85rem;
