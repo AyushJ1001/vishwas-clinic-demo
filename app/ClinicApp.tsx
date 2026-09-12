@@ -7,9 +7,11 @@ import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import {
+  ArrowClockwise,
   CaretDown,
   ChartLineUp,
   Check,
+  DownloadSimple,
   FloppyDisk,
   MagnifyingGlass,
   Plus,
@@ -17,6 +19,7 @@ import {
   Pulse,
   Receipt,
   SealCheck,
+  ShareNetwork,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -37,10 +40,13 @@ import {
   type Consultation,
   type PatientSex,
   type PrescribedMedicine,
-  type CompletedMedicineSnapshot,
   type CompletedPrescriptionSnapshot,
 } from "./consultation-model";
-import { clinicDoctors, clinicIdentity, resolveMedicineComposition } from "./clinic-facts";
+import {
+  clinicDoctors,
+  clinicIdentity,
+  resolveMedicineComposition,
+} from "./clinic-facts";
 import {
   validateConsultation,
   type ConsultationProblem,
@@ -50,10 +56,26 @@ import {
   type CompletionState,
   type DraftSaveState,
 } from "./use-consultation-draft";
+import {
+  createCompletedPrescriptionDocument,
+  emptyPrescriptionList,
+  formatMedicineDirections,
+  formatPrescriptionVitals,
+  prescriptionFooter,
+  type PrescriptionDocumentPage,
+} from "./prescription-document";
+import {
+  downloadPrescriptionPdf,
+  preparePrescriptionPdf,
+  retryPrescriptionPdf,
+} from "./prescription-output";
 
 gsap.registerPlugin(ScrollTrigger);
 export type RouteName =
-  "prescription" | "receipts" | "certificate" | "summaries";
+  | "prescription"
+  | "receipts"
+  | "certificate"
+  | "summaries";
 
 const routes: { href: string; label: string; key: RouteName }[] = [
   { href: "/", label: "Prescription", key: "prescription" },
@@ -239,8 +261,7 @@ function CatalogPicker({
     setAdding(false);
     setQuery("");
     setActiveOption("");
-    if (restoreFocus)
-      requestAnimationFrame(() => triggerRef.current?.focus());
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
   };
   const openPicker = () => {
     setOpen(true);
@@ -295,7 +316,9 @@ function CatalogPicker({
         {label}
       </span>
       <span className="sr-only" id={selectionId}>
-        {values.length ? `Selected: ${values.join(", ")}` : "No values selected"}
+        {values.length
+          ? `Selected: ${values.join(", ")}`
+          : "No values selected"}
       </span>
       <button
         ref={triggerRef}
@@ -867,7 +890,9 @@ function DraftSaveBar({
       <button
         type="button"
         onClick={() => void onSave()}
-        disabled={state === "loading" || state === "saving" || state === "saved"}
+        disabled={
+          state === "loading" || state === "saving" || state === "saved"
+        }
         className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#15362f] shadow-sm transition hover:bg-[#fbfaf5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39] disabled:cursor-default disabled:opacity-55"
       >
         <FloppyDisk size={16} weight="bold" />
@@ -913,8 +938,7 @@ function PrescriptionPage() {
   };
   const clinicalEntryBlocked =
     saveState === "loading" ||
-    (consultation.visitType === "followup" &&
-      !consultation.linkedPriorVisit);
+    (consultation.visitType === "followup" && !consultation.linkedPriorVisit);
   const updatePatient = (
     field: keyof Consultation["patient"],
     value: string,
@@ -924,10 +948,7 @@ function PrescriptionPage() {
       patient: { ...current.patient, [field]: value },
     }));
   };
-  const updateVital = (
-    field: keyof Consultation["vitals"],
-    value: string,
-  ) => {
+  const updateVital = (field: keyof Consultation["vitals"], value: string) => {
     setConsultation((current) => ({
       ...current,
       vitals: { ...current.vitals, [field]: value },
@@ -961,6 +982,7 @@ function PrescriptionPage() {
   };
   useGSAP(
     () => {
+      if (completedSnapshot) return;
       gsap.fromTo(
         ".document-preview",
         { scale: 0.9, opacity: 0.55 },
@@ -976,7 +998,7 @@ function PrescriptionPage() {
         },
       );
     },
-    { scope: root },
+    { dependencies: [completedSnapshot] },
   );
   if (completedSnapshot) {
     return (
@@ -1123,8 +1145,7 @@ function PrescriptionPage() {
                     }
                     aria-invalid={Boolean(errorFor("prior-visit"))}
                     disabled={
-                      saveState === "loading" ||
-                      priorVisitsState !== "ready"
+                      saveState === "loading" || priorVisitsState !== "ready"
                     }
                     onChange={(event) => {
                       const linkedPriorVisit = priorVisits.find(
@@ -1262,7 +1283,9 @@ function PrescriptionPage() {
                   className="input-field"
                   aria-invalid={Boolean(errorFor("patient-name"))}
                   aria-describedby={
-                    errorFor("patient-name") ? "patient-name-error" : undefined
+                      errorFor("patient-name")
+                        ? "patient-name-error"
+                        : undefined
                   }
                   value={consultation.patient.name}
                   onChange={(event) =>
@@ -1291,7 +1314,9 @@ function PrescriptionPage() {
                   aria-describedby={
                     errorFor("patient-age") ? "patient-age-error" : undefined
                   }
-                  onChange={(event) => updatePatient("age", event.target.value)}
+                    onChange={(event) =>
+                      updatePatient("age", event.target.value)
+                    }
                 />
                 {errorFor("patient-age") && (
                   <FieldError id="patient-age-error">
@@ -1478,7 +1503,9 @@ function PrescriptionPage() {
                 inputId="medicines"
                 catalogName="medicines"
                 groups={medicines}
-                value={consultation.medicines.map((medicine) => medicine.name)}
+                  value={consultation.medicines.map(
+                    (medicine) => medicine.name,
+                  )}
                 onChange={(value) => selectMedicines(value as string[])}
                 multiple
               />
@@ -1616,6 +1643,25 @@ function PrescriptionPage() {
 }
 
 function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
+  const page: PrescriptionDocumentPage = {
+    number: 1,
+    count: 1,
+    clinic: clinicIdentity,
+    doctor: clinicDoctors[consultation.doctorName],
+    patient: consultation.patient,
+    consultationDate: formatConsultationDate(consultation.consultationDate),
+    vitals: consultation.vitals,
+    complaints: consultation.complaints,
+    examinationFindings: consultation.examinationFindings,
+    provisionalDiagnosis: consultation.provisionalDiagnosis,
+    advice: consultation.advice,
+    investigations: consultation.investigations,
+    medicines: consultation.medicines.map((medicine) => ({
+      ...medicine,
+      composition: resolveMedicineComposition(medicine.name),
+    })),
+    footer: prescriptionFooter,
+  };
   return (
     <div className="rounded-[30px] bg-[#123930] p-5 text-white shadow-[0_30px_80px_rgba(21,54,47,.2)]">
       <div className="mb-4 flex items-center justify-between">
@@ -1627,13 +1673,7 @@ function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
         </span>
       </div>
       <PrescriptionDocument
-        consultation={consultation}
-        clinic={clinicIdentity}
-        doctor={clinicDoctors[consultation.doctorName]}
-        medicines={consultation.medicines.map((medicine) => ({
-          ...medicine,
-          composition: resolveMedicineComposition(medicine.name),
-        }))}
+        pages={[page]}
         ariaLabel="Draft prescription preview"
       />
     </div>
@@ -1641,93 +1681,88 @@ function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
 }
 
 function PrescriptionDocument({
-  consultation,
-  clinic,
-  doctor,
-  medicines: resolvedMedicines,
+  pages,
   ariaLabel,
 }: {
-  consultation: Consultation;
-  clinic: CompletedPrescriptionSnapshot["clinic"];
-  doctor: CompletedPrescriptionSnapshot["doctor"];
-  medicines: CompletedMedicineSnapshot[];
+  pages: readonly PrescriptionDocumentPage[];
   ariaLabel: string;
 }) {
-  const { patient, vitals } = consultation;
   return (
+    <div className="prescription-pages">
+      {pages.map((page) => (
       <article
+          key={page.number}
         aria-label={ariaLabel}
-        className="document-preview mx-auto aspect-[148/210] h-auto w-full max-w-[470px] overflow-visible bg-[#fffef9] p-6 text-[#202c29] shadow-2xl sm:p-8"
+          data-page-number={page.number}
+          data-page-count={page.count}
+          className="document-preview prescription-page mx-auto aspect-[148/210] h-auto w-full max-w-[470px] overflow-visible bg-[#fffef9] p-6 text-[#202c29] shadow-2xl sm:p-8"
       >
         <header className="text-center">
           <h2 className="text-2xl font-black tracking-[.04em]">
-            {clinic.name}
+              {page.clinic.name}
           </h2>
           <div className="mt-2 grid grid-cols-[1fr_auto] items-start border-b-2 border-[#202c29] pb-2 text-left">
             <div>
-              <b className="text-[11px]">{doctor.name}</b>
+                <b className="text-[11px]">{page.doctor.name}</b>
               <p className="text-[8px]">
-                {doctor.qualifications} · {doctor.registration}
+                  {page.doctor.qualifications} · {page.doctor.registration}
               </p>
-              {doctor.mobile && (
-                <b className="text-[9px]">Mobile: {doctor.mobile}</b>
+                {page.doctor.mobile && (
+                  <b className="text-[9px]">Mobile: {page.doctor.mobile}</b>
               )}
-              {doctor.specialty && (
-                <p className="text-[7px]">{doctor.specialty}</p>
+                {page.doctor.specialty && (
+                  <p className="text-[7px]">{page.doctor.specialty}</p>
               )}
             </div>
             <Pulse size={27} weight="duotone" />
           </div>
           <div className="space-y-1 border-b-2 py-2 text-[7px]">
-            <p>{clinic.address}</p>
-            <p>{clinic.hours}</p>
-            <p>{clinic.services}</p>
+              <p>{page.clinic.address}</p>
+              <p>{page.clinic.hours}</p>
+              <p>{page.clinic.services}</p>
           </div>
         </header>
         <div className="mt-3 grid grid-cols-[1.4fr_.6fr_.6fr] text-[8px]">
           <span>
-            Name: <b>{patient.name || "—"}</b>
+              Name: <b>{page.patient.name || "—"}</b>
           </span>
           <span>
-            Age/Sex: {patient.age || "—"}/{patient.sex || "—"}
+              Age/Sex: {page.patient.age || "—"}/{page.patient.sex || "—"}
           </span>
-          <span>
-            Date: {formatConsultationDate(consultation.consultationDate)}
-          </span>
+            <span>Date: {page.consultationDate}</span>
         </div>
         <div className="mt-3 grid grid-cols-5 text-[8px]">
-          <span>Wt: {vitals.weight || "—"}</span>
-          <span>Temp: {vitals.temperature || "—"} °F</span>
-          <span>Pulse: {vitals.pulse || "—"} /min</span>
-          <span>
-            BP: {vitals.systolic || "—"}/{vitals.diastolic || "—"} mmHg
-          </span>
-          <span>SpO₂: {vitals.spo2 || "—"}%</span>
+            {formatPrescriptionVitals(page.vitals).map((vital) => (
+              <span key={vital}>{vital}</span>
+            ))}
         </div>
         <p className="mt-4 text-[8px]">
-          <b>Major complaints:</b> {consultation.complaints.join(", ") || "—"}
+            <b>Major complaints:</b> {page.complaints.join(", ") || "—"}
         </p>
         <p className="mt-2 text-[8px]">
           <b>Examination findings:</b>{" "}
-          {consultation.examinationFindings.join(", ") || "—"}
+            {page.examinationFindings.join(", ") || "—"}
         </p>
         <p className="mt-5 border-b pb-2 text-[8px]">
-          <b>Provisional diagnosis:</b>{" "}
-          {consultation.provisionalDiagnosis || "—"}
+            <b>Provisional diagnosis:</b> {page.provisionalDiagnosis || "—"}
         </p>
         <div className="grid min-h-[52%] grid-cols-[32%_68%]">
           <aside className="border-r px-1 py-3 text-[7px]">
             <b>Advice</b>
             <ul className="mt-2 list-disc space-y-1 pl-3">
-              {consultation.advice.map((item) => (
+                {page.advice.map((item) => (
                 <li key={item}>{item}</li>
               ))}
+                {!page.advice.length && <li>{emptyPrescriptionList}</li>}
             </ul>
             <b className="mt-5 block">Investigations</b>
             <ul className="mt-2 list-disc space-y-1 pl-3">
-              {consultation.investigations.map((item) => (
+                {page.investigations.map((item) => (
                 <li key={item}>{item}</li>
               ))}
+                {!page.investigations.length && (
+                  <li>{emptyPrescriptionList}</li>
+                )}
             </ul>
           </aside>
           <section className="p-3">
@@ -1744,7 +1779,7 @@ function PrescriptionDocument({
               </span>
             </div>
             <div className="mt-4 space-y-3">
-              {resolvedMedicines.map((medicine, i) => (
+                {page.medicines.map((medicine, i) => (
                 <div key={medicine.name} className="text-[8px]">
                   <b>
                     {i + 1}. {medicine.name}
@@ -1753,9 +1788,7 @@ function PrescriptionDocument({
                     {medicine.composition}
                   </p>
                   <p className="mt-1">
-                    {medicine.dose || "Dose not set"} ·{" "}
-                    {medicine.method || "Method not set"} ·{" "}
-                    {medicine.duration || "Duration not set"}
+                    {formatMedicineDirections(medicine)}
                   </p>
                 </div>
               ))}
@@ -1763,10 +1796,16 @@ function PrescriptionDocument({
           </section>
         </div>
         <footer className="border-t pt-2 text-center text-[6px]">
-          <p>No substitutes · Bring the prescription at the next visit</p>
-          <p>Prescription is valid for the given person and duration only</p>
+            {page.footer.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+            <p className="prescription-page-number">
+              Page {page.number} of {page.count}
+            </p>
         </footer>
       </article>
+      ))}
+    </div>
   );
 }
 
@@ -1831,7 +1870,10 @@ function PrescriptionReviewDocument({
       </dl>
 
       {enteredVitals.length > 0 && (
-        <section aria-labelledby="review-vitals-heading" className="border-b border-[#202c29]/20 py-4">
+        <section
+          aria-labelledby="review-vitals-heading"
+          className="border-b border-[#202c29]/20 py-4"
+        >
           <h4 id="review-vitals-heading" className="text-sm font-bold">
             Vitals
           </h4>
@@ -1845,8 +1887,7 @@ function PrescriptionReviewDocument({
 
       <div className="space-y-4 border-b border-[#202c29]/20 py-4 text-sm leading-relaxed">
         <p>
-          <b>Major complaints:</b>{" "}
-          {consultation.complaints.join(", ") || "—"}
+          <b>Major complaints:</b> {consultation.complaints.join(", ") || "—"}
         </p>
         <p>
           <b>Examination findings:</b>{" "}
@@ -1894,7 +1935,10 @@ function PrescriptionReviewDocument({
           {consultation.medicines.length ? (
             <ol className="mt-3 space-y-4">
               {consultation.medicines.map((medicine, index) => (
-                <li key={medicine.name} className="min-w-0 text-sm leading-relaxed">
+                <li
+                  key={medicine.name}
+                  className="min-w-0 text-sm leading-relaxed"
+                >
                   <p className="break-words font-bold">
                     {index + 1}. {medicine.name}
                   </p>
@@ -1983,7 +2027,9 @@ function PrescriptionReviewDialog({
           {problems.length ? (
             <>
               <p className="mt-2 text-sm leading-relaxed text-[#60736c]">
-                Fix {problems.length} {problems.length === 1 ? "problem" : "problems"} before completion.
+                Fix {problems.length}{" "}
+                {problems.length === 1 ? "problem" : "problems"} before
+                completion.
               </p>
               <ul className="mt-4 space-y-2">
                 {problems.map((problem) => {
@@ -2023,7 +2069,10 @@ function PrescriptionReviewDialog({
             </div>
           )}
           {isFailed && (
-            <p role="alert" className="mt-4 rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-900">
+            <p
+              role="alert"
+              className="mt-4 rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-900"
+            >
               Prescription could not be completed. Your draft is still here.
             </p>
           )}
@@ -2058,17 +2107,139 @@ function PrescriptionReviewDialog({
   );
 }
 
+type PdfOutputState =
+  | { status: "preparing" }
+  | { status: "ready"; file: File }
+  | { status: "failed" };
+
 function CompletedPrescriptionView({
   snapshot,
 }: {
   snapshot: CompletedPrescriptionSnapshot;
 }) {
+  const document = useMemo(
+    () => createCompletedPrescriptionDocument(snapshot),
+    [snapshot],
+  );
+  const [pdfState, setPdfState] = useState<PdfOutputState>({
+    status: "preparing",
+  });
+  const [outputMessage, setOutputMessage] = useState<{
+    kind: "status" | "error";
+    text: string;
+  } | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const preparePdf = () => {
+    setPdfState({ status: "preparing" });
+    setOutputMessage(null);
+    void retryPrescriptionPdf(document).then(
+      (file) => setPdfState({ status: "ready", file }),
+      () => setPdfState({ status: "failed" }),
+    );
+  };
+  useEffect(() => {
+    let active = true;
+    void preparePrescriptionPdf(document).then(
+      (file) => {
+        if (active) setPdfState({ status: "ready", file });
+      },
+      () => {
+        if (active) setPdfState({ status: "failed" });
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [document]);
+
+  const printPrescription = () => {
+    setOutputMessage(null);
+    try {
+      window.print();
+    } catch {
+      setOutputMessage({
+        kind: "error",
+        text: "The print dialog did not open. Try again or download the PDF.",
+      });
+    }
+  };
+  const downloadPdf = () => {
+    if (pdfState.status !== "ready") return;
+    setOutputMessage(null);
+    try {
+      downloadPrescriptionPdf(pdfState.file);
+    } catch {
+      setOutputMessage({
+        kind: "error",
+        text: "The PDF could not be downloaded. Try again.",
+      });
+    }
+  };
+  const sharePrescription = () => {
+    if (pdfState.status !== "ready") return;
+    setOutputMessage(null);
+    const data: ShareData = {
+      files: [pdfState.file],
+      title: `Prescription for ${document.pages[0].patient.name}`,
+      text: "Completed prescription from Vishwas Clinic",
+    };
+    let supportsFileShare = false;
+    try {
+      supportsFileShare =
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: data.files });
+    } catch {
+      supportsFileShare = false;
+    }
+    if (!supportsFileShare) {
+      try {
+        downloadPrescriptionPdf(pdfState.file);
+        setOutputMessage({
+          kind: "status",
+          text: "File sharing is not supported in this browser. The same PDF was downloaded instead.",
+        });
+      } catch {
+        setOutputMessage({
+          kind: "error",
+          text: "Sharing is not supported and the PDF could not be downloaded. Try the download again.",
+        });
+      }
+      return;
+    }
+
+    try {
+      setSharing(true);
+      void navigator.share(data).then(
+        () => {
+          setSharing(false);
+          setOutputMessage({ kind: "status", text: "Prescription shared." });
+        },
+        (error: unknown) => {
+          setSharing(false);
+          if (error instanceof DOMException && error.name === "AbortError")
+            return;
+          setOutputMessage({
+            kind: "error",
+            text: "The prescription could not be shared. Try again or download the PDF.",
+          });
+        },
+      );
+    } catch (error) {
+      setSharing(false);
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setOutputMessage({
+        kind: "error",
+        text: "The prescription could not be shared. Try again or download the PDF.",
+      });
+    }
+  };
   const completedTime = new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(snapshot.completedAt));
   return (
-    <section className="mx-auto grid max-w-[1200px] gap-6 px-5 py-12 lg:grid-cols-[.65fr_1.35fr] lg:px-10 lg:py-16">
+    <section className="completed-prescription-layout mx-auto grid max-w-[1200px] gap-6 px-5 py-12 lg:grid-cols-[.65fr_1.35fr] lg:px-10 lg:py-16">
       <div className="min-w-0">
         <div
           role="status"
@@ -2084,7 +2255,9 @@ function CompletedPrescriptionView({
           <dl className="mt-6 space-y-4 border-t border-white/15 pt-5 text-sm">
             <div>
               <dt className="text-white/60">Completed</dt>
-              <dd className="mt-1 font-semibold tabular-nums">{completedTime}</dd>
+              <dd className="mt-1 font-semibold tabular-nums">
+                {completedTime}
+              </dd>
             </div>
             <div>
               <dt className="text-white/60">Prescription ID</dt>
@@ -2092,13 +2265,71 @@ function CompletedPrescriptionView({
             </div>
           </dl>
         </div>
+        <section
+          aria-labelledby="prescription-output-heading"
+          className="completed-output mt-4 rounded-[24px] bg-[#fbfaf5] p-5"
+        >
+          <h2 id="prescription-output-heading" className="text-lg font-bold">
+            Use this prescription
+          </h2>
+          <p className="mt-1 text-sm leading-relaxed text-[#60736c]">
+            Print the locked A5 document, save its PDF, or share that same PDF.
+          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+            <button
+              type="button"
+              onClick={printPrescription}
+              className="output-action"
+            >
+              <Printer size={18} weight="bold" />
+              Print prescription
+            </button>
+            <button
+              type="button"
+              onClick={downloadPdf}
+              disabled={pdfState.status !== "ready"}
+              className="output-action"
+            >
+              <DownloadSimple size={18} weight="bold" />
+              {pdfState.status === "preparing"
+                ? "Preparing PDF…"
+                : "Download PDF"}
+            </button>
+            <button
+              type="button"
+              onClick={sharePrescription}
+              disabled={pdfState.status !== "ready" || sharing}
+              className="output-action"
+            >
+              <ShareNetwork size={18} weight="bold" />
+              {sharing ? "Sharing prescription…" : "Share prescription"}
+            </button>
+          </div>
+          {pdfState.status === "failed" && (
+            <div role="alert" className="output-feedback output-feedback-error">
+              <p>
+                The PDF could not be prepared. The completed prescription is
+                still available.
+              </p>
+              <button type="button" onClick={preparePdf}>
+                <ArrowClockwise size={16} weight="bold" />
+                Retry PDF preparation
+              </button>
+            </div>
+          )}
+          {outputMessage && (
+            <p
+              role={outputMessage.kind === "error" ? "alert" : "status"}
+              className={`output-feedback ${outputMessage.kind === "error" ? "output-feedback-error" : "output-feedback-status"}`}
+            >
+              {outputMessage.text}
+            </p>
+          )}
+        </section>
       </div>
-      <div className="min-w-0 rounded-[30px] bg-[#123930] p-5 shadow-[0_30px_80px_rgba(21,54,47,.2)]">
+      <div className="completed-document-shell min-w-0 rounded-[30px] bg-[#123930] p-5 shadow-[0_30px_80px_rgba(21,54,47,.2)]">
         <PrescriptionDocument
-          consultation={snapshot.consultation}
-          clinic={snapshot.clinic}
-          doctor={snapshot.doctor}
-          medicines={snapshot.medicines}
+          pages={document.pages}
           ariaLabel="Completed prescription"
         />
       </div>

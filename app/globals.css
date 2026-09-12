@@ -231,8 +231,127 @@ button {
   font-weight: 800;
   box-shadow: 0 12px 28px rgba(216, 95, 57, 0.2);
 }
+.prescription-pages {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+}
+.prescription-page {
+  min-width: 0;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.prescription-page-number {
+  margin-top: 0.2rem;
+  color: #65716d;
+}
+.output-action {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  border-radius: 999px;
+  background: #15362f;
+  padding: 0.7rem 1rem;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  transition:
+    background-color 0.2s,
+    opacity 0.2s;
+}
+.output-action:hover:not(:disabled) {
+  background: #245248;
+}
+.output-action:focus-visible,
+.output-feedback button:focus-visible {
+  outline: 3px solid rgba(216, 95, 57, 0.28);
+  outline-offset: 2px;
+}
+.output-action:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+.output-feedback {
+  margin-top: 1rem;
+  border-radius: 14px;
+  padding: 0.8rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.output-feedback-error {
+  border: 1px solid rgba(184, 90, 54, 0.25);
+  background: #fff7f0;
+  color: #7a3424;
+}
+.output-feedback-status {
+  background: #e4ece7;
+  color: #294b42;
+}
+.output-feedback button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  border-radius: 999px;
+  background: #15362f;
+  padding: 0.55rem 0.9rem;
+  color: #fff;
+  font-weight: 800;
+}
 @media (max-width: 640px) {
   .paper {
     min-height: 560px;
+  }
+}
+@media print {
+  @page {
+    size: A5 portrait;
+    margin: 0;
+  }
+  html,
+  body,
+  main {
+    width: 148mm;
+    height: 210mm;
+    overflow: visible !important;
+    background: #fff;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  .completed-document-shell,
+  .completed-document-shell * {
+    visibility: visible !important;
+  }
+  .completed-document-shell {
+    position: absolute;
+    inset: 0;
+    width: 148mm;
+    height: 210mm;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+  }
+  .prescription-pages {
+    display: block;
+  }
+  .prescription-page {
+    width: 148mm !important;
+    height: 210mm !important;
+    max-width: none !important;
+    min-height: 210mm;
+    overflow: hidden !important;
+    padding: 10mm !important;
+    break-after: page;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .prescription-page:last-child {
+    break-after: auto;
   }
 }
