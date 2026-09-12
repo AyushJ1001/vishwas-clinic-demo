@@ -7,19 +7,12 @@ import {
   type PDFFont,
   type PDFPage,
 } from "pdf-lib";
-import notoSansRegularUrl from "@expo-google-fonts/noto-sans/400Regular/NotoSans_400Regular.ttf?url";
-import notoSansBoldUrl from "@expo-google-fonts/noto-sans/700Bold/NotoSans_700Bold.ttf?url";
-import notoSansDevanagariRegularUrl from "@expo-google-fonts/noto-sans-devanagari/400Regular/NotoSansDevanagari_400Regular.ttf?url";
-import notoSansScRegularUrl from "@expo-google-fonts/noto-sans-sc/400Regular/NotoSansSC_400Regular.ttf?url";
+import { notoSansBoldUrl, notoSansRegularUrl } from "./prescription-fonts";
 import type {
   CompletedPrescriptionDocument,
   PrescriptionDocumentPage,
 } from "./prescription-document";
-import {
-  emptyPrescriptionList,
-  formatMedicineDirections,
-  formatPrescriptionVitals,
-} from "./prescription-document";
+import { formatPrescriptionVitals } from "./prescription-document";
 
 const ink = rgb(0.125, 0.173, 0.161);
 const mutedInk = rgb(0.36, 0.43, 0.41);
@@ -69,7 +62,12 @@ function textRuns(text: string, preferred: PDFFont, fonts: PdfFonts) {
   return runs;
 }
 
-function textWidth(text: string, preferred: PDFFont, fonts: PdfFonts, size: number) {
+function textWidth(
+  text: string,
+  preferred: PDFFont,
+  fonts: PdfFonts,
+  size: number,
+) {
   return textRuns(text, preferred, fonts).reduce(
     (width, run) => width + run.font.widthOfTextAtSize(run.text, size),
     0,
@@ -178,67 +176,29 @@ function drawWrappedText({
   return y - lines.length * lineHeight;
 }
 
-function drawLabelValue(
+function drawPlannedLines(
   page: PDFPage,
-  label: string,
-  value: string,
-  y: number,
-  font: PDFFont,
-  bold: PDFFont,
-  fonts: PdfFonts,
-) {
-  const size = 7.2;
-  const x = 24;
-  drawText(page, label, x, y, size, bold, fonts, ink);
-  return drawWrappedText({
-    page,
-    text: value || "—",
-    x: x + bold.widthOfTextAtSize(label, size) + 3,
-    y,
-    width: 365 - bold.widthOfTextAtSize(label, size),
-    font,
-    fonts,
-    size,
-  });
-}
-
-function drawList(
-  page: PDFPage,
-  items: readonly string[],
+  lines: PrescriptionDocumentPage["clinical"][number]["lines"],
   x: number,
   y: number,
-  width: number,
-  font: PDFFont,
   fonts: PdfFonts,
 ) {
-  if (!items.length) {
-    return drawWrappedText({
+  const lineHeight = 9.5;
+  lines.forEach((line, index) => {
+    const preferred = line.tone === "strong" ? fonts.bold : fonts.regular;
+    const size = line.tone === "muted" ? 6.5 : 7.2;
+    drawText(
       page,
-      text: emptyPrescriptionList,
+      line.text,
       x,
-      y,
-      width,
-      font,
+      y - index * lineHeight,
+      size,
+      preferred,
       fonts,
-      size: 7,
-      color: mutedInk,
-    });
-  }
-  let cursor = y;
-  items.forEach((item) => {
-    cursor = drawWrappedText({
-      page,
-      text: `• ${item}`,
-      x,
-      y: cursor,
-      width,
-      font,
-      fonts,
-      size: 7,
-      lineHeight: 9.5,
-    });
+      line.tone === "muted" ? mutedInk : ink,
+    );
   });
-  return cursor;
+  return y - lines.length * lineHeight;
 }
 
 function drawPage(
@@ -373,34 +333,11 @@ function drawPage(
     size: 7,
   });
   y -= 5;
-  y = drawLabelValue(
-    pdfPage,
-    "Major complaints:",
-    documentPage.complaints.join(", "),
-    y,
-    font,
-    bold,
-    fonts,
-  );
-  y = drawLabelValue(
-    pdfPage,
-    "Examination findings:",
-    documentPage.examinationFindings.join(", "),
-    y - 4,
-    font,
-    bold,
-    fonts,
-  );
-  y = drawLabelValue(
-    pdfPage,
-    "Provisional diagnosis:",
-    documentPage.provisionalDiagnosis,
-    y - 4,
-    font,
-    bold,
-    fonts,
-  );
-  y -= 2;
+  documentPage.clinical.forEach((chunk) => {
+    const label = `${chunk.label}${chunk.continued ? " (continued)" : ""}:`;
+    drawText(pdfPage, label, 24, y, 7.2, bold, fonts, ink);
+    y = drawPlannedLines(pdfPage, chunk.lines, 24, y - 9.5, fonts) - 9.5;
+  });
   pdfPage.drawLine({
     start: { x: 24, y },
     end: { x: 395, y },
@@ -408,40 +345,28 @@ function drawPage(
     color: ink,
   });
 
-  const columnsTop = y - 16;
-  pdfPage.drawText("Advice", {
-    x: 24,
-    y: columnsTop,
-    size: 8,
-    font: bold,
-    color: ink,
+  const columnsTop = y - 14;
+  let leftY = columnsTop;
+  documentPage.leftColumn.forEach((section) => {
+    drawText(pdfPage, section.title, 24, leftY, 8, bold, fonts, ink);
+    leftY -= 12;
+    section.chunks.forEach((chunk) => {
+      chunk.lines.forEach((line, lineIndex) => {
+        drawText(
+          pdfPage,
+          `${lineIndex === 0 ? "• " : "  "}${line.text}`,
+          24,
+          leftY,
+          7,
+          font,
+          fonts,
+          ink,
+        );
+        leftY -= 9.5;
+      });
+      leftY -= 9.5;
+    });
   });
-  const leftY =
-    drawList(
-      pdfPage,
-      documentPage.advice,
-      24,
-      columnsTop - 12,
-      118,
-      font,
-      fonts,
-    ) - 8;
-  pdfPage.drawText("Investigations", {
-    x: 24,
-    y: leftY,
-    size: 8,
-    font: bold,
-    color: ink,
-  });
-  drawList(
-    pdfPage,
-    documentPage.investigations,
-    24,
-    leftY - 12,
-    118,
-    font,
-    fonts,
-  );
 
   pdfPage.drawLine({
     start: { x: 153, y: columnsTop + 8 },
@@ -449,47 +374,32 @@ function drawPage(
     thickness: 0.5,
     color: mutedInk,
   });
-  pdfPage.drawText("Rx  Medicines", {
-    x: 166,
-    y: columnsTop,
-    size: 9,
-    font: bold,
-    color: ink,
-  });
+  if (documentPage.medicines.length) {
+    drawText(pdfPage, "Rx  Medicines", 166, columnsTop, 9, bold, fonts, ink);
+  }
   let medicineY = columnsTop - 16;
-  documentPage.medicines.forEach((medicine, index) => {
-    medicineY = drawWrappedText({
-      page: pdfPage,
-      text: `${index + 1}. ${medicine.name}`,
-      x: 166,
-      y: medicineY,
-      width: 229,
-      font: bold,
+  documentPage.medicines.forEach((medicine) => {
+    if (medicine.continued) {
+      drawText(
+        pdfPage,
+        `${medicine.medicineNumber}. Medicine continued`,
+        166,
+        medicineY,
+        7.2,
+        bold,
+        fonts,
+        ink,
+      );
+      medicineY -= 9.5;
+    }
+    medicineY = drawPlannedLines(
+      pdfPage,
+      medicine.lines,
+      166,
+      medicineY,
       fonts,
-      size: 7.5,
-    });
-    medicineY = drawWrappedText({
-      page: pdfPage,
-      text: medicine.composition,
-      x: 166,
-      y: medicineY,
-      width: 229,
-      font,
-      fonts,
-      size: 6.5,
-      color: mutedInk,
-    });
-    medicineY = drawWrappedText({
-      page: pdfPage,
-      text: formatMedicineDirections(medicine),
-      x: 166,
-      y: medicineY - 1,
-      width: 229,
-      font,
-      fonts,
-      size: 7.2,
-    });
-    medicineY -= 7;
+    );
+    medicineY -= 9.5;
   });
 
   pdfPage.drawLine({
@@ -541,14 +451,22 @@ export async function generatePrescriptionPdf(
   document: CompletedPrescriptionDocument,
 ) {
   const fallbacks = requiredFallbacks(document);
-  const [regularBytes, boldBytes, devanagariBytes, cjkBytes] = await Promise.all([
-    fetchFont(notoSansRegularUrl),
-    fetchFont(notoSansBoldUrl),
-    fallbacks.devanagari
-      ? fetchFont(notoSansDevanagariRegularUrl)
-      : Promise.resolve(null),
-    fallbacks.cjk ? fetchFont(notoSansScRegularUrl) : Promise.resolve(null),
-  ]);
+  const [regularBytes, boldBytes, devanagariBytes, cjkBytes] =
+    await Promise.all([
+      fetchFont(notoSansRegularUrl),
+      fetchFont(notoSansBoldUrl),
+      fallbacks.devanagari
+        ? import("./prescription-devanagari-font").then(
+            ({ notoSansDevanagariRegularUrl }) =>
+              fetchFont(notoSansDevanagariRegularUrl),
+          )
+        : Promise.resolve(null),
+      fallbacks.cjk
+        ? import("./prescription-cjk-font").then(({ notoSansScRegularUrl }) =>
+            fetchFont(notoSansScRegularUrl),
+          )
+        : Promise.resolve(null),
+    ]);
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   pdf.setTitle(`Prescription for ${document.pages[0].patient.name}`);
@@ -560,9 +478,7 @@ export async function generatePrescriptionPdf(
     devanagari: devanagariBytes
       ? await pdf.embedFont(devanagariBytes, { subset: true })
       : undefined,
-    cjk: cjkBytes
-      ? await pdf.embedFont(cjkBytes, { subset: true })
-      : undefined,
+    cjk: cjkBytes ? await pdf.embedFont(cjkBytes, { subset: true }) : undefined,
   };
   document.pages.forEach((documentPage) => {
     const page = pdf.addPage(PageSizes.A5);

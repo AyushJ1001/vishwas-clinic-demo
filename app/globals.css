@@ -13,7 +13,9 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-outfit), Arial, sans-serif;
+  font-family:
+    var(--font-outfit), Arial, "Prescription Noto Sans SC",
+    "Prescription Noto Sans Devanagari", sans-serif;
 }
 button,
 input {
@@ -415,11 +417,33 @@ button {
 .prescription-pages {
   display: grid;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
   gap: 1rem;
 }
-.prescription-page {
+.prescription-page-frame {
+  position: relative;
+  container-type: inline-size;
   min-width: 0;
   width: 100%;
+  max-width: 470px;
+  aspect-ratio: 148 / 210;
+  margin-inline: auto;
+  overflow: hidden;
+}
+.prescription-page-scale {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 470px;
+  height: calc(470px * 210 / 148);
+  transform: scale(calc(100cqw / 470px));
+  transform-origin: top left;
+}
+.prescription-page {
+  display: flex;
+  flex-direction: column;
+  width: 470px;
+  height: calc(470px * 210 / 148);
   overflow-wrap: anywhere;
 }
 .prescription-page-number {
@@ -521,7 +545,14 @@ button {
   .prescription-pages {
     display: block;
   }
+  .prescription-page-frame {
+    display: contents;
+  }
+  .prescription-page-scale {
+    display: contents;
+  }
   .prescription-page {
+    position: static;
     width: 148mm !important;
     height: 210mm !important;
     max-width: none !important;
@@ -532,7 +563,7 @@ button {
     border-radius: 0 !important;
     box-shadow: none !important;
   }
-  .prescription-page:last-child {
+  .prescription-page-frame:last-child .prescription-page {
     break-after: auto;
   }
 }

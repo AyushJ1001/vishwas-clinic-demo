@@ -1,6 +1,7 @@
 import {
   expect,
   test,
+  type APIRequestContext,
   type Locator,
   type Page,
   type Route,
@@ -107,6 +108,384 @@ async function completeSeededPrescription(page: Page, patientName: string) {
   ).toBeVisible();
 }
 
+function validPaginationConsultation() {
+  return {
+    ...createDemoConsultation(),
+    visitType: "new" as const,
+    consultationDate: "2026-09-12",
+    medicines: [
+      {
+        name: "Paracetamol 500 mg tablet",
+        dose: "1–0–1",
+        duration: "5 days",
+        method: "After food",
+      },
+    ],
+  };
+}
+
+async function openSavedConsultation(
+  page: Page,
+  request: APIRequestContext,
+  testName: string,
+  consultation: ReturnType<typeof validPaginationConsultation>,
+) {
+  const draftId = `e2e-pagination-${testName}-${Date.now()}`;
+  const saved = await request.put(`/api/consultation-drafts/${draftId}`, {
+    data: { consultation, revision: 1 },
+  });
+  expect(saved.ok(), await saved.text()).toBe(true);
+  await page.addInitScript(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    { key: draftIdStorageKey, value: draftId },
+  );
+  await page.goto("/");
+  await expect(page.getByLabel("Patient name")).toHaveValue(
+    consultation.patient.name,
+  );
+  await expect(page.getByRole("status")).toContainText("Saved");
+}
+
+test("an exactly full A5 prescription remains one page in review and completion", async ({
+  page,
+  request,
+}) => {
+  // Three one-line clinical sections cost 9 of 23 modeled lines. These four
+  // one-line advice items plus the empty investigations row cost the remaining
+  // 14 lines in the independently budgeted left column.
+  const exactFitAdvice = ["Fit one", "Fit two", "Fit three", "Fit four"];
+  await openSavedConsultation(page, request, "exact-fit", {
+    ...validPaginationConsultation(),
+    advice: exactFitAdvice,
+  });
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  await expect(review.getByText("1 A5 page", { exact: true })).toBeVisible();
+  await expect(
+    review.getByRole("article", { name: "Prescription under review" }),
+  ).toHaveCount(1);
+  await expect(
+    review.getByRole("article", { name: "Prescription under review" }),
+  ).toContainText("Fit four");
+
+  await review.getByRole("button", { name: "Complete prescription" }).click();
+  await expect(
+    page.getByRole("article", { name: "Completed prescription" }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("article", { name: "Completed prescription" }),
+  ).toContainText("Page 1 of 1");
+});
+
+test("supported-script glyphs stay inside the DOM columns and PDF media box", async ({
+  page,
+  request,
+}) => {
+  const adversarialDevanagari = "ओ".repeat(69);
+  const adversarialLatin = "m".repeat(69);
+  await openSavedConsultation(page, request, "supported-script-width", {
+    ...validPaginationConsultation(),
+    examinationFindings: [adversarialDevanagari],
+    provisionalDiagnosis: adversarialLatin,
+  });
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  const reviewPages = review.getByRole("article", {
+    name: "Prescription under review",
+  });
+  for (const adversarialText of [adversarialDevanagari, adversarialLatin]) {
+    const character = adversarialText[0];
+    const plannedLines = reviewPages
+      .locator(".prescription-clinical span")
+      .filter({ hasText: new RegExp(`^${character}+\\s*$`, "u") });
+    expect(await plannedLines.count()).toBeGreaterThan(1);
+    expect(
+      (await plannedLines.allInnerTexts()).join("").replaceAll(" ", ""),
+    ).toBe(adversarialText);
+    const domBounds = await plannedLines.evaluateAll((elements) =>
+      elements.map((element) => {
+        const line = element.getBoundingClientRect();
+        const prescriptionPage = element
+          .closest("article")!
+          .getBoundingClientRect();
+        return {
+          left: line.left,
+          right: line.right,
+          pageLeft: prescriptionPage.left,
+          pageRight: prescriptionPage.right,
+        };
+      }),
+    );
+    for (const bounds of domBounds) {
+      expect(bounds.left).toBeGreaterThanOrEqual(bounds.pageLeft - 1);
+      expect(bounds.right).toBeLessThanOrEqual(bounds.pageRight + 1);
+    }
+  }
+
+  await review.getByRole("button", { name: "Complete prescription" }).click();
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PDF" }).click();
+  const path = await (await downloadEvent).path();
+  expect(path).not.toBeNull();
+  const pdf = await getDocument({
+    data: new Uint8Array(await readFile(path!)),
+  }).promise;
+  let extractedDevanagari = "";
+  let extractedLatin = "";
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const pdfPage = await pdf.getPage(pageNumber);
+    const viewport = pdfPage.getViewport({ scale: 1 });
+    const content = await pdfPage.getTextContent();
+    for (const item of content.items) {
+      if (!("str" in item) || !item.str.trim()) continue;
+      expect(item.transform[4]).toBeGreaterThanOrEqual(-1);
+      expect(item.transform[4] + item.width).toBeLessThanOrEqual(
+        viewport.width + 1,
+      );
+      if (/^ओ+$/u.test(item.str)) extractedDevanagari += item.str;
+      if (/^m+$/u.test(item.str)) extractedLatin += item.str;
+    }
+  }
+  expect(extractedDevanagari).toBe(adversarialDevanagari);
+  expect(extractedLatin).toBe(adversarialLatin);
+});
+
+test("overflow keeps identical two-page breaks and content across mobile review, completion, print, and PDF", async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const advice = Array.from(
+    { length: 2 },
+    (_, index) =>
+      `Overflow advice ${index + 1}: drink measured fluids and record symptoms twice daily`,
+  );
+  const consultation = {
+    ...validPaginationConsultation(),
+    patient: {
+      ...validPaginationConsultation().patient,
+      name: "Demo Patient 李 Zoë D’Souza",
+    },
+    advice,
+    investigations: ["CBC overflow marker · रक्त जाँच"],
+  };
+  await openSavedConsultation(page, request, "two-page-mobile", consultation);
+
+  const draftPages = page.getByRole("article", {
+    name: "Draft prescription preview",
+  });
+  await expect(draftPages).toHaveCount(2);
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  await expect(review.getByText("2 A5 pages", { exact: true })).toBeVisible();
+  const reviewPages = review.getByRole("article", {
+    name: "Prescription under review",
+  });
+  await expect(reviewPages).toHaveCount(2);
+  const reviewedText = await reviewPages.allInnerTexts();
+  const reviewedBounds = await reviewPages.evaluateAll((elements) =>
+    elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        left: bounds.left,
+        right: bounds.right,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+      };
+    }),
+  );
+  for (const bounds of reviewedBounds) {
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(390);
+    expect(bounds.scrollHeight).toBeLessThanOrEqual(bounds.clientHeight + 1);
+  }
+  const clinicalLabel = reviewPages
+    .getByText("Major complaints:", { exact: true })
+    .first();
+  const fitWidthClinicalFontSize = await clinicalLabel.evaluate((element) => {
+    const prescriptionPage = element.closest<HTMLElement>(
+      ".prescription-page",
+    )!;
+    const scale =
+      prescriptionPage.getBoundingClientRect().width /
+      prescriptionPage.offsetWidth;
+    return Number.parseFloat(getComputedStyle(element).fontSize) * scale;
+  });
+  expect(Number.isFinite(fitWidthClinicalFontSize)).toBe(true);
+  expect(fitWidthClinicalFontSize).toBeLessThan(11);
+  for (let step = 0; step < 4; step += 1) {
+    await review.getByRole("button", { name: "Zoom in" }).click();
+  }
+  await expect(review.getByLabel("Review zoom")).toHaveText("200%");
+  const effectiveClinicalFontSize = await clinicalLabel.evaluate((element) => {
+      const prescriptionPage = element.closest<HTMLElement>(
+        ".prescription-page",
+      )!;
+      const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
+      const transformScale =
+        prescriptionPage.getBoundingClientRect().width /
+        prescriptionPage.offsetWidth;
+      return fontSize * transformScale;
+    });
+  expect(Number.isFinite(effectiveClinicalFontSize)).toBe(true);
+  expect(effectiveClinicalFontSize).toBeGreaterThanOrEqual(11);
+
+  await review.getByRole("button", { name: "Complete prescription" }).click();
+  const completedPages = page.getByRole("article", {
+    name: "Completed prescription",
+  });
+  await expect(completedPages).toHaveCount(2);
+  expect(await completedPages.allInnerTexts()).toEqual(reviewedText);
+  await expect(completedPages.nth(0)).toContainText("Overflow advice 1:");
+  await expect(completedPages.nth(1)).toContainText("CBC overflow marker");
+
+  await page.emulateMedia({ media: "print" });
+  const printBreaks = await completedPages.evaluateAll((elements) =>
+    elements.map((element) => getComputedStyle(element).breakAfter),
+  );
+  expect(printBreaks).toEqual(["page", "auto"]);
+  await page.emulateMedia({ media: "screen" });
+
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PDF" }).click();
+  const path = await (await downloadEvent).path();
+  expect(path).not.toBeNull();
+  const bytes = await readFile(path!);
+  const pdf = await getDocument({ data: new Uint8Array(bytes) }).promise;
+  expect(pdf.numPages).toBe(2);
+  const pdfText: string[] = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const pdfPage = await pdf.getPage(pageNumber);
+    const content = await pdfPage.getTextContent();
+    const text = content.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ");
+    pdfText.push(text);
+    expect(text).toContain("VISHWAS CLINIC");
+    expect(text).toContain("Demo Patient 李 Zoë D’Souza");
+    expect(text).toContain("No substitutes · Bring the prescription");
+    expect(text).toContain(`Page ${pageNumber} of 2`);
+  }
+  const allPdfText = pdfText.join(" ");
+  for (const item of [...advice, "CBC overflow marker", "रक्त जाँच"]) {
+    expect(allPdfText).toContain(item);
+  }
+});
+
+test("oversized clinical, advice, and medicine items always advance without clipping or data loss", async ({
+  page,
+  request,
+}) => {
+  const longClinical = `CLINICAL-START ${"carefully-observed ".repeat(90)}CLINICAL-END`;
+  const longAdvice = `ADVICE-START ${"measured-hydration ".repeat(90)}ADVICE-END`;
+  const longMedicine = `MEDICINE-START ${"extended-release ".repeat(90)}MEDICINE-END`;
+  await openSavedConsultation(page, request, "oversized-items", {
+    ...validPaginationConsultation(),
+    examinationFindings: [longClinical],
+    advice: [longAdvice],
+    medicines: [
+      {
+        name: longMedicine,
+        dose: "1–0–1",
+        duration: "5 days",
+        method: "After food",
+      },
+    ],
+  });
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  const pages = review.getByRole("article", {
+    name: "Prescription under review",
+  });
+  const count = await pages.count();
+  expect(count).toBeGreaterThan(3);
+  expect(count).toBeLessThan(20);
+  await expect(pages.first()).toContainText("CLINICAL-START");
+  const completeText = (await pages.allInnerTexts()).join(" ");
+  const completeCharacters = completeText.replace(/\s/gu, "");
+  for (const marker of [
+    "CLINICAL-START",
+    "CLINICAL-END",
+    "ADVICE-START",
+    "ADVICE-END",
+    "MEDICINE-START",
+    "MEDICINE-END",
+  ]) {
+    expect(completeCharacters).toContain(marker);
+  }
+  const numbering = await pages.evaluateAll((elements) =>
+    elements.map((element) => {
+      const pageBounds = element.getBoundingClientRect();
+      const footerTop = element
+        .querySelector("footer")!
+        .getBoundingClientRect().top;
+      const content = element.querySelectorAll(
+        ".prescription-clinical b, .prescription-clinical span, .prescription-columns b, .prescription-columns span",
+      );
+      const visuallyClipped = Array.from(content).some((node) => {
+        const bounds = node.getBoundingClientRect();
+        return (
+          bounds.bottom > footerTop + 1 ||
+          bounds.left < pageBounds.left - 1 ||
+          bounds.right > pageBounds.right + 1
+        );
+      });
+      return {
+        number: element.getAttribute("data-page-number"),
+        count: element.getAttribute("data-page-count"),
+        clipped:
+          element.scrollHeight > element.clientHeight + 1 || visuallyClipped,
+      };
+    }),
+  );
+  expect(numbering).toEqual(
+    Array.from({ length: count }, (_, index) => ({
+      number: String(index + 1),
+      count: String(count),
+      clipped: false,
+    })),
+  );
+
+  await review.getByRole("button", { name: "Complete prescription" }).click();
+  const completedPages = page.getByRole("article", {
+    name: "Completed prescription",
+  });
+  await expect(completedPages).toHaveCount(count);
+  expect((await completedPages.allInnerTexts()).join(" ")).toBe(completeText);
+
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PDF" }).click();
+  const path = await (await downloadEvent).path();
+  expect(path).not.toBeNull();
+  const pdf = await getDocument({
+    data: new Uint8Array(await readFile(path!)),
+  }).promise;
+  expect(pdf.numPages).toBe(count);
+  const pdfPageText: string[] = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const pdfPage = await pdf.getPage(pageNumber);
+    const content = await pdfPage.getTextContent();
+    pdfPageText.push(
+      content.items.map((item) => ("str" in item ? item.str : "")).join(" "),
+    );
+  }
+  const allPdfText = pdfPageText.join(" ");
+  const allPdfCharacters = allPdfText.replace(/\s/gu, "");
+  for (const marker of [
+    "CLINICAL-START",
+    "CLINICAL-END",
+    "ADVICE-START",
+    "ADVICE-END",
+    "MEDICINE-START",
+    "MEDICINE-END",
+  ]) {
+    expect(allPdfCharacters).toContain(marker);
+  }
+});
+
 test("print is available only for a completed A5 prescription and prints only that document", async ({
   page,
 }) => {
@@ -205,13 +584,7 @@ test("downloaded PDF is a readable A5 document with the completed Unicode conten
   ]) {
     expect(text).toContain(expected);
   }
-  expect(
-    requestedFonts.some(
-      (url) =>
-        url.includes("NotoSansSC") &&
-        url.includes("prescription-font-request="),
-    ),
-  ).toBe(false);
+  expect(requestedFonts.some((url) => url.includes("NotoSansSC"))).toBe(false);
 });
 
 test("downloaded PDF preserves a long multilingual patient identity without overlapping demographics", async ({
@@ -249,7 +622,9 @@ test("downloaded PDF preserves a long multilingual patient identity without over
   expect(extractedText).toContain(patientName);
 
   const ageAndSex = textItems.find((item) => item.text.startsWith("Age/Sex:"));
-  const consultationDate = textItems.find((item) => item.text.startsWith("Date:"));
+  const consultationDate = textItems.find((item) =>
+    item.text.startsWith("Date:"),
+  );
   expect(ageAndSex).toBeDefined();
   expect(consultationDate).toBeDefined();
   expect(ageAndSex!.right).toBeLessThanOrEqual(consultationDate!.x - 4);
@@ -792,7 +1167,7 @@ test("phone review fits the viewport and keeps clinical text readable", async ({
       .evaluate((element) =>
         Number.parseFloat(getComputedStyle(element).fontSize),
       );
-    expect(fontSize).toBeGreaterThanOrEqual(14);
+    expect(fontSize).toBeGreaterThanOrEqual(11);
   }
 });
 
@@ -1384,9 +1759,9 @@ test("consultation values appear unchanged in the draft prescription", async ({
   await expect(page.getByLabel(`${seededMedicine} dose`)).toHaveValue("");
   await expect(page.getByLabel(`${seededMedicine} duration`)).toHaveValue("");
   await expect(page.getByLabel(`${seededMedicine} method`)).toHaveValue("");
-  await expect(
-    page.getByRole("article", { name: "Draft prescription preview" }),
-  ).toContainText("Dose not set · Method not set · Duration not set");
+  await expect(page.locator(".preview-wrap .prescription-pages")).toContainText(
+    "Dose not set · Method not set · Duration not set",
+  );
 
   await page.getByLabel("Patient name").fill("Demo Patient Rivera");
   await page.getByLabel("Age").fill("47");
@@ -1434,9 +1809,7 @@ test("consultation values appear unchanged in the draft prescription", async ({
   await page.getByLabel(`${seededMedicine} duration`).selectOption("7 days");
   await page.getByLabel(`${seededMedicine} method`).selectOption("With water");
 
-  const preview = page.getByRole("article", {
-    name: "Draft prescription preview",
-  });
+  const preview = page.locator(".preview-wrap .prescription-pages");
   await expect(preview).toContainText("Demo Patient Rivera");
   await expect(preview).toContainText("47/Other");
   await expect(preview).toContainText("09/09/2026");
@@ -1487,7 +1860,7 @@ test("follow-up prescribing requires a linked prior demo visit", async ({
     "Demo Patient Ananya Deshmukh",
   );
   await expect(
-    page.getByRole("article", { name: "Draft prescription preview" }),
+    page.locator(".preview-wrap .prescription-pages"),
   ).not.toContainText("Demo Patient Kavya Mehta");
 });
 

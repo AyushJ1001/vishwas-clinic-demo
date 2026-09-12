@@ -59,8 +59,7 @@ import {
 } from "./use-consultation-draft";
 import {
   createCompletedPrescriptionDocument,
-  emptyPrescriptionList,
-  formatMedicineDirections,
+  createPrescriptionDocumentPages,
   formatPrescriptionVitals,
   prescriptionFooter,
   type PrescriptionDocumentPage,
@@ -1769,9 +1768,27 @@ function PrescriptionPage() {
 }
 
 function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
-  const page: PrescriptionDocumentPage = {
-    number: 1,
-    count: 1,
+  const pages = createDraftPrescriptionPages(consultation);
+  return (
+    <div className="rounded-[30px] bg-[#123930] p-5 text-white shadow-[0_30px_80px_rgba(21,54,47,.2)]">
+      <div className="mb-4 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-[.18em] text-white/70">
+          Draft prescription
+        </span>
+        <span className="text-xs font-semibold text-white/70">
+          Review before completion
+        </span>
+      </div>
+      <PrescriptionDocument
+        pages={pages}
+        ariaLabel="Draft prescription preview"
+      />
+    </div>
+  );
+}
+
+function createDraftPrescriptionPages(consultation: Consultation) {
+  return createPrescriptionDocumentPages({
     clinic: clinicIdentity,
     doctor: clinicDoctors[consultation.doctorName],
     patient: consultation.patient,
@@ -1787,23 +1804,7 @@ function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
       composition: resolveMedicineComposition(medicine.name),
     })),
     footer: prescriptionFooter,
-  };
-  return (
-    <div className="rounded-[30px] bg-[#123930] p-5 text-white shadow-[0_30px_80px_rgba(21,54,47,.2)]">
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-[.18em] text-white/70">
-          Draft prescription
-        </span>
-        <span className="text-xs font-semibold text-white/70">
-          Review before completion
-        </span>
-      </div>
-      <PrescriptionDocument
-        pages={[page]}
-        ariaLabel="Draft prescription preview"
-      />
-    </div>
-  );
+  });
 }
 
 function PrescriptionDocument({
@@ -1813,281 +1814,205 @@ function PrescriptionDocument({
   pages: readonly PrescriptionDocumentPage[];
   ariaLabel: string;
 }) {
+  useEffect(() => {
+    const addFontFace = async (
+      id: string,
+      load: () => Promise<{ fontFace: string }>,
+    ) => {
+      if (document.getElementById(id)) return;
+      const { fontFace } = await load();
+      if (document.getElementById(id)) return;
+      const style = document.createElement("style");
+      style.id = id;
+      style.textContent = fontFace;
+      document.head.appendChild(style);
+    };
+    const pageText = JSON.stringify(pages);
+    if (/[\u0900-\u097f]/u.test(pageText)) {
+      void addFontFace("prescription-devanagari-font-face", () =>
+        import("./prescription-devanagari-font").then(
+          ({ prescriptionDevanagariFontFace }) => ({
+            fontFace: prescriptionDevanagariFontFace,
+          }),
+        ),
+      );
+    }
+    if (/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u.test(pageText)) {
+      void addFontFace("prescription-cjk-font-face", () =>
+        import("./prescription-cjk-font").then(
+          ({ prescriptionCjkFontFace }) => ({
+            fontFace: prescriptionCjkFontFace,
+          }),
+        ),
+      );
+    }
+  }, [pages]);
+
   return (
     <div className="prescription-pages">
       {pages.map((page) => (
-      <article
-          key={page.number}
-        aria-label={ariaLabel}
-          data-page-number={page.number}
-          data-page-count={page.count}
-          className="document-preview prescription-page mx-auto aspect-[148/210] h-auto w-full max-w-[470px] overflow-visible bg-[#fffef9] p-6 text-[#202c29] shadow-2xl sm:p-8"
-      >
-        <header className="text-center">
-          <h2 className="text-2xl font-black tracking-[.04em]">
-              {page.clinic.name}
-          </h2>
-          <div className="mt-2 grid grid-cols-[1fr_auto] items-start border-b-2 border-[#202c29] pb-2 text-left">
-            <div>
-                <b className="text-[11px]">{page.doctor.name}</b>
-              <p className="text-[8px]">
-                  {page.doctor.qualifications} · {page.doctor.registration}
-              </p>
-                {page.doctor.mobile && (
-                  <b className="text-[9px]">Mobile: {page.doctor.mobile}</b>
-              )}
-                {page.doctor.specialty && (
-                  <p className="text-[7px]">{page.doctor.specialty}</p>
-              )}
-            </div>
-            <Pulse size={27} weight="duotone" />
-          </div>
-          <div className="space-y-1 border-b-2 py-2 text-[7px]">
-              <p>{page.clinic.address}</p>
-              <p>{page.clinic.hours}</p>
-              <p>{page.clinic.services}</p>
-          </div>
-        </header>
-        <div className="mt-3 grid grid-cols-[1.4fr_.6fr_.6fr] text-[8px]">
-          <span>
-              Name: <b>{page.patient.name || "—"}</b>
-          </span>
-          <span>
-              Age/Sex: {page.patient.age || "—"}/{page.patient.sex || "—"}
-          </span>
-            <span>Date: {page.consultationDate}</span>
-        </div>
-        <div className="mt-3 grid grid-cols-5 text-[8px]">
-            {formatPrescriptionVitals(page.vitals).map((vital) => (
-              <span key={vital}>{vital}</span>
-            ))}
-        </div>
-        <p className="mt-4 text-[8px]">
-            <b>Major complaints:</b> {page.complaints.join(", ") || "—"}
-        </p>
-        <p className="mt-2 text-[8px]">
-          <b>Examination findings:</b>{" "}
-            {page.examinationFindings.join(", ") || "—"}
-        </p>
-        <p className="mt-5 border-b pb-2 text-[8px]">
-            <b>Provisional diagnosis:</b> {page.provisionalDiagnosis || "—"}
-        </p>
-        <div className="grid min-h-[52%] grid-cols-[32%_68%]">
-          <aside className="border-r px-1 py-3 text-[7px]">
-            <b>Advice</b>
-            <ul className="mt-2 list-disc space-y-1 pl-3">
-                {page.advice.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-                {!page.advice.length && <li>{emptyPrescriptionList}</li>}
-            </ul>
-            <b className="mt-5 block">Investigations</b>
-            <ul className="mt-2 list-disc space-y-1 pl-3">
-                {page.investigations.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-                {!page.investigations.length && (
-                  <li>{emptyPrescriptionList}</li>
-                )}
-            </ul>
-          </aside>
-          <section className="p-3">
-            <div className="flex items-start justify-between">
-              <Image
-                src="/icons/prescription-fill.svg"
-                alt="Prescription"
-                width={34}
-                height={34}
-                className="rx-logo"
-              />
-              <span className="text-[6px]">
-                Read the instructions carefully
-              </span>
-            </div>
-            <div className="mt-4 space-y-3">
-                {page.medicines.map((medicine, i) => (
-                <div key={medicine.name} className="text-[8px]">
-                  <b>
-                    {i + 1}. {medicine.name}
-                  </b>
-                  <p className="text-[6px] text-[#65716d]">
-                    {medicine.composition}
+        <div className="prescription-page-frame" key={page.number}>
+          <div className="prescription-page-scale">
+            <article
+              aria-label={ariaLabel}
+              data-page-number={page.number}
+              data-page-count={page.count}
+              className="document-preview prescription-page overflow-hidden bg-[#fffef9] p-8 text-[#202c29] shadow-2xl"
+            >
+            <header className="text-center">
+              <h2 className="text-2xl font-black tracking-[.04em]">
+                {page.clinic.name}
+              </h2>
+              <div className="mt-2 grid grid-cols-[1fr_auto] items-start border-b-2 border-[#202c29] pb-2 text-left">
+                <div>
+                  <b className="text-[11px]">{page.doctor.name}</b>
+                  <p className="text-[8px]">
+                    {page.doctor.qualifications} · {page.doctor.registration}
                   </p>
-                  <p className="mt-1">
-                    {formatMedicineDirections(medicine)}
-                  </p>
+                  {page.doctor.mobile && (
+                    <b className="text-[9px]">
+                      Mobile: {page.doctor.mobile}
+                    </b>
+                  )}
+                  {page.doctor.specialty && (
+                    <p className="text-[7px]">{page.doctor.specialty}</p>
+                  )}
                 </div>
+                <Pulse size={27} weight="duotone" />
+              </div>
+              <div className="space-y-1 border-b-2 py-2 text-[7px]">
+                <p>{page.clinic.address}</p>
+                <p>{page.clinic.hours}</p>
+                <p>{page.clinic.services}</p>
+              </div>
+            </header>
+            <div className="mt-3 grid grid-cols-[1.4fr_.6fr_.6fr] text-[8px]">
+              <span>
+                Name: <b>{page.patient.name || "—"}</b>
+              </span>
+              <span>
+                Age/Sex: {page.patient.age || "—"}/{page.patient.sex || "—"}
+              </span>
+              <span>Date: {page.consultationDate}</span>
+            </div>
+            <div className="mt-3 grid grid-cols-5 text-[8px]">
+              {formatPrescriptionVitals(page.vitals).map((vital) => (
+                <span key={vital}>{vital}</span>
               ))}
             </div>
-          </section>
+            <div className="prescription-clinical mt-2 border-b pb-2 text-[11px] leading-[1.2]">
+              {page.clinical.map((chunk) => (
+                <section
+                  key={`${chunk.key}-${chunk.continued}`}
+                  className="mb-1"
+                >
+                  <b>
+                    {chunk.label}
+                    {chunk.continued ? " (continued)" : ""}:
+                  </b>
+                  {chunk.lines.map((line, index) => (
+                    <span key={`${line.text}-${index}`} className="block">
+                      {line.text}{" "}
+                    </span>
+                  ))}
+                </section>
+              ))}
+            </div>
+            {(page.leftColumn.length > 0 || page.medicines.length > 0) && (
+              <div className="prescription-columns grid min-h-0 flex-1 grid-cols-[32%_68%] overflow-hidden">
+                <aside className="min-h-0 overflow-hidden border-r px-1 py-3 text-[11px] leading-[1.2]">
+                  {page.leftColumn.map((section) => (
+                    <section
+                      key={section.key}
+                      className="prescription-list-section"
+                    >
+                      <b>{section.title}</b>
+                      <ul className="mt-1 list-disc pl-3">
+                        {section.chunks.map((chunk) => (
+                          <li key={chunk.key}>
+                            {chunk.lines.map((line, index) => (
+                              <span
+                                key={`${line.text}-${index}`}
+                                className="block"
+                              >
+                                {line.text}{" "}
+                              </span>
+                            ))}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
+                </aside>
+                <section className="min-h-0 overflow-hidden p-3 text-[11px] leading-[1.2]">
+                  <div className="flex items-start justify-between">
+                    <Image
+                      src="/icons/prescription-fill.svg"
+                      alt="Prescription"
+                      width={34}
+                      height={34}
+                      className="rx-logo"
+                    />
+                    <span className="text-[6px]">
+                      Read the instructions carefully
+                    </span>
+                  </div>
+                  <div className="prescription-medicines mt-2">
+                    {page.medicines.map((medicine) => (
+                      <div key={medicine.key}>
+                        {medicine.continued && (
+                          <b>
+                            {medicine.medicineNumber}. Medicine continued
+                          </b>
+                        )}
+                        {medicine.lines.map((line, index) => (
+                          <span
+                            key={`${line.text}-${index}`}
+                            className={`block ${line.tone === "strong" ? "font-bold" : line.tone === "muted" ? "text-xs text-[#65716d]" : ""}`}
+                          >
+                            {line.text}{" "}
+                          </span>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            )}
+            <footer className="border-t pt-2 text-center text-[6px]">
+              {page.footer.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+              <p className="prescription-page-number">
+                Page {page.number} of {page.count}
+              </p>
+            </footer>
+            </article>
+          </div>
         </div>
-        <footer className="border-t pt-2 text-center text-[6px]">
-            {page.footer.map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-            <p className="prescription-page-number">
-              Page {page.number} of {page.count}
-            </p>
-        </footer>
-      </article>
       ))}
     </div>
   );
 }
-
 function PrescriptionReviewDocument({
   consultation,
 }: {
   consultation: Consultation;
 }) {
-  const doctor = clinicDoctors[consultation.doctorName];
-  const { patient, vitals } = consultation;
-  const enteredVitals = [
-    vitals.weight ? `Weight ${vitals.weight} kg` : "",
-    vitals.temperature ? `Temperature ${vitals.temperature} °F` : "",
-    vitals.pulse ? `Pulse ${vitals.pulse} /min` : "",
-    vitals.systolic || vitals.diastolic
-      ? `BP ${vitals.systolic || "—"}/${vitals.diastolic || "—"} mmHg`
-      : "",
-    vitals.spo2 ? `SpO₂ ${vitals.spo2}%` : "",
-  ].filter(Boolean);
+  const pages = createDraftPrescriptionPages(consultation);
 
   return (
-    <article
-      aria-label="Prescription under review"
-      className="w-full min-w-0 bg-[#fffef9] p-4 text-[#202c29] shadow-[0_20px_45px_rgba(0,0,0,.2)] sm:p-7"
-    >
-      <header className="border-b-2 border-[#202c29] pb-4 text-center">
-        <h3 className="text-xl font-black tracking-[.04em]">
-          {clinicIdentity.name}
-        </h3>
-        <p className="mt-3 text-sm font-bold">{doctor.name}</p>
-        <p className="mt-1 text-xs leading-relaxed text-[#53635e]">
-          {doctor.qualifications} · {doctor.registration}
-          {doctor.mobile ? ` · Mobile ${doctor.mobile}` : ""}
-        </p>
-        {doctor.specialty && (
-          <p className="mt-1 text-xs leading-relaxed text-[#53635e]">
-            {doctor.specialty}
-          </p>
-        )}
-        <p className="mx-auto mt-3 max-w-[65ch] text-xs leading-relaxed text-[#53635e]">
-          {clinicIdentity.address}
-        </p>
-      </header>
-
-      <dl className="grid gap-3 border-b border-[#202c29]/20 py-4 text-sm sm:grid-cols-3">
-        <div className="min-w-0">
-          <dt className="font-bold">Patient</dt>
-          <dd className="mt-1 break-words">{patient.name || "—"}</dd>
-        </div>
-        <div>
-          <dt className="font-bold">Age and sex</dt>
-          <dd className="mt-1">
-            {patient.age || "—"} / {patient.sex || "—"}
-          </dd>
-        </div>
-        <div>
-          <dt className="font-bold">Consultation date</dt>
-          <dd className="mt-1 tabular-nums">
-            {formatConsultationDate(consultation.consultationDate)}
-          </dd>
-        </div>
-      </dl>
-
-      {enteredVitals.length > 0 && (
-        <section
-          aria-labelledby="review-vitals-heading"
-          className="border-b border-[#202c29]/20 py-4"
-        >
-          <h4 id="review-vitals-heading" className="text-sm font-bold">
-            Vitals
-          </h4>
-          <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm">
-            {enteredVitals.map((vital) => (
-              <li key={vital}>{vital}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <div className="space-y-4 border-b border-[#202c29]/20 py-4 text-sm leading-relaxed">
-        <p>
-          <b>Major complaints:</b> {consultation.complaints.join(", ") || "—"}
-        </p>
-        <p>
-          <b>Examination findings:</b>{" "}
-          {consultation.examinationFindings.join(", ") || "—"}
-        </p>
-        <p>
-          <b>Provisional diagnosis:</b>{" "}
-          {consultation.provisionalDiagnosis || "—"}
-        </p>
-      </div>
-
-      <div className="grid gap-6 py-4 md:grid-cols-[.75fr_1.25fr]">
-        <div className="grid gap-5 text-sm leading-relaxed sm:grid-cols-2 md:grid-cols-1">
-          <section aria-labelledby="review-advice-heading">
-            <h4 id="review-advice-heading" className="font-bold">
-              Advice
-            </h4>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {consultation.advice.length ? (
-                consultation.advice.map((item) => <li key={item}>{item}</li>)
-              ) : (
-                <li className="list-none text-[#536760]">None entered</li>
-              )}
-            </ul>
-          </section>
-          <section aria-labelledby="review-investigations-heading">
-            <h4 id="review-investigations-heading" className="font-bold">
-              Investigations
-            </h4>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {consultation.investigations.length ? (
-                consultation.investigations.map((item) => (
-                  <li key={item}>{item}</li>
-                ))
-              ) : (
-                <li className="list-none text-[#536760]">None entered</li>
-              )}
-            </ul>
-          </section>
-        </div>
-        <section aria-labelledby="review-medicines-heading" className="min-w-0">
-          <h4 id="review-medicines-heading" className="text-sm font-bold">
-            Medicines
-          </h4>
-          {consultation.medicines.length ? (
-            <ol className="mt-3 space-y-4">
-              {consultation.medicines.map((medicine, index) => (
-                <li
-                  key={medicine.name}
-                  className="min-w-0 text-sm leading-relaxed"
-                >
-                  <p className="break-words font-bold">
-                    {index + 1}. {medicine.name}
-                  </p>
-                  <p className="break-words text-sm text-[#53635e]">
-                    {resolveMedicineComposition(medicine.name)}
-                  </p>
-                  <p className="mt-1 break-words text-sm">
-                    {medicine.dose || "Dose not set"} ·{" "}
-                    {medicine.method || "Method not set"} ·{" "}
-                    {medicine.duration || "Duration not set"}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="mt-2 text-sm text-[#536760]">No medicines selected</p>
-          )}
-        </section>
-      </div>
-    </article>
+    <div className="w-full min-w-0">
+      <p className="mb-3 text-center text-xs font-bold text-[#435c54]">
+        {pages.length} A5 {pages.length === 1 ? "page" : "pages"}
+      </p>
+      <PrescriptionDocument
+        pages={pages}
+        ariaLabel="Prescription under review"
+      />
+    </div>
   );
 }
-
 function PrescriptionReviewDialog({
   consultation,
   problems,
