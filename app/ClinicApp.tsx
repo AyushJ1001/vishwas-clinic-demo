@@ -14,6 +14,7 @@ import {
   DownloadSimple,
   FloppyDisk,
   MagnifyingGlass,
+  Minus,
   Plus,
   Printer,
   Pulse,
@@ -87,6 +88,12 @@ const routes: { href: string; label: string; key: RouteName }[] = [
   },
   { href: "/summaries", label: "Summaries", key: "summaries" },
 ];
+
+function getVisitTypeLabel(visitType: Consultation["visitType"]) {
+  if (visitType === "new") return "New consultation";
+  if (visitType === "followup") return "Follow-up consultation";
+  return "Prescription type needed";
+}
 
 function CatalogPicker({
   label,
@@ -479,7 +486,7 @@ function CatalogPicker({
                   onClick={() =>
                     setExpanded(expanded === group.group ? "" : group.group)
                   }
-                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold uppercase tracking-[.11em] text-[#536760] hover:bg-[#ece7dc]"
+                  className="flex min-h-11 min-w-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold uppercase tracking-[.11em] text-[#536760] hover:bg-[#ece7dc]"
                   aria-expanded={expanded === group.group}
                   aria-controls={groupId(group.group)}
                 >
@@ -517,7 +524,7 @@ function CatalogPicker({
                         onMouseEnter={() =>
                           setActiveOption(optionKey(group.group, item))
                         }
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[#15362f] hover:text-white ${activeOption === optionKey(group.group, item) ? "bg-[#15362f] text-white" : ""}`}
+                        className={`flex min-h-11 min-w-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[#15362f] hover:text-white ${activeOption === optionKey(group.group, item) ? "bg-[#15362f] text-white" : ""}`}
                         role="option"
                         aria-selected={values.includes(item)}
                         tabIndex={-1}
@@ -543,7 +550,7 @@ function CatalogPicker({
                   setAdding(true);
                   setSaveState("idle");
                 }}
-                className="mt-2 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#b85a36]/50 bg-[#fff7f0] px-3 py-3 text-left text-sm font-semibold text-[#9b492f]"
+                className="mt-2 flex min-h-11 min-w-11 w-full items-center gap-2 rounded-xl border border-dashed border-[#b85a36]/50 bg-[#fff7f0] px-3 py-3 text-left text-sm font-semibold text-[#9b492f]"
               >
                 <Plus size={15} weight="bold" /> Add “{query.trim()}” as a
                 clinic term
@@ -554,7 +561,7 @@ function CatalogPicker({
                 <p className="text-xs font-bold text-[#15362f]">
                   Where should this term live?
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-[#536760]">
+                <p className="mt-1 text-xs leading-relaxed text-[#536760]">
                   Custom terms are saved for this clinic and kept distinct from
                   the standard catalog.
                 </p>
@@ -596,7 +603,7 @@ function CatalogPicker({
                     type="button"
                     onClick={saveCustomItem}
                     disabled={saveState === "saving"}
-                    className="rounded-full bg-[#15362f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                    className="min-h-11 min-w-11 rounded-full bg-[#15362f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
                     aria-label={`Save ${query.trim()} to ${label} catalog`}
                   >
                     {saveState === "saving"
@@ -611,7 +618,7 @@ function CatalogPicker({
                       setAdding(false);
                       setSaveState("idle");
                     }}
-                    className="rounded-full px-3 py-2 text-xs font-bold text-[#536760]"
+                    className="min-h-11 min-w-11 rounded-full px-3 py-2 text-xs font-bold text-[#536760]"
                   >
                     Cancel
                   </button>
@@ -644,7 +651,7 @@ function UnitInput({
 }) {
   return (
     <label>
-      <span className="mb-1.5 block text-[10px] uppercase tracking-[.12em] text-[#536760]">
+      <span className="field-label mb-1.5">
         {label}
       </span>
       <span className="unit-input-wrap">
@@ -685,7 +692,7 @@ function BloodPressureInput({
 }) {
   return (
     <label>
-      <span className="mb-1.5 block text-[10px] uppercase tracking-[.12em] text-[#536760]">
+      <span className="field-label mb-1.5">
         BP
       </span>
       <span className="bp-input-wrap">
@@ -717,7 +724,7 @@ function BloodPressureInput({
           }
         />
       </span>
-      <span className="mt-1 block text-[10px] text-[#536760]">mmHg</span>
+      <span className="mt-1 block text-xs text-[#536760]">mmHg</span>
       {systolicError && (
         <FieldError id="systolic-blood-pressure-error">
           {systolicError}
@@ -762,7 +769,7 @@ function MedicineInstructionSelect({
       <select
         id={id}
         aria-label={label}
-        className="input-field min-h-10 py-2 text-xs"
+        className="input-field min-h-11 py-2 text-sm"
         value={value}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? `${id}-error` : undefined}
@@ -810,8 +817,8 @@ function Shell({
   return (
     <main className="w-full max-w-full overflow-x-hidden bg-[#f4f1e9] text-[#15362f]">
       <nav className="sticky top-0 z-50 border-b border-[#15362f]/10 bg-[#f4f1e9]/92 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-5 px-5 py-4 lg:px-10">
-          <Link href="/" className="flex items-center gap-3">
+        <div className="nav-workspace-header mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3 px-5 py-4 lg:px-10">
+          <Link href="/" className="flex min-w-0 items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-[#15362f] text-white">
               <Pulse size={20} weight="bold" />
             </span>
@@ -835,7 +842,7 @@ function Shell({
               </Link>
             ))}
           </div>
-          <label className="relative flex items-center rounded-full border border-[#15362f]/15 bg-white px-4 py-2 text-xs font-semibold">
+          <label className="doctor-control relative flex items-center rounded-full border border-[#15362f]/15 bg-white px-4 py-2 text-xs font-semibold">
             <span className="sr-only">Select doctor</span>
             <select
               aria-label="Select doctor"
@@ -844,7 +851,7 @@ function Shell({
               onChange={(event) =>
                 onDoctorChange?.(event.target.value as ClinicDoctorName)
               }
-              className="appearance-none bg-transparent pr-5 outline-none disabled:cursor-default"
+              className="min-w-0 max-w-full appearance-none bg-transparent pr-5 outline-none disabled:cursor-default"
             >
               {doctors.map((doctor) => (
                 <option key={doctor}>{doctor}</option>
@@ -880,11 +887,17 @@ function Shell({
 function DraftSaveBar({
   state,
   savedAt,
+  patientName,
+  visitType,
   onSave,
+  onReview,
 }: {
   state: DraftSaveState;
   savedAt: string | null;
+  patientName: string;
+  visitType: Consultation["visitType"];
   onSave: () => Promise<void>;
+  onReview: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   const savedTime = savedAt
     ? new Intl.DateTimeFormat("en-IN", {
@@ -900,48 +913,69 @@ function DraftSaveBar({
     failed: "Draft save failed. Your changes are still here.",
   }[state];
   const isFailed = state === "failed";
-
   return (
-    <div
-      className={`mb-7 flex flex-col gap-3 rounded-2xl px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${isFailed ? "border border-red-800/20 bg-red-50" : "bg-[#ece7dc]"}`}
+    <section
+      aria-label="Current consultation"
+      className={`mb-7 grid gap-4 rounded-2xl px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${isFailed ? "border border-red-800/20 bg-red-50" : "bg-[#ece7dc]"}`}
     >
-      <div className="flex min-w-0 items-center gap-2.5">
-        {isFailed ? (
-          <WarningCircle
-            size={18}
-            weight="fill"
-            className="shrink-0 text-red-800"
-          />
-        ) : (
-          <Check size={17} weight="bold" className="shrink-0" />
-        )}
-        <p
-          role={isFailed ? "alert" : "status"}
-          aria-live={isFailed ? "assertive" : "polite"}
-          aria-atomic="true"
-          className={`text-sm font-semibold ${isFailed ? "text-red-900" : "text-[#435c54]"}`}
-        >
-          {statusCopy}
+      <div className="min-w-0">
+        <p className="field-label mb-1">Current consultation</p>
+        <p className="truncate text-base font-bold">
+          {patientName.trim() || "Patient not named"}
         </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="text-sm text-[#435c54]">
+            {getVisitTypeLabel(visitType)}
+          </p>
+          <div className="flex min-w-0 items-center gap-1.5">
+            {isFailed ? (
+              <WarningCircle
+                size={16}
+                weight="fill"
+                className="shrink-0 text-red-800"
+              />
+            ) : (
+              <Check size={15} weight="bold" className="shrink-0" />
+            )}
+            <p
+              role={isFailed ? "alert" : "status"}
+              aria-live={isFailed ? "assertive" : "polite"}
+              aria-atomic="true"
+              className={`text-sm font-semibold ${isFailed ? "text-red-900" : "text-[#435c54]"}`}
+            >
+              {statusCopy}
+            </p>
+          </div>
+        </div>
       </div>
-      <button
-        type="button"
-        onClick={() => void onSave()}
-        disabled={
-          state === "loading" || state === "saving" || state === "saved"
-        }
-        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#15362f] shadow-sm transition hover:bg-[#fbfaf5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39] disabled:cursor-default disabled:opacity-55"
-      >
-        <FloppyDisk size={16} weight="bold" />
-        {isFailed ? "Retry save" : "Save draft"}
-      </button>
-    </div>
+      <div className="flex flex-wrap gap-2 sm:justify-end">
+        <button
+          type="button"
+          onClick={() => void onSave()}
+          disabled={
+            state === "loading" || state === "saving" || state === "saved"
+          }
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#15362f] shadow-sm transition hover:bg-[#fbfaf5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39] disabled:cursor-default disabled:opacity-55"
+        >
+          <FloppyDisk size={16} weight="bold" />
+          {isFailed ? "Retry save" : "Save draft"}
+        </button>
+        <button
+          type="button"
+          className="primary-action desktop-review-action min-h-11"
+          disabled={state === "loading"}
+          onClick={onReview}
+        >
+          Review prescription
+        </button>
+      </div>
+    </section>
   );
 }
 
 function PrescriptionPage() {
   const root = useRef<HTMLDivElement>(null);
-  const reviewButtonRef = useRef<HTMLButtonElement>(null);
+  const reviewReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const {
     consultation,
     setConsultation,
@@ -966,15 +1000,20 @@ function PrescriptionPage() {
     reviewAttempted
       ? reviewProblems.find((problem) => problem.fieldId === fieldId)?.message
       : undefined;
+  const openReview = (event: React.MouseEvent<HTMLButtonElement>) => {
+    reviewReturnFocusRef.current = event.currentTarget;
+    setReviewAttempted(true);
+    setReviewOpen(true);
+  };
   const closeReview = () => {
     setReviewOpen(false);
-    window.requestAnimationFrame(() => reviewButtonRef.current?.focus());
+    window.requestAnimationFrame(() => reviewReturnFocusRef.current?.focus());
   };
   const focusProblem = (problem: ConsultationProblem) => {
     setReviewOpen(false);
     window.requestAnimationFrame(() => {
       const field = document.getElementById(problem.fieldId);
-      field?.scrollIntoView({ block: "center", behavior: "smooth" });
+      field?.scrollIntoView({ block: "center" });
       field?.focus();
     });
   };
@@ -1024,24 +1063,24 @@ function PrescriptionPage() {
   };
   useGSAP(
     () => {
-      if (
-        completedSnapshot ||
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      )
-        return;
-      gsap.fromTo(
-        ".document-preview",
-        { scale: 0.9 },
-        {
-          scale: 1,
-          scrollTrigger: {
-            trigger: ".workspace-grid",
-            start: "top 74%",
-            end: "top 25%",
-            scrub: true,
-          },
-        },
-      );
+      if (completedSnapshot) return;
+      const motionPreference = gsap.matchMedia();
+      motionPreference.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          ".document-preview",
+          { scale: 0.9 },
+          {
+            scale: 1,
+            scrollTrigger: {
+              trigger: ".workspace-grid",
+              start: "top 74%",
+              end: "top 25%",
+              scrub: true,
+             },
+           },
+         );
+      });
+      return () => motionPreference.revert();
     },
     { dependencies: [completedSnapshot] },
   );
@@ -1089,11 +1128,17 @@ function PrescriptionPage() {
           </div>
         </header>
         <section className="workspace-grid mx-auto grid-flow-dense grid max-w-[1500px] grid-cols-12 items-start gap-5 px-5 pb-40 lg:px-10">
-          <div className="col-span-12 rounded-[30px] border border-[#15362f]/10 bg-[#fbfaf5] p-6 shadow-[0_24px_70px_rgba(21,54,47,.08)] lg:col-span-7 lg:p-9">
+          <section
+            aria-label="Consultation form"
+            className="col-span-12 rounded-[30px] border border-[#15362f]/10 bg-[#fbfaf5] p-6 shadow-[0_24px_70px_rgba(21,54,47,.08)] lg:col-span-7 lg:p-9"
+          >
             <DraftSaveBar
               state={saveState}
               savedAt={savedAt}
+              patientName={consultation.patient.name}
+              visitType={consultation.visitType}
               onSave={saveDraft}
+              onReview={openReview}
             />
             <fieldset
               role="radiogroup"
@@ -1563,17 +1608,17 @@ function PrescriptionPage() {
                 onChange={(value) => selectMedicines(value as string[])}
                 multiple
               />
-              <div className="mt-5 space-y-3">
+              <div className="medicine-list mt-5 space-y-3">
                 {consultation.medicines.map((medicine, i) => (
                   <div
                     key={medicine.name}
-                    className="grid gap-3 rounded-2xl border border-[#15362f]/10 bg-white p-4 sm:grid-cols-[1fr_110px_100px_120px_auto]"
+                    className="medicine-row"
                   >
-                    <div>
+                    <div className="medicine-identity min-w-0">
                       <b className="text-sm">
                         {i + 1}. {medicine.name}
                       </b>
-                      <p className="mt-1 text-[10px] text-[#536760]">
+                      <p className="mt-1 break-words text-xs text-[#536760]">
                         {ingredientByMedicine[medicine.name] ||
                           "Composition from medicine catalog"}
                       </p>
@@ -1649,7 +1694,7 @@ function PrescriptionPage() {
                           (nextRemove ?? document.getElementById("medicines"))?.focus();
                         });
                       }}
-                      className="grid h-10 w-10 place-items-center rounded-xl bg-[#f0ece3]"
+                      className="medicine-remove grid min-h-11 min-w-11 place-items-center rounded-xl bg-[#f0ece3]"
                     >
                       <X size={14} />
                     </button>
@@ -1657,7 +1702,7 @@ function PrescriptionPage() {
                 ))}
               </div>
             </div>
-            <div className="mt-8 rounded-2xl bg-[#ece7dc] px-4 py-3 text-[11px] leading-relaxed text-[#536760]">
+            <div className="mt-8 rounded-2xl bg-[#ece7dc] px-4 py-3 text-xs leading-relaxed text-[#536760]">
               <b className="text-[#15362f]">Demo workspace:</b> use fictional
               patient details only. Search or use the categories above to
               record this consultation. If the right term is missing, type it
@@ -1665,29 +1710,49 @@ function PrescriptionPage() {
               after a short pause.
             </div>
             </fieldset>
-            <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-[#15362f]/10 pt-7">
-              <p className="max-w-md text-sm leading-relaxed text-[#536760]">
-                Review every patient, clinical, and medicine detail before the
-                prescription is locked.
-              </p>
-              <button
-                ref={reviewButtonRef}
-                type="button"
-                className="primary-action min-h-11"
-                disabled={saveState === "loading"}
-                onClick={() => {
-                  setReviewAttempted(true);
-                  setReviewOpen(true);
-                }}
-              >
-                Review prescription
-              </button>
-            </div>
-          </div>
+            <p className="mt-8 border-t border-[#15362f]/10 pt-7 text-sm leading-relaxed text-[#60736c]">
+              Review every patient, clinical, and medicine detail before the
+              prescription is locked.
+            </p>
+          </section>
           <div className="preview-wrap col-span-12 lg:col-span-5">
             <PrescriptionPreview consultation={consultation} />
           </div>
         </section>
+        <aside
+          aria-label="Current consultation actions"
+          role="region"
+          className="mobile-consultation-actions lg:hidden"
+        >
+          <div className="min-w-0">
+            <p className="mobile-patient-name text-sm font-bold">
+              {consultation.patient.name.trim() || "Patient not named"}
+            </p>
+            <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[#60736c]">
+              <span>{getVisitTypeLabel(consultation.visitType)}</span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {{
+                  loading: "Checking draft",
+                  saved: "Saved",
+                  unsaved: "Unsaved",
+                  saving: "Saving",
+                  failed: "Save failed",
+                }[saveState]}
+              </span>
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Review prescription"
+            className="primary-action mobile-review-action min-h-11 shrink-0"
+            disabled={saveState === "loading"}
+            onClick={openReview}
+          >
+            <span className="mobile-review-label-short">Review</span>
+            <span className="mobile-review-label-long">Review prescription</span>
+          </button>
+        </aside>
         {reviewOpen && (
           <PrescriptionReviewDialog
             consultation={consultation}
@@ -2041,6 +2106,10 @@ function PrescriptionReviewDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const firstProblemRef = useRef<HTMLButtonElement>(null);
   const completeButtonRef = useRef<HTMLButtonElement>(null);
+  const reviewCanvasRef = useRef<HTMLDivElement>(null);
+  const reviewDocumentRef = useRef<HTMLDivElement>(null);
+  const [reviewZoom, setReviewZoom] = useState(100);
+  const [reviewDocumentHeight, setReviewDocumentHeight] = useState(0);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog && !dialog.open) {
@@ -2052,6 +2121,15 @@ function PrescriptionReviewDialog({
     return () => {
       if (dialog?.open) dialog.close();
     };
+  }, []);
+  useEffect(() => {
+    const documentElement = reviewDocumentRef.current;
+    if (!documentElement) return;
+    const measure = () => setReviewDocumentHeight(documentElement.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(documentElement);
+    return () => observer.disconnect();
   }, []);
   const isCompleting = completionState === "completing";
   const isFailed = completionState === "failed";
@@ -2069,7 +2147,7 @@ function PrescriptionReviewDialog({
         event.preventDefault();
         if (!isCompleting) onClose();
       }}
-      className="m-auto max-h-[calc(100vh-2rem)] w-[min(1120px,calc(100vw-2rem))] overflow-y-auto rounded-[24px] bg-[#f4f1e9] p-0 text-[#15362f] shadow-[0_28px_90px_rgba(21,54,47,.3)] backdrop:bg-[#102c27]/70"
+      className="review-dialog m-auto bg-[#f4f1e9] p-0 text-[#15362f] shadow-[0_28px_90px_rgba(21,54,47,.3)] backdrop:bg-[#102c27]/70"
     >
       <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-[#15362f]/10 bg-[#f4f1e9] px-5 py-4 sm:px-7">
         <div>
@@ -2090,7 +2168,7 @@ function PrescriptionReviewDialog({
           <X size={18} />
         </button>
       </div>
-      <div className="grid min-w-0 gap-6 p-5 lg:grid-cols-[minmax(0,.72fr)_minmax(0,1.28fr)] lg:p-7">
+      <div className="review-dialog-body grid min-w-0 gap-6 p-5 lg:grid-cols-[minmax(0,.72fr)_minmax(0,1.28fr)] lg:p-7">
         <section aria-labelledby="review-check-heading" className="min-w-0">
           <h3 id="review-check-heading" className="text-lg font-bold">
             Completion check
@@ -2175,8 +2253,86 @@ function PrescriptionReviewDialog({
             </button>
           </div>
         </section>
-        <div className="min-w-0 overflow-hidden rounded-[20px] bg-[#123930] p-3 sm:p-6">
-          <PrescriptionReviewDocument consultation={consultation} />
+        <div className="review-preview-panel min-w-0 rounded-[20px] bg-[#123930] p-3 sm:p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-white">
+            <p className="text-sm font-bold">Prescription preview</p>
+            <div
+              className="flex items-center gap-1 rounded-full bg-white/10 p-1"
+              aria-label="Prescription zoom controls"
+              role="group"
+            >
+              <button
+                type="button"
+                className="review-zoom-button"
+                aria-label="Zoom out"
+                aria-controls="review-prescription-canvas"
+                disabled={reviewZoom === 100}
+                onClick={() =>
+                  setReviewZoom((current) => Math.max(100, current - 25))
+                }
+              >
+                <Minus size={16} weight="bold" />
+              </button>
+              <output
+                className="min-w-12 text-center text-sm font-bold tabular-nums"
+                aria-label="Review zoom"
+              >
+                {reviewZoom}%
+              </output>
+              <button
+                type="button"
+                className="review-zoom-button"
+                aria-label="Zoom in"
+                aria-controls="review-prescription-canvas"
+                disabled={reviewZoom === 200}
+                onClick={() =>
+                  setReviewZoom((current) => Math.min(200, current + 25))
+                }
+              >
+                <Plus size={16} weight="bold" />
+              </button>
+              <button
+                type="button"
+                className="review-fit-button"
+                aria-controls="review-prescription-canvas"
+                disabled={reviewZoom === 100}
+                onClick={() => {
+                  setReviewZoom(100);
+                  reviewCanvasRef.current?.scrollTo({ left: 0, top: 0 });
+                }}
+              >
+                Fit width
+              </button>
+            </div>
+          </div>
+          <div
+            ref={reviewCanvasRef}
+            id="review-prescription-canvas"
+            className="review-prescription-canvas"
+            role="region"
+            aria-label="Prescription preview canvas"
+            tabIndex={0}
+          >
+            <div
+              className="review-document-scale"
+              style={{
+                width: `${reviewZoom}%`,
+                height: reviewDocumentHeight
+                  ? `${reviewDocumentHeight * (reviewZoom / 100)}px`
+                  : undefined,
+              }}
+            >
+              <div
+                ref={reviewDocumentRef}
+                style={{
+                  width: `${10_000 / reviewZoom}%`,
+                  transform: `scale(${reviewZoom / 100})`,
+                }}
+              >
+                <PrescriptionReviewDocument consultation={consultation} />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </dialog>
