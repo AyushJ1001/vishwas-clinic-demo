@@ -1,5 +1,15 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+const draftIdStorageKey = "vishwas-clinic-demo-draft-id";
+
+async function useIsolatedDraft(page: Page, testName: string) {
+  const draftId = `e2e-${testName}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await page.addInitScript(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    { key: draftIdStorageKey, value: draftId },
+  );
+}
+
 async function chooseCatalogItem(
   page: Page,
   trigger: Locator,
@@ -87,4 +97,216 @@ test("consultation values appear unchanged in the draft prescription", async ({
   await expect(preview).toContainText("Complete blood count");
   await expect(preview).toContainText("0–0–1 · With water · 7 days");
   await expect(page.getByText("Draft prescription", { exact: true })).toBeVisible();
+});
+
+test("changed consultation autosaves and recovers after refresh", async ({
+  page,
+}) => {
+  await useIsolatedDraft(page, "recovery");
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("Saved");
+
+  await page.getByLabel("Patient name").fill("Demo Patient Isha Kulkarni");
+  await expect(page.getByRole("status")).toContainText("Unsaved changes");
+  await expect(page.getByRole("button", { name: "Save draft" })).toBeEnabled();
+  await expect(page.getByRole("status")).toContainText("Saved", {
+    timeout: 5_000,
+  });
+
+  await page.reload();
+  await expect(page.getByLabel("Patient name")).toHaveValue(
+    "Demo Patient Isha Kulkarni",
+  );
+
+  await page.getByLabel("Age").fill("41");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await page.reload();
+  await expect(page.getByLabel("Age")).toHaveValue("41");
+});
+
+test("failed save preserves the consultation and retries without data loss", async ({
+  page,
+}) => {
+  await useIsolatedDraft(page, "failed-save");
+  let failNextSave = true;
+  await page.route("**/api/consultation-drafts/**", async (route) => {
+    if (route.request().method() === "PUT" && failNextSave) {
+      failNextSave = false;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Temporary demo backend outage" }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await page.getByLabel("Patient name").fill("Demo Patient Neel Joshi");
+
+  await expect(page.getByRole("alert")).toContainText(
+    "Draft save failed. Your changes are still here.",
+  );
+  await expect(page.getByLabel("Patient name")).toHaveValue(
+    "Demo Patient Neel Joshi",
+  );
+  await page.getByRole("button", { name: "Retry save" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved");
+
+  await page.reload();
+  await expect(page.getByLabel("Patient name")).toHaveValue(
+    "Demo Patient Neel Joshi",
+  );
+});
+
+test("an older late save cannot replace newer consultation values", async ({
+  page,
+}) => {
+  await useIsolatedDraft(page, "stale-save");
+  let releaseOlderSave = () => {};
+  let reportOlderSaveStarted = () => {};
+  let reportOlderSaveFinished = () => {};
+  const olderSaveGate = new Promise<void>((resolve) => {
+    releaseOlderSave = resolve;
+  });
+  const olderSaveStarted = new Promise<void>((resolve) => {
+    reportOlderSaveStarted = resolve;
+  });
+  const olderSaveFinished = new Promise<void>((resolve) => {
+    reportOlderSaveFinished = resolve;
+  });
+
+  await page.route("**/api/consultation-drafts/**", async (route) => {
+    const request = route.request();
+    if (request.method() !== "PUT") {
+      await route.continue();
+      return;
+    }
+    const body = request.postDataJSON() as {
+      consultation: { patient: { name: string } };
+    };
+    if (body.consultation.patient.name !== "Demo Patient Older Value") {
+      await route.continue();
+      return;
+    }
+
+    reportOlderSaveStarted();
+    await olderSaveGate;
+    const response = await route.fetch();
+    await route.fulfill({ response });
+    reportOlderSaveFinished();
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await page.getByLabel("Patient name").fill("Demo Patient Older Value");
+  await olderSaveStarted;
+
+  await page.getByLabel("Patient name").fill("Demo Patient Latest Value");
+  await expect(page.getByRole("status")).toContainText("Saved", {
+    timeout: 5_000,
+  });
+  releaseOlderSave();
+  await olderSaveFinished;
+  await expect(page.getByRole("status")).toContainText("Saved");
+
+  await page.reload();
+  await expect(page.getByLabel("Patient name")).toHaveValue(
+    "Demo Patient Latest Value",
+  );
+});
+
+test("leaving while changes are unsaved warns before discarding work", async ({
+  page,
+}) => {
+  await useIsolatedDraft(page, "leave-warning");
+  await page.route("**/api/consultation-drafts/**", async (route) => {
+    if (route.request().method() === "PUT") {
+      await route.fulfill({ status: 503, body: "Temporarily unavailable" });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await page.getByLabel("Patient name").fill("Demo Patient Aarya Shah");
+  await expect(page.getByRole("status")).toContainText("Unsaved changes");
+  await expect(page.getByRole("alert")).toContainText("changes are still here");
+
+  const warning = page.waitForEvent("dialog").then(async (dialog) => {
+    expect(dialog.type()).toBe("confirm");
+    expect(dialog.message()).toContain("unsaved changes");
+    await dialog.dismiss();
+  });
+  await page.getByRole("link", { name: "Receipts", exact: true }).first().click();
+  await warning;
+
+  await expect(page).toHaveURL("/");
+  await expect(page.getByLabel("Patient name")).toHaveValue(
+    "Demo Patient Aarya Shah",
+  );
+});
+
+test("a failed initial draft check can recover with a valid first save", async ({
+  page,
+}) => {
+  await useIsolatedDraft(page, "initial-load-failure");
+  let failInitialLoad = true;
+  await page.route("**/api/consultation-drafts/**", async (route) => {
+    if (route.request().method() === "GET" && failInitialLoad) {
+      failInitialLoad = false;
+      await route.fulfill({ status: 503, body: "Temporarily unavailable" });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("alert")).toContainText(
+    "Your changes are still here",
+  );
+  await page.getByRole("button", { name: "Retry save" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved");
+
+  await page.reload();
+  await expect(page.getByLabel("Patient name")).toHaveValue(
+    "Demo Patient Ananya Deshmukh",
+  );
+});
+
+test("consultation controls stay disabled until draft recovery finishes", async ({
+  page,
+}) => {
+  await useIsolatedDraft(page, "slow-initial-load");
+  let releaseInitialLoad = () => {};
+  let reportInitialLoadStarted = () => {};
+  const initialLoadGate = new Promise<void>((resolve) => {
+    releaseInitialLoad = resolve;
+  });
+  const initialLoadStarted = new Promise<void>((resolve) => {
+    reportInitialLoadStarted = resolve;
+  });
+  await page.route("**/api/consultation-drafts/**", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    reportInitialLoadStarted();
+    await initialLoadGate;
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await initialLoadStarted;
+  await expect(page.getByRole("status")).toContainText(
+    "Checking for a saved draft",
+  );
+  await expect(page.getByLabel("Patient name")).toBeDisabled();
+
+  releaseInitialLoad();
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await expect(page.getByLabel("Patient name")).toBeEnabled();
 });
