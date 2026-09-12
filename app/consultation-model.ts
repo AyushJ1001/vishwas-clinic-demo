@@ -53,8 +53,46 @@ export type SavedConsultationDraft = {
   id: string;
   revision: number;
   consultation: Consultation;
+  lifecycle: "editing" | "completed";
+  completedSnapshot: CompletedPrescriptionSnapshot | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ClinicIdentitySnapshot = {
+  name: string;
+  address: string;
+  hours: string;
+  services: string;
+};
+
+export type DoctorIdentitySnapshot = {
+  name: ClinicDoctorName;
+  qualifications: string;
+  registration: string;
+  mobile: string;
+  specialty: string;
+};
+
+export type CompletedMedicineSnapshot = PrescribedMedicine & {
+  composition: string;
+};
+
+export type CompletedPrescriptionSnapshot = {
+  id: string;
+  draftId: string;
+  sourceRevision: number;
+  completedAt: string;
+  documentVersion: "prescription-v1";
+  layoutVersion: "a5-v1";
+  clinic: ClinicIdentitySnapshot;
+  doctor: DoctorIdentitySnapshot;
+  consultation: Consultation;
+  medicines: CompletedMedicineSnapshot[];
+};
+
+export type CompleteConsultationDraftResult = {
+  snapshot: CompletedPrescriptionSnapshot;
 };
 
 export type SaveConsultationDraftResult = {

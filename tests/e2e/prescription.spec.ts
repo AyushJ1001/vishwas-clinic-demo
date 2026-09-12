@@ -39,6 +39,400 @@ async function chooseCatalogItem(
   await trigger.page().keyboard.press("Escape");
 }
 
+async function makeSeededConsultationValid(page: Page) {
+  await page.getByRole("radio", { name: "New prescription" }).check();
+  for (const medicine of [
+    "Paracetamol 500 mg tablet",
+    "Levocetirizine 5 mg tablet",
+  ]) {
+    await page.getByLabel(`${medicine} dose`).selectOption("1–0–1");
+    await page.getByLabel(`${medicine} duration`).selectOption("5 days");
+    await page.getByLabel(`${medicine} method`).selectOption("After food");
+  }
+}
+
+test("review lists blocking problems and takes focus to the selected field", async ({
+  page,
+}) => {
+  await openPrescription(page, "invalid-review");
+  await page.getByLabel("Patient name").fill("   ");
+  await page.getByLabel("Age").fill("-2");
+  await page.getByLabel("Weight").fill("62kg");
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  await expect(review).toBeVisible();
+  await expect(review).toContainText("Choose a prescription type.");
+  await expect(review).toContainText("Enter the patient's name.");
+  await expect(review).toContainText("Age must be a nonnegative whole number.");
+  await expect(review).toContainText("Enter weight as a number.");
+  await expect(review).toContainText(
+    "Choose a dose for Paracetamol 500 mg tablet.",
+  );
+  await expect(
+    review.getByRole("button", { name: "Complete prescription" }),
+  ).toBeDisabled();
+
+  await review
+    .getByRole("button", { name: "Fix patient name" })
+    .click();
+  await expect(review).toBeHidden();
+  await expect(page.getByLabel("Patient name")).toBeFocused();
+  await expect(page.getByLabel("Patient name")).toHaveValue("   ");
+  const inlineProblem = page.getByText("Enter the patient's name.");
+  await expect(inlineProblem).toBeVisible();
+  await expect(inlineProblem).toHaveCSS("color", "rgb(184, 90, 54)");
+});
+
+test("an unlinked follow-up review lists every problem and routes fixes through the prior visit", async ({
+  page,
+}) => {
+  await openPrescription(page, "followup-review-focus");
+  await page.getByLabel("Patient name").fill("   ");
+  await page.getByRole("radio", { name: "Follow-up prescription" }).check();
+  await expect(page.getByLabel("Prior demo visit")).toBeEnabled();
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  const problemActions = review.getByRole("list").first().getByRole("button");
+  await expect(problemActions).toHaveCount(8);
+  await expect(review).toContainText(
+    "Choose the completed demo visit linked to this follow-up.",
+  );
+  await expect(review).toContainText("Enter the patient's name.");
+  await expect(review).toContainText(
+    "Choose a dose for Paracetamol 500 mg tablet.",
+  );
+
+  await review
+    .getByRole("button", {
+      name: "Link prior visit before fixing patient name",
+    })
+    .click();
+  await expect(page.getByLabel("Prior demo visit")).toBeFocused();
+  await expect(page.getByLabel("Prior demo visit")).toBeEnabled();
+  await expect(page.getByLabel("Patient name")).toBeDisabled();
+
+  await page
+    .getByLabel("Prior demo visit")
+    .selectOption("demo-visit-kavya-mehta-2026-08-18");
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  await review.getByRole("button", { name: "Fix patient name" }).click();
+  await expect(page.getByLabel("Patient name")).toBeFocused();
+  await expect(page.getByLabel("Patient name")).toBeEnabled();
+});
+
+test("a reviewed prescription completes once, locks, and recovers after refresh", async ({
+  page,
+}) => {
+  await openPrescription(page, "complete-and-recover");
+  await makeSeededConsultationValid(page);
+  await page.getByLabel("Patient name").fill("Demo Patient Completion");
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  await expect(
+    review.getByRole("article", { name: "Prescription under review" }),
+  ).toContainText("Demo Patient Completion");
+  await expect(review).toContainText("Ready to complete");
+  await review
+    .getByRole("button", { name: "Complete prescription" })
+    .click();
+
+  await expect(
+    page.getByRole("status", { name: "Prescription completed" }),
+  ).toContainText("Prescription completed");
+  await expect(
+    page.getByRole("article", { name: "Completed prescription" }),
+  ).toContainText("Demo Patient Completion");
+  await expect(page.getByLabel("Patient name")).toHaveCount(0);
+  await expect(page.getByLabel("Select doctor")).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Review prescription" }),
+  ).toHaveCount(0);
+
+  await page.reload();
+  await expect(
+    page.getByRole("status", { name: "Prescription completed" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: "Completed prescription" }),
+  ).toContainText("Demo Patient Completion");
+  await expect(page.getByLabel("Patient name")).toHaveCount(0);
+  await expect(page.getByLabel("Select doctor")).toBeDisabled();
+});
+
+test("phone review fits the viewport and keeps clinical text readable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openPrescription(page, "phone-readable-review");
+  await makeSeededConsultationValid(page);
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  const document = review.getByRole("article", {
+    name: "Prescription under review",
+  });
+  await expect(document).toBeVisible();
+
+  const bounds = await document.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      left: box.left,
+      right: box.right,
+      width: box.width,
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    };
+  });
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(390);
+  expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth);
+
+  for (const text of [
+    "Major complaints:",
+    "1–0–1 · After food · 5 days",
+  ]) {
+    const fontSize = await document
+      .getByText(text, { exact: true })
+      .first()
+      .evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+    expect(fontSize).toBeGreaterThanOrEqual(14);
+  }
+});
+
+test("completion failure keeps the reviewed draft and can retry", async ({
+  page,
+}) => {
+  await setIsolatedDraft(page, "completion-retry");
+  let failFirstCompletion = true;
+  await page.route("**/api/consultation-drafts/**/complete", async (route) => {
+    if (failFirstCompletion) {
+      failFirstCompletion = false;
+      const committed = await route.fetch();
+      expect(committed.ok()).toBe(true);
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Temporary demo backend outage" }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await makeSeededConsultationValid(page);
+  await page.getByLabel("Patient name").fill("Demo Patient Retry");
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  await review
+    .getByRole("button", { name: "Complete prescription" })
+    .click();
+  await expect(review.getByRole("alert")).toContainText(
+    "Prescription could not be completed. Your draft is still here.",
+  );
+  await expect(review).toContainText("Demo Patient Retry");
+
+  await review.getByRole("button", { name: "Retry completion" }).click();
+  await expect(
+    page.getByRole("status", { name: "Prescription completed" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: "Completed prescription" }),
+  ).toContainText("Demo Patient Retry");
+});
+
+test("completion API validates the saved revision and freezes rendered facts", async ({
+  request,
+}) => {
+  const draftId = `e2e-api-complete-${Date.now()}`;
+  const consultation = {
+    ...createDemoConsultation(),
+    visitType: "new" as const,
+    consultationDate: "2026-09-12",
+    medicines: [
+      {
+        name: "Paracetamol 500 mg tablet",
+        dose: "1–0–1",
+        duration: "5 days",
+        method: "After food",
+      },
+    ],
+  };
+  const saved = await request.put(`/api/consultation-drafts/${draftId}`, {
+    data: { consultation, revision: 1 },
+  });
+  expect(saved.ok()).toBe(true);
+
+  const stale = await request.post(
+    `/api/consultation-drafts/${draftId}/complete`,
+    { data: { revision: 2, expectedConsultation: consultation } },
+  );
+  expect(stale.status()).toBe(409);
+
+  const [completed, concurrentCompletion] = await Promise.all([
+    request.post(`/api/consultation-drafts/${draftId}/complete`, {
+      data: { revision: 1, expectedConsultation: consultation },
+    }),
+    request.post(`/api/consultation-drafts/${draftId}/complete`, {
+      data: { revision: 1, expectedConsultation: consultation },
+    }),
+  ]);
+  expect(completed.ok()).toBe(true);
+  expect(concurrentCompletion.ok()).toBe(true);
+  const body = (await completed.json()) as {
+    snapshot: {
+      id: string;
+      draftId: string;
+      completedAt: string;
+      documentVersion: string;
+      layoutVersion: string;
+      clinic: { name: string; address: string };
+      doctor: { name: string; qualifications: string; registration: string };
+      consultation: typeof consultation;
+      medicines: Array<{ name: string; composition: string }>;
+    };
+  };
+  expect((await concurrentCompletion.json()).snapshot).toEqual(body.snapshot);
+  expect(body.snapshot).toMatchObject({
+    draftId,
+    documentVersion: "prescription-v1",
+    layoutVersion: "a5-v1",
+    clinic: {
+      name: "VISHWAS CLINIC",
+      address:
+        "Shop No. 6, Amrapali Apartments, Right Bhusari Colony, Paud Road, Kothrud, Pune 411038",
+    },
+    doctor: {
+      name: "Dr. Makarand Vishwas Apte",
+      qualifications: "MBBS, MD (Anatomy)",
+      registration: "Reg. No. 87352",
+    },
+    consultation,
+    medicines: [
+      {
+        name: "Paracetamol 500 mg tablet",
+        composition: "Paracetamol IP 500 mg",
+      },
+    ],
+  });
+  expect(body.snapshot.id).toMatch(/^prescription-/);
+  expect(Number.isNaN(Date.parse(body.snapshot.completedAt))).toBe(false);
+
+  const repeated = await request.post(
+    `/api/consultation-drafts/${draftId}/complete`,
+    { data: { revision: 1, expectedConsultation: consultation } },
+  );
+  expect(repeated.ok()).toBe(true);
+  expect((await repeated.json()).snapshot).toEqual(body.snapshot);
+
+  const mismatchedRetry = await request.post(
+    `/api/consultation-drafts/${draftId}/complete`,
+    {
+      data: {
+        revision: 1,
+        expectedConsultation: {
+          ...consultation,
+          patient: { ...consultation.patient, name: "Demo Patient Other Tab" },
+        },
+      },
+    },
+  );
+  expect(mismatchedRetry.status()).toBe(409);
+
+  const changed = await request.put(`/api/consultation-drafts/${draftId}`, {
+    data: {
+      consultation: {
+        ...consultation,
+        patient: { ...consultation.patient, name: "Demo Patient Changed" },
+      },
+      revision: 2,
+    },
+  });
+  expect(changed.status()).toBe(409);
+
+  const restored = await request.get(`/api/consultation-drafts/${draftId}`);
+  const restoredBody = await restored.json();
+  expect(restoredBody.draft.lifecycle).toBe("completed");
+  expect(restoredBody.draft.completedSnapshot).toEqual(body.snapshot);
+});
+
+test("completion rejects competing content saved at the reviewed revision", async ({
+  request,
+}) => {
+  const draftId = `e2e-api-competing-review-${Date.now()}`;
+  const base = {
+    ...createDemoConsultation(),
+    visitType: "new" as const,
+    consultationDate: "2026-09-12",
+    medicines: [],
+  };
+  const competingConsultation = {
+    ...base,
+    patient: { ...base.patient, name: "Demo Patient Other Tab" },
+  };
+  const reviewedConsultation = {
+    ...base,
+    patient: { ...base.patient, name: "Demo Patient Reviewed" },
+  };
+
+  const competingSave = await request.put(
+    `/api/consultation-drafts/${draftId}`,
+    { data: { consultation: competingConsultation, revision: 1 } },
+  );
+  expect(competingSave.ok()).toBe(true);
+  const reviewedSave = await request.put(
+    `/api/consultation-drafts/${draftId}`,
+    { data: { consultation: reviewedConsultation, revision: 1 } },
+  );
+  expect(reviewedSave.ok()).toBe(true);
+  expect((await reviewedSave.json()).accepted).toBe(false);
+
+  const completion = await request.post(
+    `/api/consultation-drafts/${draftId}/complete`,
+    { data: { revision: 1, expectedConsultation: reviewedConsultation } },
+  );
+  expect(completion.status()).toBe(409);
+
+  const restored = await request.get(`/api/consultation-drafts/${draftId}`);
+  const body = await restored.json();
+  expect(body.draft.lifecycle).toBe("editing");
+  expect(body.draft.consultation.patient.name).toBe("Demo Patient Other Tab");
+});
+
+test("completion API rejects clinically invalid saved drafts", async ({
+  request,
+}) => {
+  const invalidCases = [
+    ["age", { patient: { name: "Demo Patient Invalid", age: "2.5", sex: "Female" } }],
+    ["date", { consultationDate: "2026-02-30" }],
+  ] as const;
+
+  for (const [label, change] of invalidCases) {
+    const draftId = `e2e-api-invalid-${label}-${Date.now()}`;
+    const consultation = {
+      ...createDemoConsultation(),
+      visitType: "new" as const,
+      consultationDate: "2026-09-12",
+      medicines: [],
+      ...change,
+    };
+    const response = await request.put(`/api/consultation-drafts/${draftId}`, {
+      data: { consultation, revision: 1 },
+    });
+    expect(response.ok()).toBe(true);
+    const completion = await request.post(
+      `/api/consultation-drafts/${draftId}/complete`,
+      { data: { revision: 1, expectedConsultation: consultation } },
+    );
+    expect(completion.status()).toBe(422);
+  }
+});
+
 test("consultation values appear unchanged in the draft prescription", async ({
   page,
 }) => {
