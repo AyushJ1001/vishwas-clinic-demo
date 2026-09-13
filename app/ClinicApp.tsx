@@ -316,7 +316,18 @@ function CatalogPicker({
       ref={pickerRef}
       onBlur={(event) => {
         const nextTarget = event.relatedTarget;
-        if (open && (!nextTarget || !event.currentTarget.contains(nextTarget))) {
+        const movedToLiveControls =
+          nextTarget instanceof Element &&
+          Boolean(
+            nextTarget.closest(
+              '#impeccable-live-root, [id^="impeccable-live-"]',
+            ),
+          );
+        if (
+          open &&
+          !movedToLiveControls &&
+          (!nextTarget || !event.currentTarget.contains(nextTarget))
+        ) {
           closePicker();
         }
       }}
@@ -444,7 +455,7 @@ function CatalogPicker({
               }
             />
           </div>
-          <div className="max-h-72 overflow-y-auto p-2">
+          <div className="flex max-h-72 flex-col overflow-y-auto p-2">
             {loadState === "loading" && (
               <p className="catalog-status catalog-loading" role="status">
                 Loading clinic terms for {label}…
@@ -476,68 +487,75 @@ function CatalogPicker({
               </div>
             )}
             {!query && (
-              <div role="group" aria-label={`${label} categories`}>
-                {filtered.map((group) => (
-                <button
-                  type="button"
-                  key={group.group}
-                  id={categoryId(group.group)}
-                  onClick={() =>
-                    setExpanded(expanded === group.group ? "" : group.group)
-                  }
-                  className="flex min-h-11 min-w-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold uppercase tracking-[.11em] text-[#536760] hover:bg-[#ece7dc]"
-                  aria-expanded={expanded === group.group}
-                  aria-controls={groupId(group.group)}
-                >
-                  <span>{group.group}</span>
-                  <CaretDown
-                    className={`transition ${expanded === group.group || query ? "rotate-180" : ""}`}
-                    size={13}
-                  />
-                </button>
+              <div
+                className="contents"
+                role="group"
+                aria-label={`${label} categories`}
+              >
+                {filtered.map((group, groupIndex) => (
+                  <button
+                    type="button"
+                    key={group.group}
+                    id={categoryId(group.group)}
+                    style={{ order: groupIndex * 2 }}
+                    onClick={() =>
+                      setExpanded(expanded === group.group ? "" : group.group)
+                    }
+                    className="flex min-h-11 min-w-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold uppercase tracking-[.11em] text-[#536760] hover:bg-[#ece7dc]"
+                    aria-expanded={expanded === group.group}
+                    aria-controls={groupId(group.group)}
+                  >
+                    <span>{group.group}</span>
+                    <CaretDown
+                      className={`transition ${expanded === group.group || query ? "rotate-180" : ""}`}
+                      size={13}
+                    />
+                  </button>
                 ))}
               </div>
             )}
             <div
               id={listboxId}
               role="listbox"
+              className="contents"
               aria-label={`${label} options`}
               aria-multiselectable={multiple || undefined}
             >
-            {filtered.map((group) => (
-              <div
-                key={group.group}
-                id={groupId(group.group)}
-                role="group"
-                aria-label={group.group}
-                className="mb-1"
-              >
-                {(expanded === group.group || query) && (
-                  <div className="grid gap-1 py-1">
-                    {group.items.map((item) => (
-                      <button
-                        type="button"
-                        key={item}
-                        id={optionId(group.group, item)}
-                        onClick={() => select(item)}
-                        onMouseEnter={() =>
-                          setActiveOption(optionKey(group.group, item))
-                        }
-                        className={`flex min-h-11 min-w-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[#15362f] hover:text-white ${activeOption === optionKey(group.group, item) ? "bg-[#15362f] text-white" : ""}`}
-                        role="option"
-                        aria-selected={values.includes(item)}
-                        tabIndex={-1}
-                      >
-                        <span>{item}</span>
-                        {values.includes(item) && (
-                          <Check size={14} weight="bold" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+              {filtered.map((group, groupIndex) => (
+                <div
+                  key={group.group}
+                  id={groupId(group.group)}
+                  role="group"
+                  aria-label={group.group}
+                  className="mb-1"
+                  style={!query ? { order: groupIndex * 2 + 1 } : undefined}
+                >
+                  {(expanded === group.group || query) && (
+                    <div className="grid gap-1 py-1">
+                      {group.items.map((item) => (
+                        <button
+                          type="button"
+                          key={item}
+                          id={optionId(group.group, item)}
+                          onClick={() => select(item)}
+                          onMouseEnter={() =>
+                            setActiveOption(optionKey(group.group, item))
+                          }
+                          className={`flex min-h-11 min-w-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[#15362f] hover:text-white ${activeOption === optionKey(group.group, item) ? "bg-[#15362f] text-white" : ""}`}
+                          role="option"
+                          aria-selected={values.includes(item)}
+                          tabIndex={-1}
+                        >
+                          <span>{item}</span>
+                          {values.includes(item) && (
+                            <Check size={14} weight="bold" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
             {query.trim() && filtered.length === 0 && (
               <p className="catalog-status">No matching catalog choices.</p>
@@ -1125,7 +1143,10 @@ function PrescriptionPage() {
       <div ref={root}>
         <header className="mx-auto grid max-w-[1500px] gap-8 px-5 pb-14 pt-14 lg:grid-cols-[1.1fr_.9fr] lg:px-10 lg:pb-20 lg:pt-20">
           <div>
-            <p className="eyebrow">
+            <h1 className="max-w-6xl text-[clamp(2.8rem,5vw,5.5rem)] font-medium leading-[.94] tracking-[-.035em]">
+              Write the prescription. See the paper take shape.
+            </h1>
+            <p className="consultation-context">
               {consultation.visitType === "followup"
                 ? consultation.linkedPriorVisit
                   ? "Follow-up consultation · prior visit linked"
@@ -1134,9 +1155,6 @@ function PrescriptionPage() {
                   ? "New consultation · no prior visit linked"
                   : "Choose a prescription type to begin"}
             </p>
-            <h1 className="max-w-6xl text-[clamp(2.8rem,5vw,5.5rem)] font-medium leading-[.94] tracking-[-.055em]">
-              Write the prescription. See the paper take shape.
-            </h1>
           </div>
           <div className="flex items-end">
             <p className="max-w-xl text-lg leading-relaxed text-[#536760]">
@@ -1731,7 +1749,7 @@ function PrescriptionPage() {
               after a short pause.
             </div>
             </fieldset>
-            <p className="mt-8 border-t border-[#15362f]/10 pt-7 text-sm leading-relaxed text-[#60736c]">
+            <p className="mt-8 max-w-[56ch] border-t border-[#15362f]/10 pt-7 text-sm leading-relaxed text-[#60736c]">
               Review every patient, clinical, and medicine detail before the
               prescription is locked.
             </p>
@@ -1971,8 +1989,8 @@ function PrescriptionDocument({
                     <Image
                       src="/icons/prescription-fill.svg"
                       alt="Prescription"
-                      width={34}
-                      height={34}
+                      width={30}
+                      height={30}
                       className="rx-logo"
                     />
                     <span className="text-[6px]">
@@ -2834,7 +2852,7 @@ function RouteHeader({
     <header className="mx-auto grid max-w-[1500px] gap-8 px-5 pb-14 pt-16 lg:grid-cols-[1.1fr_.9fr] lg:px-10 lg:pb-20 lg:pt-24">
       <div>
         <p className="eyebrow">{eyebrow}</p>
-        <h1 className="max-w-6xl text-[clamp(2.8rem,5vw,5.5rem)] font-medium leading-[.94] tracking-[-.055em]">
+        <h1 className="max-w-6xl text-[clamp(2.8rem,5vw,5.5rem)] font-medium leading-[.94] tracking-[-.035em]">
           {title}
         </h1>
       </div>
