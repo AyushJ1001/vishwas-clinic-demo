@@ -40,6 +40,19 @@ export type Consultation = {
   medicines: PrescribedMedicine[];
 };
 
+export type SavedConsultationDraft = {
+  id: string;
+  revision: number;
+  consultation: Consultation;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SaveConsultationDraftResult = {
+  accepted: boolean;
+  draft: SavedConsultationDraft;
+};
+
 export function createDemoConsultation(): Consultation {
   return {
     visitType: null,

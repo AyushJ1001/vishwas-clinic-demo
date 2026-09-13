@@ -23,3 +23,11 @@ export const catalogEntries = sqliteTable(
     ),
   ],
 );
+
+export const consultationDrafts = sqliteTable("consultation_drafts", {
+  id: text("id").primaryKey(),
+  revision: integer("revision").notNull(),
+  consultationJson: text("consultation_json").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

@@ -9,12 +9,14 @@ import {
   CaretDown,
   ChartLineUp,
   Check,
+  FloppyDisk,
   MagnifyingGlass,
   Plus,
   Printer,
   Pulse,
   Receipt,
   SealCheck,
+  WarningCircle,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -28,14 +30,16 @@ import {
   type CatalogGroup,
 } from "./clinic-data";
 import {
-  createDemoConsultation,
   formatConsultationDate,
-  toLocalDateInputValue,
   type ClinicDoctorName,
   type Consultation,
   type PatientSex,
   type PrescribedMedicine,
 } from "./consultation-model";
+import {
+  useConsultationDraft,
+  type DraftSaveState,
+} from "./use-consultation-draft";
 
 gsap.registerPlugin(ScrollTrigger);
 export type RouteName =
@@ -436,14 +440,27 @@ function Shell({
   active,
   doctorName = "Dr. Makarand Vishwas Apte",
   onDoctorChange,
+  shouldWarnBeforeLeaving = false,
   children,
 }: {
   active: RouteName;
   doctorName?: ClinicDoctorName;
   onDoctorChange?: (doctor: ClinicDoctorName) => void;
+  shouldWarnBeforeLeaving?: boolean;
   children: React.ReactNode;
 }) {
   const doctors = Object.keys(clinicDoctors) as ClinicDoctorName[];
+  const navigateTo = (href: string) => {
+    if (
+      shouldWarnBeforeLeaving &&
+      !window.confirm(
+        "This consultation has unsaved changes. Leave and discard them?",
+      )
+    ) {
+      return;
+    }
+    window.location.assign(href);
+  };
   return (
     <main className="w-full max-w-full overflow-x-hidden bg-[#f4f1e9] text-[#15362f]">
       <nav className="sticky top-0 z-50 border-b border-[#15362f]/10 bg-[#f4f1e9]/92 backdrop-blur-xl">
@@ -464,7 +481,7 @@ function Shell({
                 href={route.href}
                 onClick={(event) => {
                   event.preventDefault();
-                  window.location.assign(route.href);
+                  navigateTo(route.href);
                 }}
                 className={`rounded-full px-4 py-2 text-xs font-semibold transition ${active === route.key ? "bg-[#15362f] text-white" : "hover:bg-[#ece7dc]"}`}
               >
@@ -499,7 +516,7 @@ function Shell({
               href={route.href}
               onClick={(event) => {
                 event.preventDefault();
-                window.location.assign(route.href);
+                navigateTo(route.href);
               }}
               className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold ${active === route.key ? "bg-[#15362f] text-white" : "bg-white"}`}
             >
@@ -513,23 +530,76 @@ function Shell({
   );
 }
 
+function DraftSaveBar({
+  state,
+  savedAt,
+  onSave,
+}: {
+  state: DraftSaveState;
+  savedAt: string | null;
+  onSave: () => Promise<void>;
+}) {
+  const savedTime = savedAt
+    ? new Intl.DateTimeFormat("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(savedAt))
+    : null;
+  const statusCopy = {
+    loading: "Checking for a saved draft…",
+    saved: savedTime ? `Saved at ${savedTime}` : "Saved · Ready to edit",
+    unsaved: "Unsaved changes · Autosave is waiting for a pause",
+    saving: "Saving draft…",
+    failed: "Draft save failed. Your changes are still here.",
+  }[state];
+  const isFailed = state === "failed";
+
+  return (
+    <div
+      className={`mb-7 flex flex-col gap-3 rounded-2xl px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${isFailed ? "border border-red-800/20 bg-red-50" : "bg-[#ece7dc]"}`}
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
+        {isFailed ? (
+          <WarningCircle
+            size={18}
+            weight="fill"
+            className="shrink-0 text-red-800"
+          />
+        ) : (
+          <Check size={17} weight="bold" className="shrink-0" />
+        )}
+        <p
+          role={isFailed ? "alert" : "status"}
+          aria-live={isFailed ? "assertive" : "polite"}
+          aria-atomic="true"
+          className={`text-sm font-semibold ${isFailed ? "text-red-900" : "text-[#435c54]"}`}
+        >
+          {statusCopy}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => void onSave()}
+        disabled={state === "loading" || state === "saving" || state === "saved"}
+        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#15362f] shadow-sm transition hover:bg-[#fbfaf5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39] disabled:cursor-default disabled:opacity-55"
+      >
+        <FloppyDisk size={16} weight="bold" />
+        {isFailed ? "Retry save" : "Save draft"}
+      </button>
+    </div>
+  );
+}
+
 function PrescriptionPage() {
   const root = useRef<HTMLDivElement>(null);
-  const [consultation, setConsultation] =
-    useState<Consultation>(createDemoConsultation);
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setConsultation((current) =>
-        current.consultationDate
-          ? current
-          : {
-              ...current,
-              consultationDate: toLocalDateInputValue(new Date()),
-            },
-      );
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
+  const {
+    consultation,
+    setConsultation,
+    saveState,
+    savedAt,
+    hasUnconfirmedChanges,
+    saveDraft,
+  } = useConsultationDraft();
   const updatePatient = (
     field: keyof Consultation["patient"],
     value: string,
@@ -597,6 +667,7 @@ function PrescriptionPage() {
     <Shell
       active="prescription"
       doctorName={consultation.doctorName}
+      shouldWarnBeforeLeaving={hasUnconfirmedChanges}
       onDoctorChange={(doctorName) =>
         setConsultation((current) => ({ ...current, doctorName }))
       }
@@ -624,7 +695,17 @@ function PrescriptionPage() {
         </header>
         <section className="workspace-grid mx-auto grid-flow-dense grid max-w-[1500px] grid-cols-12 items-start gap-5 px-5 pb-40 lg:px-10">
           <div className="col-span-12 rounded-[30px] border border-[#15362f]/10 bg-[#fbfaf5] p-6 shadow-[0_24px_70px_rgba(21,54,47,.08)] lg:col-span-7 lg:p-9">
-            <fieldset className="mb-8 rounded-[24px] border border-[#b85a36]/25 bg-[#fff7f0] p-5">
+            <DraftSaveBar
+              state={saveState}
+              savedAt={savedAt}
+              onSave={saveDraft}
+            />
+            <fieldset
+              disabled={saveState === "loading"}
+              aria-busy={saveState === "loading"}
+              className="m-0 min-w-0 border-0 p-0 disabled:opacity-70"
+            >
+              <fieldset className="mb-8 rounded-[24px] border border-[#b85a36]/25 bg-[#fff7f0] p-5">
               <legend className="px-2 text-xs font-extrabold uppercase tracking-[.12em] text-[#9b492f]">
                 Required before prescribing
               </legend>
@@ -669,7 +750,7 @@ function PrescriptionPage() {
                   </button>
                 ))}
               </div>
-            </fieldset>
+              </fieldset>
             <div className="grid gap-5 sm:grid-cols-2">
               <label>
                 <span className="field-label">Patient name</span>
@@ -971,12 +1052,12 @@ function PrescriptionPage() {
               </div>
             </div>
             <div className="mt-8 rounded-2xl bg-[#ece7dc] px-4 py-3 text-[11px] leading-relaxed text-[#60736c]">
-              <b className="text-[#15362f]">Clinical catalog note:</b> seeded
-              terms are organised around ABDM-recognised terminology patterns
-              and India-relevant primary-care workflows. Clinic-added terms
-              remain local entries and should be reviewed before use as
-              standardised clinical data.
+              <b className="text-[#15362f]">Demo workspace:</b> use fictional
+              patient details only. Your draft saves automatically after a
+              short pause, and clinic-added terms remain available for this
+              demonstration.
             </div>
+            </fieldset>
           </div>
           <div className="preview-wrap col-span-12 lg:col-span-5">
             <PrescriptionPreview consultation={consultation} />
