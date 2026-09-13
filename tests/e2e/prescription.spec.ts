@@ -5,6 +5,7 @@ import {
   type Page,
   type Route,
 } from "@playwright/test";
+import { createDemoConsultation } from "../../app/consultation-model";
 
 async function openPrescription(page: Page, testName: string) {
   await setIsolatedDraft(page, testName);
@@ -119,6 +120,178 @@ test("consultation values appear unchanged in the draft prescription", async ({
   await expect(preview).toContainText("Complete blood count");
   await expect(preview).toContainText("0–0–1 · With water · 7 days");
   await expect(page.getByText("Draft prescription", { exact: true })).toBeVisible();
+});
+
+test("follow-up prescribing requires a linked prior demo visit", async ({
+  page,
+}) => {
+  await setIsolatedDraft(page, "follow-up-link");
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("Saved");
+
+  const visitType = page.getByRole("radiogroup", {
+    name: "Prescription type",
+  });
+  await expect(visitType.getByRole("radio")).toHaveCount(2);
+  await visitType.getByRole("radio", { name: "Follow-up prescription" }).check();
+
+  await expect(page.getByLabel("Patient name")).toBeDisabled();
+  await expect(
+    page.getByText("Choose a prior demo visit to continue."),
+  ).toBeVisible();
+
+  await page
+    .getByLabel("Prior demo visit")
+    .selectOption("demo-visit-kavya-mehta-2026-08-18");
+
+  const linkedVisit = page.getByRole("region", { name: "Linked prior visit" });
+  await expect(linkedVisit).toContainText("Demo Patient Kavya Mehta");
+  await expect(linkedVisit).toContainText("18 August 2026");
+  await expect(linkedVisit).toContainText("Dr. Gauri Makarand Apte");
+  await expect(linkedVisit).toContainText(
+    "Thyroid review; fatigue improving and observations stable.",
+  );
+  await expect(page.getByLabel("Patient name")).toBeEnabled();
+  await expect(page.getByLabel("Patient name")).toHaveValue(
+    "Demo Patient Ananya Deshmukh",
+  );
+  await expect(
+    page.getByRole("article", { name: "Draft prescription preview" }),
+  ).not.toContainText("Demo Patient Kavya Mehta");
+});
+
+test("a prior visit link can be restored, replaced, removed, and cleared by New", async ({
+  page,
+}) => {
+  await setIsolatedDraft(page, "manage-prior-link");
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("Saved");
+
+  await page.getByRole("radio", { name: "Follow-up prescription" }).check();
+  await page
+    .getByLabel("Prior demo visit")
+    .selectOption("demo-visit-kavya-mehta-2026-08-18");
+  await expect(page.getByRole("status")).toContainText("Unsaved changes");
+  await expect(page.getByRole("status")).toContainText("Saved", {
+    timeout: 5_000,
+  });
+
+  await page.reload();
+  await expect(
+    page.getByRole("radio", { name: "Follow-up prescription" }),
+  ).toBeChecked();
+  const linkedVisit = page.getByRole("region", { name: "Linked prior visit" });
+  await expect(linkedVisit).toContainText("Demo Patient Kavya Mehta");
+
+  await page
+    .getByLabel("Prior demo visit")
+    .selectOption("demo-visit-rohan-shah-2026-07-29");
+  await expect(linkedVisit).toContainText("Demo Patient Rohan Shah");
+  await expect(linkedVisit).not.toContainText("Demo Patient Kavya Mehta");
+
+  await page.getByRole("button", { name: "Remove prior visit link" }).click();
+  await expect(linkedVisit).toHaveCount(0);
+  await expect(page.getByLabel("Prior demo visit")).toHaveValue("");
+  await expect(page.getByLabel("Patient name")).toBeDisabled();
+
+  await page
+    .getByLabel("Prior demo visit")
+    .selectOption("demo-visit-kavya-mehta-2026-08-18");
+  await page.getByRole("radio", { name: "New prescription" }).check();
+  await expect(linkedVisit).toHaveCount(0);
+  await expect(page.getByLabel("Patient name")).toBeEnabled();
+  await expect(page.getByRole("status")).toContainText("Saved", {
+    timeout: 5_000,
+  });
+
+  await page.reload();
+  await expect(
+    page.getByRole("radio", { name: "New prescription" }),
+  ).toBeChecked();
+  await page.getByRole("radio", { name: "Follow-up prescription" }).check();
+  await expect(page.getByLabel("Prior demo visit")).toHaveValue("");
+  await expect(page.getByLabel("Patient name")).toBeDisabled();
+});
+
+test("a prior visit loading failure keeps the follow-up safe and can retry", async ({
+  page,
+}) => {
+  await setIsolatedDraft(page, "prior-visit-retry");
+  let failFirstList = true;
+  await page.route("**/api/prior-visits", async (route) => {
+    if (failFirstList) {
+      failFirstList = false;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Temporary demo backend outage" }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await page.getByRole("radio", { name: "Follow-up prescription" }).check();
+  await expect(page.getByRole("alert")).toContainText(
+    "Completed demo visits could not be loaded.",
+  );
+  await expect(page.getByLabel("Patient name")).toBeDisabled();
+
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByLabel("Prior demo visit")).toBeEnabled();
+  await page
+    .getByLabel("Prior demo visit")
+    .selectOption("demo-visit-samira-iyer-2026-06-12");
+  await expect(
+    page.getByRole("region", { name: "Linked prior visit" }),
+  ).toContainText("Demo Patient Samira Iyer");
+  await expect(page.getByLabel("Patient name")).toBeEnabled();
+});
+
+test("the draft API canonicalizes known prior visits and rejects invented links", async ({
+  request,
+}) => {
+  const draftId = `e2e-api-prior-${Date.now()}`;
+  const alteredKnownVisit = {
+    id: "demo-visit-kavya-mehta-2026-08-18",
+    patient: { name: "Invented Person", age: "999", sex: "Other" as const },
+    consultationDate: "1900-01-01",
+    doctorName: "Dr. Makarand Vishwas Apte" as const,
+    clinicalSummary: "Invented summary",
+  };
+  const consultation = {
+    ...createDemoConsultation(),
+    visitType: "followup" as const,
+    linkedPriorVisit: alteredKnownVisit,
+  };
+
+  const saved = await request.put(`/api/consultation-drafts/${draftId}`, {
+    data: { consultation, revision: 1 },
+  });
+  expect(saved.ok()).toBe(true);
+  const savedBody = (await saved.json()) as {
+    draft: { consultation: typeof consultation };
+  };
+  expect(savedBody.draft.consultation.linkedPriorVisit).toMatchObject({
+    id: "demo-visit-kavya-mehta-2026-08-18",
+    patient: { name: "Demo Patient Kavya Mehta", age: "44", sex: "Female" },
+    consultationDate: "2026-08-18",
+    doctorName: "Dr. Gauri Makarand Apte",
+    clinicalSummary:
+      "Thyroid review; fatigue improving and observations stable.",
+  });
+
+  const invented = await request.put(`/api/consultation-drafts/${draftId}`, {
+    data: {
+      consultation: {
+        ...consultation,
+        linkedPriorVisit: { ...alteredKnownVisit, id: "invented-visit" },
+      },
+      revision: 2,
+    },
+  });
+  expect(invented.status()).toBe(400);
 });
 
 test("changed consultation autosaves and recovers after refresh", async ({

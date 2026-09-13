@@ -17,6 +17,7 @@ import {
   createDemoConsultation,
   toLocalDateInputValue,
   type Consultation,
+  type PriorVisitSnapshot,
 } from "./consultation-model";
 
 export type DraftSaveState =
@@ -25,6 +26,12 @@ export type DraftSaveState =
   | "unsaved"
   | "saving"
   | "failed";
+
+export type PriorVisitsLoadState = "loading" | "ready" | "failed";
+
+type PriorVisitsLoadResult =
+  | { request: number; state: "ready"; visits: PriorVisitSnapshot[] }
+  | { request: number; state: "failed" };
 
 const autosaveDelayMs = 800;
 
@@ -35,6 +42,9 @@ export function useConsultationDraft(): {
   savedAt: string | null;
   hasUnconfirmedChanges: boolean;
   saveDraft: () => Promise<void>;
+  priorVisits: PriorVisitSnapshot[];
+  priorVisitsState: PriorVisitsLoadState;
+  reloadPriorVisits: () => Promise<void>;
 } {
   const repository = useMemo<ConsultationDraftRepository>(
     () => createConsultationDraftRepository(),
@@ -44,10 +54,14 @@ export function useConsultationDraft(): {
     useState<Consultation>(createDemoConsultation);
   const [saveState, setSaveState] = useState<DraftSaveState>("loading");
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [priorVisits, setPriorVisits] = useState<PriorVisitSnapshot[]>([]);
+  const [priorVisitsState, setPriorVisitsState] =
+    useState<PriorVisitsLoadState>("loading");
   const consultationRef = useRef(consultation);
   const hydratedRef = useRef(false);
   const revisionRef = useRef(0);
   const editFingerprintRef = useRef("");
+  const priorVisitsRequestRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -59,7 +73,12 @@ export function useConsultationDraft(): {
     repository.load().then(
       (draft) => {
         if (!active) return;
-        const restoredConsultation = draft?.consultation ?? initialConsultation;
+        const restoredConsultation = draft
+          ? {
+              ...draft.consultation,
+              linkedPriorVisit: draft.consultation.linkedPriorVisit ?? null,
+            }
+          : initialConsultation;
         const fingerprint = JSON.stringify(restoredConsultation);
         revisionRef.current = draft?.revision ?? 0;
         editFingerprintRef.current = fingerprint;
@@ -85,6 +104,38 @@ export function useConsultationDraft(): {
       active = false;
     };
   }, [repository]);
+
+  const requestPriorVisits = useCallback(
+    async (): Promise<PriorVisitsLoadResult> => {
+      const request = priorVisitsRequestRef.current + 1;
+      priorVisitsRequestRef.current = request;
+      try {
+        const visits = await repository.listPriorVisits();
+        return { request, state: "ready", visits };
+      } catch {
+        return { request, state: "failed" };
+      }
+    },
+    [repository],
+  );
+
+  const commitPriorVisits = useCallback((result: PriorVisitsLoadResult) => {
+    if (result.request !== priorVisitsRequestRef.current) return;
+    if (result.state === "ready") setPriorVisits(result.visits);
+    setPriorVisitsState(result.state);
+  }, []);
+
+  const reloadPriorVisits = useCallback(async () => {
+    setPriorVisitsState("loading");
+    commitPriorVisits(await requestPriorVisits());
+  }, [commitPriorVisits, requestPriorVisits]);
+
+  useEffect(() => {
+    void requestPriorVisits().then(commitPriorVisits);
+    return () => {
+      priorVisitsRequestRef.current += 1;
+    };
+  }, [commitPriorVisits, requestPriorVisits]);
 
   const fingerprint = useMemo(() => JSON.stringify(consultation), [consultation]);
 
@@ -165,5 +216,8 @@ export function useConsultationDraft(): {
     savedAt,
     hasUnconfirmedChanges,
     saveDraft,
+    priorVisits,
+    priorVisitsState,
+    reloadPriorVisits,
   };
 }
