@@ -1,4 +1,5 @@
 import type {
+  CompleteConsultationDraftResult,
   Consultation,
   ListPriorVisitsResult,
   PriorVisitSnapshot,
@@ -15,6 +16,10 @@ export interface ConsultationDraftRepository {
     consultation: Consultation,
     revision: number,
   ): Promise<SaveConsultationDraftResult>;
+  complete(
+    revision: number,
+    expectedConsultation: Consultation,
+  ): Promise<CompleteConsultationDraftResult>;
 }
 
 function getOrCreateDemoDraftId() {
@@ -58,6 +63,16 @@ export function createConsultationDraftRepository(): ConsultationDraftRepository
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ consultation, revision }),
+        },
+      );
+    },
+    async complete(revision, expectedConsultation) {
+      return request<CompleteConsultationDraftResult>(
+        `/api/consultation-drafts/${encodeURIComponent(getOrCreateDemoDraftId())}/complete`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ revision, expectedConsultation }),
         },
       );
     },

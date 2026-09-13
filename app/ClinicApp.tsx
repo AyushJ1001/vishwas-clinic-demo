@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
@@ -36,9 +37,17 @@ import {
   type Consultation,
   type PatientSex,
   type PrescribedMedicine,
+  type CompletedMedicineSnapshot,
+  type CompletedPrescriptionSnapshot,
 } from "./consultation-model";
+import { clinicDoctors, clinicIdentity, resolveMedicineComposition } from "./clinic-facts";
+import {
+  validateConsultation,
+  type ConsultationProblem,
+} from "./consultation-validation";
 import {
   useConsultationDraft,
+  type CompletionState,
   type DraftSaveState,
 } from "./use-consultation-draft";
 
@@ -57,23 +66,6 @@ const routes: { href: string; label: string; key: RouteName }[] = [
   { href: "/summaries", label: "Summaries", key: "summaries" },
 ];
 
-const clinicDoctors = {
-  "Dr. Makarand Vishwas Apte": {
-    name: "Dr. Makarand Vishwas Apte",
-    qualifications: "MBBS, MD (Anatomy)",
-    registration: "Reg. No. 87352",
-    mobile: "9730034907",
-    specialty: "",
-  },
-  "Dr. Gauri Makarand Apte": {
-    name: "Dr. Gauri Makarand Apte",
-    qualifications: "MBBS, MD (Physiology)",
-    registration: "Reg. No. 2000/31891",
-    mobile: "",
-    specialty: "CC EBDM, CCMTD · Diabetes & Thyroid Consultation",
-  },
-} as const;
-
 function CatalogPicker({
   label,
   catalogName,
@@ -81,6 +73,8 @@ function CatalogPicker({
   value,
   onChange,
   multiple = false,
+  inputId,
+  error,
 }: {
   label: string;
   catalogName:
@@ -94,12 +88,15 @@ function CatalogPicker({
   value: string | string[];
   onChange: (value: string | string[]) => void;
   multiple?: boolean;
+  inputId?: string;
+  error?: string;
 }) {
   const pickerId = useId();
   const labelId = `${pickerId}-label`;
   const selectionId = `${pickerId}-selection`;
   const listboxId = `${pickerId}-listbox`;
   const customErrorId = `${pickerId}-custom-error`;
+  const validationErrorId = inputId ? `${inputId}-error` : undefined;
   const pickerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -303,6 +300,7 @@ function CatalogPicker({
       <button
         ref={triggerRef}
         type="button"
+        id={inputId}
         onClick={() => (open ? closePicker() : openPicker())}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -313,7 +311,12 @@ function CatalogPicker({
         className="picker-trigger"
         role="combobox"
         aria-labelledby={labelId}
-        aria-describedby={selectionId}
+        aria-describedby={
+          error && validationErrorId
+            ? `${selectionId} ${validationErrorId}`
+            : selectionId
+        }
+        aria-invalid={Boolean(error)}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={listboxId}
@@ -332,6 +335,9 @@ function CatalogPicker({
         </span>
         <CaretDown size={15} />
       </button>
+      {error && validationErrorId && (
+        <FieldError id={validationErrorId}>{error}</FieldError>
+      )}
       {multiple && values.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
           {values.map((item) => (
@@ -565,12 +571,16 @@ function UnitInput({
   unit,
   onChange,
   step = "any",
+  inputId,
+  error,
 }: {
   label: string;
   value: string;
   unit: string;
   onChange: (value: string) => void;
   step?: string;
+  inputId: string;
+  error?: string;
 }) {
   return (
     <label>
@@ -579,17 +589,21 @@ function UnitInput({
       </span>
       <span className="unit-input-wrap">
         <input
+          id={inputId}
           className="small-input unit-input"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           inputMode="decimal"
           step={step}
           aria-label={label}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${inputId}-error` : undefined}
         />
         <span className="unit-suffix" aria-hidden="true">
           {unit}
         </span>
       </span>
+      {error && <FieldError id={`${inputId}-error`}>{error}</FieldError>}
     </label>
   );
 }
@@ -599,11 +613,15 @@ function BloodPressureInput({
   diastolic,
   onSystolicChange,
   onDiastolicChange,
+  systolicError,
+  diastolicError,
 }: {
   systolic: string;
   diastolic: string;
   onSystolicChange: (value: string) => void;
   onDiastolicChange: (value: string) => void;
+  systolicError?: string;
+  diastolicError?: string;
 }) {
   return (
     <label>
@@ -612,25 +630,93 @@ function BloodPressureInput({
       </span>
       <span className="bp-input-wrap">
         <input
+          id="systolic-blood-pressure"
           className="small-input"
           value={systolic}
           onChange={(event) => onSystolicChange(event.target.value)}
           inputMode="numeric"
           aria-label="Systolic blood pressure"
+          aria-invalid={Boolean(systolicError)}
+          aria-describedby={
+            systolicError ? "systolic-blood-pressure-error" : undefined
+          }
         />
         <span className="bp-divider" aria-hidden="true">
           /
         </span>
         <input
+          id="diastolic-blood-pressure"
           className="small-input"
           value={diastolic}
           onChange={(event) => onDiastolicChange(event.target.value)}
           inputMode="numeric"
           aria-label="Diastolic blood pressure"
+          aria-invalid={Boolean(diastolicError)}
+          aria-describedby={
+            diastolicError ? "diastolic-blood-pressure-error" : undefined
+          }
         />
       </span>
       <span className="mt-1 block text-[10px] text-[#7b8b85]">mmHg</span>
+      {systolicError && (
+        <FieldError id="systolic-blood-pressure-error">
+          {systolicError}
+        </FieldError>
+      )}
+      {diastolicError && (
+        <FieldError id="diastolic-blood-pressure-error">
+          {diastolicError}
+        </FieldError>
+      )}
     </label>
+  );
+}
+
+function FieldError({ id, children }: { id: string; children: string }) {
+  return (
+    <span id={id} className="mt-2 block text-sm font-semibold text-[#b85a36]">
+      {children}
+    </span>
+  );
+}
+
+function MedicineInstructionSelect({
+  id,
+  label,
+  value,
+  options,
+  placeholder,
+  error,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: string[];
+  placeholder: string;
+  error?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="min-w-0">
+      <select
+        id={id}
+        aria-label={label}
+        className="input-field min-h-10 py-2 text-xs"
+        value={value}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${id}-error` : undefined}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="" disabled>
+          {placeholder}
+        </option>
+        {options.map((option) => (
+          <option key={option}>{option}</option>
+        ))}
+      </select>
+      {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
+    </div>
   );
 }
 
@@ -638,12 +724,14 @@ function Shell({
   active,
   doctorName = "Dr. Makarand Vishwas Apte",
   onDoctorChange,
+  doctorSelectionLocked = false,
   shouldWarnBeforeLeaving = false,
   children,
 }: {
   active: RouteName;
   doctorName?: ClinicDoctorName;
   onDoctorChange?: (doctor: ClinicDoctorName) => void;
+  doctorSelectionLocked?: boolean;
   shouldWarnBeforeLeaving?: boolean;
   children: React.ReactNode;
 }) {
@@ -692,10 +780,11 @@ function Shell({
             <select
               aria-label="Select doctor"
               value={doctorName}
+              disabled={doctorSelectionLocked}
               onChange={(event) =>
                 onDoctorChange?.(event.target.value as ClinicDoctorName)
               }
-              className="appearance-none bg-transparent pr-5 outline-none"
+              className="appearance-none bg-transparent pr-5 outline-none disabled:cursor-default"
             >
               {doctors.map((doctor) => (
                 <option key={doctor}>{doctor}</option>
@@ -797,10 +886,31 @@ function PrescriptionPage() {
     savedAt,
     hasUnconfirmedChanges,
     saveDraft,
+    completionState,
+    completedSnapshot,
+    completePrescription,
     priorVisits,
     priorVisitsState,
     reloadPriorVisits,
   } = useConsultationDraft();
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewAttempted, setReviewAttempted] = useState(false);
+  const reviewProblems = useMemo(
+    () => validateConsultation(consultation),
+    [consultation],
+  );
+  const errorFor = (fieldId: string) =>
+    reviewAttempted
+      ? reviewProblems.find((problem) => problem.fieldId === fieldId)?.message
+      : undefined;
+  const focusProblem = (problem: ConsultationProblem) => {
+    setReviewOpen(false);
+    window.requestAnimationFrame(() => {
+      const field = document.getElementById(problem.fieldId);
+      field?.scrollIntoView({ block: "center", behavior: "smooth" });
+      field?.focus();
+    });
+  };
   const clinicalEntryBlocked =
     saveState === "loading" ||
     (consultation.visitType === "followup" &&
@@ -868,6 +978,17 @@ function PrescriptionPage() {
     },
     { scope: root },
   );
+  if (completedSnapshot) {
+    return (
+      <Shell
+        active="prescription"
+        doctorName={completedSnapshot.doctor.name}
+        doctorSelectionLocked
+      >
+        <CompletedPrescriptionView snapshot={completedSnapshot} />
+      </Shell>
+    );
+  }
   return (
     <Shell
       active="prescription"
@@ -910,6 +1031,12 @@ function PrescriptionPage() {
             <fieldset
               role="radiogroup"
               aria-labelledby="prescription-type-label"
+              aria-invalid={Boolean(errorFor("prescription-type-new"))}
+              aria-describedby={
+                errorFor("prescription-type-new")
+                  ? "prescription-type-error"
+                  : undefined
+              }
               disabled={saveState === "loading"}
               aria-busy={saveState === "loading"}
               className="mb-8 min-w-0 rounded-[24px] border border-[#b85a36]/25 bg-[#fff7f0] p-5 disabled:opacity-70"
@@ -940,6 +1067,7 @@ function PrescriptionPage() {
                   return (
                     <label key={key} className="relative block">
                       <input
+                        id={`prescription-type-${key}`}
                         className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                         type="radio"
                         name="prescription-type"
@@ -971,20 +1099,29 @@ function PrescriptionPage() {
                   );
                 })}
               </div>
+              {errorFor("prescription-type-new") && (
+                <FieldError id="prescription-type-error">
+                  {errorFor("prescription-type-new")!}
+                </FieldError>
+              )}
             </fieldset>
             {consultation.visitType === "followup" && (
               <div className="mb-8 rounded-[24px] border border-[#15362f]/15 bg-[#ece7dc] p-5">
                 <label>
                   <span className="field-label">Prior demo visit</span>
                   <select
+                    id="prior-visit"
                     className="input-field"
                     value={consultation.linkedPriorVisit?.id ?? ""}
                     aria-describedby={
-                      !consultation.linkedPriorVisit &&
-                      priorVisitsState !== "failed"
-                        ? "prior-visit-required"
-                        : undefined
+                      errorFor("prior-visit")
+                        ? "prior-visit-error"
+                        : !consultation.linkedPriorVisit &&
+                            priorVisitsState !== "failed"
+                          ? "prior-visit-required"
+                          : undefined
                     }
+                    aria-invalid={Boolean(errorFor("prior-visit"))}
                     disabled={
                       saveState === "loading" ||
                       priorVisitsState !== "ready"
@@ -1012,6 +1149,11 @@ function PrescriptionPage() {
                     ))}
                   </select>
                 </label>
+                {errorFor("prior-visit") && (
+                  <FieldError id="prior-visit-error">
+                    {errorFor("prior-visit")!}
+                  </FieldError>
+                )}
                 {priorVisitsState === "failed" && (
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-red-900">
                     <p role="alert">
@@ -1027,7 +1169,8 @@ function PrescriptionPage() {
                   </div>
                 )}
                 {!consultation.linkedPriorVisit &&
-                  priorVisitsState !== "failed" && (
+                  priorVisitsState !== "failed" &&
+                  !errorFor("prior-visit") && (
                     <p
                       id="prior-visit-required"
                       className="mt-3 text-sm font-semibold text-[#9b492f]"
@@ -1115,34 +1258,58 @@ function PrescriptionPage() {
               <label>
                 <span className="field-label">Patient name</span>
                 <input
+                  id="patient-name"
                   className="input-field"
+                  aria-invalid={Boolean(errorFor("patient-name"))}
+                  aria-describedby={
+                    errorFor("patient-name") ? "patient-name-error" : undefined
+                  }
                   value={consultation.patient.name}
                   onChange={(event) =>
                     updatePatient("name", event.target.value)
                   }
                 />
+                {errorFor("patient-name") && (
+                  <FieldError id="patient-name-error">
+                    {errorFor("patient-name")!}
+                  </FieldError>
+                )}
               </label>
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-[.6fr_1fr_1.2fr]">
               <label>
                 <span className="field-label">Age</span>
                 <input
+                  id="patient-age"
                   aria-label="Age"
                   className="input-field"
                   type="number"
                   inputMode="numeric"
                   min="0"
-                  max="130"
                   value={consultation.patient.age}
+                  aria-invalid={Boolean(errorFor("patient-age"))}
+                  aria-describedby={
+                    errorFor("patient-age") ? "patient-age-error" : undefined
+                  }
                   onChange={(event) => updatePatient("age", event.target.value)}
                 />
+                {errorFor("patient-age") && (
+                  <FieldError id="patient-age-error">
+                    {errorFor("patient-age")!}
+                  </FieldError>
+                )}
               </label>
               <label>
                 <span className="field-label">Sex</span>
                 <select
+                  id="patient-sex"
                   aria-label="Sex"
                   className="input-field"
                   value={consultation.patient.sex}
+                  aria-invalid={Boolean(errorFor("patient-sex"))}
+                  aria-describedby={
+                    errorFor("patient-sex") ? "patient-sex-error" : undefined
+                  }
                   onChange={(event) =>
                     updatePatient("sex", event.target.value as PatientSex)
                   }
@@ -1151,14 +1318,26 @@ function PrescriptionPage() {
                   <option>Male</option>
                   <option>Other</option>
                 </select>
+                {errorFor("patient-sex") && (
+                  <FieldError id="patient-sex-error">
+                    {errorFor("patient-sex")!}
+                  </FieldError>
+                )}
               </label>
               <label>
                 <span className="field-label">Consultation date</span>
                 <input
+                  id="consultation-date"
                   aria-label="Consultation date"
                   className="input-field tabular-nums"
                   type="date"
                   value={consultation.consultationDate}
+                  aria-invalid={Boolean(errorFor("consultation-date"))}
+                  aria-describedby={
+                    errorFor("consultation-date")
+                      ? "consultation-date-error"
+                      : undefined
+                  }
                   onChange={(event) =>
                     setConsultation((current) => ({
                       ...current,
@@ -1166,43 +1345,60 @@ function PrescriptionPage() {
                     }))
                   }
                 />
+                {errorFor("consultation-date") && (
+                  <FieldError id="consultation-date-error">
+                    {errorFor("consultation-date")!}
+                  </FieldError>
+                )}
               </label>
             </div>
             <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-5">
               <UnitInput
+                inputId="weight"
                 label="Weight"
                 value={consultation.vitals.weight}
                 unit="kg"
                 onChange={(value) => updateVital("weight", value)}
+                error={errorFor("weight")}
               />
               <UnitInput
+                inputId="temperature"
                 label="Temperature"
                 value={consultation.vitals.temperature}
                 unit="°F"
                 onChange={(value) => updateVital("temperature", value)}
+                error={errorFor("temperature")}
               />
               <UnitInput
+                inputId="pulse"
                 label="Pulse"
                 value={consultation.vitals.pulse}
                 unit="/min"
                 onChange={(value) => updateVital("pulse", value)}
+                error={errorFor("pulse")}
               />
               <BloodPressureInput
                 systolic={consultation.vitals.systolic}
                 diastolic={consultation.vitals.diastolic}
                 onSystolicChange={(value) => updateVital("systolic", value)}
                 onDiastolicChange={(value) => updateVital("diastolic", value)}
+                systolicError={errorFor("systolic-blood-pressure")}
+                diastolicError={errorFor("diastolic-blood-pressure")}
               />
               <UnitInput
+                inputId="spo2"
                 label="SpO₂"
                 value={consultation.vitals.spo2}
                 unit="%"
                 onChange={(value) => updateVital("spo2", value)}
+                error={errorFor("spo2")}
               />
             </div>
             <div className="mt-8 grid gap-6 sm:grid-cols-2">
               <CatalogPicker
                 label="Major complaints"
+                inputId="complaints"
+                error={errorFor("complaints")}
                 catalogName="symptoms"
                 groups={symptoms}
                 value={consultation.complaints}
@@ -1216,6 +1412,8 @@ function PrescriptionPage() {
               />
               <CatalogPicker
                 label="Examination findings"
+                inputId="examination-findings"
+                error={errorFor("examination-findings")}
                 catalogName="findings"
                 groups={findings}
                 value={consultation.examinationFindings}
@@ -1231,6 +1429,8 @@ function PrescriptionPage() {
             <div className="mt-7">
               <CatalogPicker
                 label="Provisional diagnosis"
+                inputId="provisional-diagnosis"
+                error={errorFor("provisional-diagnosis")}
                 catalogName="diagnoses"
                 groups={diagnoses}
                 value={consultation.provisionalDiagnosis}
@@ -1245,6 +1445,7 @@ function PrescriptionPage() {
             <div className="mt-7 grid gap-6 sm:grid-cols-2">
               <CatalogPicker
                 label="Advice"
+                inputId="advice"
                 catalogName="advice"
                 groups={advice}
                 value={consultation.advice}
@@ -1258,6 +1459,7 @@ function PrescriptionPage() {
               />
               <CatalogPicker
                 label="Investigations"
+                inputId="investigations"
                 catalogName="investigations"
                 groups={investigations}
                 value={consultation.investigations}
@@ -1273,6 +1475,7 @@ function PrescriptionPage() {
             <div className="mt-8 border-t border-[#15362f]/10 pt-8">
               <CatalogPicker
                 label="Medicines"
+                inputId="medicines"
                 catalogName="medicines"
                 groups={medicines}
                 value={consultation.medicines.map((medicine) => medicine.name)}
@@ -1294,48 +1497,31 @@ function PrescriptionPage() {
                           "Composition from medicine catalog"}
                       </p>
                     </div>
-                    <select
-                      aria-label={`${medicine.name} dose`}
-                      className="input-field min-h-10 py-2 text-xs"
+                    <MedicineInstructionSelect
+                      id={`medicine-${i}-dose`}
+                      label={`${medicine.name} dose`}
                       value={medicine.dose}
-                      onChange={(event) =>
-                        updateMedicine(
-                          medicine.name,
-                          "dose",
-                          event.target.value,
-                        )
-                      }
-                    >
-                      <option value="" disabled>
-                        Choose dose
-                      </option>
-                      {[
+                      error={errorFor(`medicine-${i}-dose`)}
+                      placeholder="Choose dose"
+                      options={[
                         "1–0–1",
                         "1–0–0",
                         "0–0–1",
                         "1–1–1",
                         "0–1–0",
                         "As needed",
-                      ].map((option) => (
-                        <option key={option}>{option}</option>
-                      ))}
-                    </select>
-                    <select
-                      aria-label={`${medicine.name} duration`}
-                      className="input-field min-h-10 py-2 text-xs"
-                      value={medicine.duration}
-                      onChange={(event) =>
-                        updateMedicine(
-                          medicine.name,
-                          "duration",
-                          event.target.value,
-                        )
+                      ]}
+                      onChange={(value) =>
+                        updateMedicine(medicine.name, "dose", value)
                       }
-                    >
-                      <option value="" disabled>
-                        Choose duration
-                      </option>
-                      {[
+                    />
+                    <MedicineInstructionSelect
+                      id={`medicine-${i}-duration`}
+                      label={`${medicine.name} duration`}
+                      value={medicine.duration}
+                      error={errorFor(`medicine-${i}-duration`)}
+                      placeholder="Choose duration"
+                      options={[
                         "1 day",
                         "3 days",
                         "5 days",
@@ -1343,36 +1529,29 @@ function PrescriptionPage() {
                         "10 days",
                         "14 days",
                         "Until review",
-                      ].map((option) => (
-                        <option key={option}>{option}</option>
-                      ))}
-                    </select>
-                    <select
-                      aria-label={`${medicine.name} method`}
-                      className="input-field min-h-10 py-2 text-xs"
-                      value={medicine.method}
-                      onChange={(event) =>
-                        updateMedicine(
-                          medicine.name,
-                          "method",
-                          event.target.value,
-                        )
+                      ]}
+                      onChange={(value) =>
+                        updateMedicine(medicine.name, "duration", value)
                       }
-                    >
-                      <option value="" disabled>
-                        Choose method
-                      </option>
-                      {[
+                    />
+                    <MedicineInstructionSelect
+                      id={`medicine-${i}-method`}
+                      label={`${medicine.name} method`}
+                      value={medicine.method}
+                      error={errorFor(`medicine-${i}-method`)}
+                      placeholder="Choose method"
+                      options={[
                         "After food",
                         "Before food",
                         "With water",
                         "At bedtime",
                         "As needed",
                         "As directed",
-                      ].map((option) => (
-                        <option key={option}>{option}</option>
-                      ))}
-                    </select>
+                      ]}
+                      onChange={(value) =>
+                        updateMedicine(medicine.name, "method", value)
+                      }
+                    />
                     <button
                       type="button"
                       aria-label={`Remove ${medicine.name}`}
@@ -1399,40 +1578,90 @@ function PrescriptionPage() {
               after a short pause.
             </div>
             </fieldset>
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-[#15362f]/10 pt-7">
+              <p className="max-w-md text-sm leading-relaxed text-[#60736c]">
+                Review every patient, clinical, and medicine detail before the
+                prescription is locked.
+              </p>
+              <button
+                type="button"
+                className="primary-action min-h-11"
+                disabled={saveState === "loading"}
+                onClick={() => {
+                  setReviewAttempted(true);
+                  setReviewOpen(true);
+                }}
+              >
+                Review prescription
+              </button>
+            </div>
           </div>
           <div className="preview-wrap col-span-12 lg:col-span-5">
             <PrescriptionPreview consultation={consultation} />
           </div>
         </section>
+        {reviewOpen && (
+          <PrescriptionReviewDialog
+            consultation={consultation}
+            problems={reviewProblems}
+            completionState={completionState}
+            onClose={() => setReviewOpen(false)}
+            onFixProblem={focusProblem}
+            onComplete={() => void completePrescription()}
+          />
+        )}
       </div>
     </Shell>
   );
 }
 
 function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
-  const doctor = clinicDoctors[consultation.doctorName];
-  const { patient, vitals } = consultation;
   return (
     <div className="rounded-[30px] bg-[#123930] p-5 text-white shadow-[0_30px_80px_rgba(21,54,47,.2)]">
       <div className="mb-4 flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-[.18em] text-white/70">
           Draft prescription
         </span>
-        <button
-          type="button"
-          aria-label="Print draft prescription"
-          className="rounded-full bg-white p-2.5 text-[#15362f]"
-        >
-          <Printer size={16} />
-        </button>
+        <span className="text-xs font-semibold text-white/70">
+          Review before completion
+        </span>
       </div>
+      <PrescriptionDocument
+        consultation={consultation}
+        clinic={clinicIdentity}
+        doctor={clinicDoctors[consultation.doctorName]}
+        medicines={consultation.medicines.map((medicine) => ({
+          ...medicine,
+          composition: resolveMedicineComposition(medicine.name),
+        }))}
+        ariaLabel="Draft prescription preview"
+      />
+    </div>
+  );
+}
+
+function PrescriptionDocument({
+  consultation,
+  clinic,
+  doctor,
+  medicines: resolvedMedicines,
+  ariaLabel,
+}: {
+  consultation: Consultation;
+  clinic: CompletedPrescriptionSnapshot["clinic"];
+  doctor: CompletedPrescriptionSnapshot["doctor"];
+  medicines: CompletedMedicineSnapshot[];
+  ariaLabel: string;
+}) {
+  const { patient, vitals } = consultation;
+  return (
       <article
-        aria-label="Draft prescription preview"
+        aria-label={ariaLabel}
         className="document-preview mx-auto aspect-[148/210] h-auto w-full max-w-[470px] overflow-visible bg-[#fffef9] p-6 text-[#202c29] shadow-2xl sm:p-8"
       >
         <header className="text-center">
           <h2 className="text-2xl font-black tracking-[.04em]">
-            VISHWAS CLINIC
+            {clinic.name}
           </h2>
           <div className="mt-2 grid grid-cols-[1fr_auto] items-start border-b-2 border-[#202c29] pb-2 text-left">
             <div>
@@ -1450,18 +1679,9 @@ function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
             <Pulse size={27} weight="duotone" />
           </div>
           <div className="space-y-1 border-b-2 py-2 text-[7px]">
-            <p>
-              Shop No. 6, Amrapali Apartments, Right Bhusari Colony, Paud Road,
-              Kothrud, Pune 411038
-            </p>
-            <p>
-              Time: 6.30 pm to 9.30 pm, Monday to Saturday · Sunday by
-              appointment only
-            </p>
-            <p>
-              Emergency Home Visits · ECG · Nebulization · Blood Sugar
-              Monitoring
-            </p>
+            <p>{clinic.address}</p>
+            <p>{clinic.hours}</p>
+            <p>{clinic.services}</p>
           </div>
         </header>
         <div className="mt-3 grid grid-cols-[1.4fr_.6fr_.6fr] text-[8px]">
@@ -1512,9 +1732,11 @@ function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
           </aside>
           <section className="p-3">
             <div className="flex items-start justify-between">
-              <img
+              <Image
                 src="/icons/prescription-fill.svg"
                 alt="Prescription"
+                width={34}
+                height={34}
                 className="rx-logo"
               />
               <span className="text-[6px]">
@@ -1522,14 +1744,13 @@ function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
               </span>
             </div>
             <div className="mt-4 space-y-3">
-              {consultation.medicines.map((medicine, i) => (
+              {resolvedMedicines.map((medicine, i) => (
                 <div key={medicine.name} className="text-[8px]">
                   <b>
                     {i + 1}. {medicine.name}
                   </b>
                   <p className="text-[6px] text-[#65716d]">
-                    {ingredientByMedicine[medicine.name] ||
-                      "Composition from medicine catalog"}
+                    {medicine.composition}
                   </p>
                   <p className="mt-1">
                     {medicine.dose || "Dose not set"} ·{" "}
@@ -1546,7 +1767,342 @@ function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
           <p>Prescription is valid for the given person and duration only</p>
         </footer>
       </article>
-    </div>
+  );
+}
+
+function PrescriptionReviewDocument({
+  consultation,
+}: {
+  consultation: Consultation;
+}) {
+  const doctor = clinicDoctors[consultation.doctorName];
+  const { patient, vitals } = consultation;
+  const enteredVitals = [
+    vitals.weight ? `Weight ${vitals.weight} kg` : "",
+    vitals.temperature ? `Temperature ${vitals.temperature} °F` : "",
+    vitals.pulse ? `Pulse ${vitals.pulse} /min` : "",
+    vitals.systolic || vitals.diastolic
+      ? `BP ${vitals.systolic || "—"}/${vitals.diastolic || "—"} mmHg`
+      : "",
+    vitals.spo2 ? `SpO₂ ${vitals.spo2}%` : "",
+  ].filter(Boolean);
+
+  return (
+    <article
+      aria-label="Prescription under review"
+      className="w-full min-w-0 bg-[#fffef9] p-4 text-[#202c29] shadow-[0_20px_45px_rgba(0,0,0,.2)] sm:p-7"
+    >
+      <header className="border-b-2 border-[#202c29] pb-4 text-center">
+        <h3 className="text-xl font-black tracking-[.04em]">
+          {clinicIdentity.name}
+        </h3>
+        <p className="mt-3 text-sm font-bold">{doctor.name}</p>
+        <p className="mt-1 text-xs leading-relaxed text-[#53635e]">
+          {doctor.qualifications} · {doctor.registration}
+          {doctor.mobile ? ` · Mobile ${doctor.mobile}` : ""}
+        </p>
+        {doctor.specialty && (
+          <p className="mt-1 text-xs leading-relaxed text-[#53635e]">
+            {doctor.specialty}
+          </p>
+        )}
+        <p className="mx-auto mt-3 max-w-[65ch] text-xs leading-relaxed text-[#53635e]">
+          {clinicIdentity.address}
+        </p>
+      </header>
+
+      <dl className="grid gap-3 border-b border-[#202c29]/20 py-4 text-sm sm:grid-cols-3">
+        <div className="min-w-0">
+          <dt className="font-bold">Patient</dt>
+          <dd className="mt-1 break-words">{patient.name || "—"}</dd>
+        </div>
+        <div>
+          <dt className="font-bold">Age and sex</dt>
+          <dd className="mt-1">
+            {patient.age || "—"} / {patient.sex || "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-bold">Consultation date</dt>
+          <dd className="mt-1 tabular-nums">
+            {formatConsultationDate(consultation.consultationDate)}
+          </dd>
+        </div>
+      </dl>
+
+      {enteredVitals.length > 0 && (
+        <section aria-labelledby="review-vitals-heading" className="border-b border-[#202c29]/20 py-4">
+          <h4 id="review-vitals-heading" className="text-sm font-bold">
+            Vitals
+          </h4>
+          <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {enteredVitals.map((vital) => (
+              <li key={vital}>{vital}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <div className="space-y-4 border-b border-[#202c29]/20 py-4 text-sm leading-relaxed">
+        <p>
+          <b>Major complaints:</b>{" "}
+          {consultation.complaints.join(", ") || "—"}
+        </p>
+        <p>
+          <b>Examination findings:</b>{" "}
+          {consultation.examinationFindings.join(", ") || "—"}
+        </p>
+        <p>
+          <b>Provisional diagnosis:</b>{" "}
+          {consultation.provisionalDiagnosis || "—"}
+        </p>
+      </div>
+
+      <div className="grid gap-6 py-4 md:grid-cols-[.75fr_1.25fr]">
+        <div className="grid gap-5 text-sm leading-relaxed sm:grid-cols-2 md:grid-cols-1">
+          <section aria-labelledby="review-advice-heading">
+            <h4 id="review-advice-heading" className="font-bold">
+              Advice
+            </h4>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {consultation.advice.length ? (
+                consultation.advice.map((item) => <li key={item}>{item}</li>)
+              ) : (
+                <li className="list-none text-[#60736c]">None entered</li>
+              )}
+            </ul>
+          </section>
+          <section aria-labelledby="review-investigations-heading">
+            <h4 id="review-investigations-heading" className="font-bold">
+              Investigations
+            </h4>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {consultation.investigations.length ? (
+                consultation.investigations.map((item) => (
+                  <li key={item}>{item}</li>
+                ))
+              ) : (
+                <li className="list-none text-[#60736c]">None entered</li>
+              )}
+            </ul>
+          </section>
+        </div>
+        <section aria-labelledby="review-medicines-heading" className="min-w-0">
+          <h4 id="review-medicines-heading" className="text-sm font-bold">
+            Medicines
+          </h4>
+          {consultation.medicines.length ? (
+            <ol className="mt-3 space-y-4">
+              {consultation.medicines.map((medicine, index) => (
+                <li key={medicine.name} className="min-w-0 text-sm leading-relaxed">
+                  <p className="break-words font-bold">
+                    {index + 1}. {medicine.name}
+                  </p>
+                  <p className="break-words text-sm text-[#53635e]">
+                    {resolveMedicineComposition(medicine.name)}
+                  </p>
+                  <p className="mt-1 break-words text-sm">
+                    {medicine.dose || "Dose not set"} ·{" "}
+                    {medicine.method || "Method not set"} ·{" "}
+                    {medicine.duration || "Duration not set"}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-2 text-sm text-[#60736c]">No medicines selected</p>
+          )}
+        </section>
+      </div>
+    </article>
+  );
+}
+
+function PrescriptionReviewDialog({
+  consultation,
+  problems,
+  completionState,
+  onClose,
+  onFixProblem,
+  onComplete,
+}: {
+  consultation: Consultation;
+  problems: ConsultationProblem[];
+  completionState: CompletionState;
+  onClose: () => void;
+  onFixProblem: (problem: ConsultationProblem) => void;
+  onComplete: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => {
+      if (dialog?.open) dialog.close();
+    };
+  }, []);
+  const isCompleting = completionState === "completing";
+  const isFailed = completionState === "failed";
+  const requiresPriorVisit =
+    consultation.visitType === "followup" && !consultation.linkedPriorVisit;
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="review-prescription-heading"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!isCompleting) onClose();
+      }}
+      className="m-auto max-h-[calc(100vh-2rem)] w-[min(1120px,calc(100vw-2rem))] overflow-y-auto rounded-[24px] bg-[#f4f1e9] p-0 text-[#15362f] shadow-[0_28px_90px_rgba(21,54,47,.3)] backdrop:bg-[#102c27]/70"
+    >
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-[#15362f]/10 bg-[#f4f1e9] px-5 py-4 sm:px-7">
+        <div>
+          <h2 id="review-prescription-heading" className="text-2xl font-bold">
+            Review prescription
+          </h2>
+          <p className="mt-1 text-sm text-[#60736c]">
+            Check the final paper before locking this prescription.
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Close prescription review"
+          disabled={isCompleting}
+          onClick={onClose}
+          className="grid min-h-11 min-w-11 place-items-center rounded-xl bg-white transition hover:bg-[#ece7dc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39] disabled:opacity-50"
+        >
+          <X size={18} />
+        </button>
+      </div>
+      <div className="grid min-w-0 gap-6 p-5 lg:grid-cols-[minmax(0,.72fr)_minmax(0,1.28fr)] lg:p-7">
+        <section aria-labelledby="review-check-heading" className="min-w-0">
+          <h3 id="review-check-heading" className="text-lg font-bold">
+            Completion check
+          </h3>
+          {problems.length ? (
+            <>
+              <p className="mt-2 text-sm leading-relaxed text-[#60736c]">
+                Fix {problems.length} {problems.length === 1 ? "problem" : "problems"} before completion.
+              </p>
+              <ul className="mt-4 space-y-2">
+                {problems.map((problem) => {
+                  const mustLinkPriorVisit =
+                    requiresPriorVisit && problem.fieldId !== "prior-visit";
+                  const correction = mustLinkPriorVisit
+                    ? { ...problem, fieldId: "prior-visit" }
+                    : problem;
+                  return (
+                    <li key={problem.key}>
+                      <button
+                        type="button"
+                        onClick={() => onFixProblem(correction)}
+                        className="flex min-h-11 w-full items-start justify-between gap-4 rounded-xl bg-white px-4 py-3 text-left text-sm font-semibold transition hover:bg-[#ece7dc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
+                        aria-label={
+                          mustLinkPriorVisit
+                            ? `Link prior visit before fixing ${problem.fieldLabel}`
+                            : `Fix ${problem.fieldLabel}`
+                        }
+                      >
+                        <span>{problem.message}</span>
+                        <span aria-hidden="true">
+                          {mustLinkPriorVisit ? "Link visit first" : "Fix"}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          ) : (
+            <div className="mt-4 rounded-2xl bg-[#e4ece7] p-4 text-sm">
+              <p className="font-bold">Ready to complete</p>
+              <p className="mt-1 leading-relaxed text-[#435c54]">
+                Completion saves the latest revision and locks this document.
+              </p>
+            </div>
+          )}
+          {isFailed && (
+            <p role="alert" className="mt-4 rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-900">
+              Prescription could not be completed. Your draft is still here.
+            </p>
+          )}
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={onComplete}
+              disabled={problems.length > 0 || isCompleting}
+              className="primary-action min-h-11 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isCompleting
+                ? "Completing prescription…"
+                : isFailed
+                  ? "Retry completion"
+                  : "Complete prescription"}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isCompleting}
+              className="min-h-11 rounded-full bg-white px-5 py-2.5 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39] disabled:opacity-50"
+            >
+              Return to editing
+            </button>
+          </div>
+        </section>
+        <div className="min-w-0 overflow-hidden rounded-[20px] bg-[#123930] p-3 sm:p-6">
+          <PrescriptionReviewDocument consultation={consultation} />
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+function CompletedPrescriptionView({
+  snapshot,
+}: {
+  snapshot: CompletedPrescriptionSnapshot;
+}) {
+  const completedTime = new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(snapshot.completedAt));
+  return (
+    <section className="mx-auto grid max-w-[1200px] gap-6 px-5 py-12 lg:grid-cols-[.65fr_1.35fr] lg:px-10 lg:py-16">
+      <div className="min-w-0">
+        <div
+          role="status"
+          aria-label="Prescription completed"
+          className="rounded-[24px] bg-[#15362f] p-6 text-white"
+        >
+          <SealCheck size={30} weight="fill" />
+          <h1 className="mt-4 text-3xl font-bold">Prescription completed</h1>
+          <p className="mt-3 leading-relaxed text-white/75">
+            The reviewed prescription is locked. Refreshing this page will
+            reopen the same completed document.
+          </p>
+          <dl className="mt-6 space-y-4 border-t border-white/15 pt-5 text-sm">
+            <div>
+              <dt className="text-white/60">Completed</dt>
+              <dd className="mt-1 font-semibold tabular-nums">{completedTime}</dd>
+            </div>
+            <div>
+              <dt className="text-white/60">Prescription ID</dt>
+              <dd className="mt-1 break-all font-semibold">{snapshot.id}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+      <div className="min-w-0 rounded-[30px] bg-[#123930] p-5 shadow-[0_30px_80px_rgba(21,54,47,.2)]">
+        <PrescriptionDocument
+          consultation={snapshot.consultation}
+          clinic={snapshot.clinic}
+          doctor={snapshot.doctor}
+          medicines={snapshot.medicines}
+          ariaLabel="Completed prescription"
+        />
+      </div>
+    </section>
   );
 }
 

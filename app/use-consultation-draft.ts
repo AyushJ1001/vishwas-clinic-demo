@@ -17,6 +17,7 @@ import {
   createDemoConsultation,
   toLocalDateInputValue,
   type Consultation,
+  type CompletedPrescriptionSnapshot,
   type PriorVisitSnapshot,
 } from "./consultation-model";
 
@@ -28,6 +29,7 @@ export type DraftSaveState =
   | "failed";
 
 export type PriorVisitsLoadState = "loading" | "ready" | "failed";
+export type CompletionState = "idle" | "completing" | "failed" | "completed";
 
 type PriorVisitsLoadResult =
   | { request: number; state: "ready"; visits: PriorVisitSnapshot[] }
@@ -42,6 +44,9 @@ export function useConsultationDraft(): {
   savedAt: string | null;
   hasUnconfirmedChanges: boolean;
   saveDraft: () => Promise<void>;
+  completionState: CompletionState;
+  completedSnapshot: CompletedPrescriptionSnapshot | null;
+  completePrescription: () => Promise<void>;
   priorVisits: PriorVisitSnapshot[];
   priorVisitsState: PriorVisitsLoadState;
   reloadPriorVisits: () => Promise<void>;
@@ -54,6 +59,10 @@ export function useConsultationDraft(): {
     useState<Consultation>(createDemoConsultation);
   const [saveState, setSaveState] = useState<DraftSaveState>("loading");
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [completionState, setCompletionState] =
+    useState<CompletionState>("idle");
+  const [completedSnapshot, setCompletedSnapshot] =
+    useState<CompletedPrescriptionSnapshot | null>(null);
   const [priorVisits, setPriorVisits] = useState<PriorVisitSnapshot[]>([]);
   const [priorVisitsState, setPriorVisitsState] =
     useState<PriorVisitsLoadState>("loading");
@@ -86,6 +95,10 @@ export function useConsultationDraft(): {
         hydratedRef.current = true;
         setConsultation(restoredConsultation);
         setSavedAt(draft?.updatedAt ?? null);
+        setCompletedSnapshot(draft?.completedSnapshot ?? null);
+        setCompletionState(
+          draft?.lifecycle === "completed" ? "completed" : "idle",
+        );
         setSaveState("saved");
       },
       () => {
@@ -167,9 +180,10 @@ export function useConsultationDraft(): {
         ) {
           setSavedAt(result.draft.updatedAt);
           setSaveState("saved");
-          return;
+          return true;
         }
         setSaveState("failed");
+        return false;
       } catch {
         if (
           revision === revisionRef.current &&
@@ -177,6 +191,7 @@ export function useConsultationDraft(): {
         ) {
           setSaveState("failed");
         }
+        return false;
       }
     },
     [repository],
@@ -187,13 +202,33 @@ export function useConsultationDraft(): {
     await performSave(consultationRef.current, revisionRef.current);
   }, [performSave]);
 
+  const completePrescription = useCallback(async () => {
+    if (!hydratedRef.current || completedSnapshot) return;
+    setCompletionState("completing");
+    const revision = revisionRef.current;
+    const reviewedConsultation = consultationRef.current;
+    await performSave(reviewedConsultation, revision);
+    try {
+      const result = await repository.complete(revision, reviewedConsultation);
+      setCompletedSnapshot(result.snapshot);
+      consultationRef.current = result.snapshot.consultation;
+      editFingerprintRef.current = JSON.stringify(result.snapshot.consultation);
+      setConsultation(result.snapshot.consultation);
+      setSavedAt(result.snapshot.completedAt);
+      setSaveState("saved");
+      setCompletionState("completed");
+    } catch {
+      setCompletionState("failed");
+    }
+  }, [completedSnapshot, performSave, repository]);
+
   useEffect(() => {
-    if (saveState !== "unsaved") return;
+    if (saveState !== "unsaved" || completedSnapshot) return;
     const timer = window.setTimeout(() => {
       void performSave(consultationRef.current, revisionRef.current);
     }, autosaveDelayMs);
     return () => window.clearTimeout(timer);
-  }, [fingerprint, performSave, saveState]);
+  }, [completedSnapshot, fingerprint, performSave, saveState]);
 
   const hasUnconfirmedChanges =
     saveState === "unsaved" ||
@@ -216,6 +251,9 @@ export function useConsultationDraft(): {
     savedAt,
     hasUnconfirmedChanges,
     saveDraft,
+    completionState,
+    completedSnapshot,
+    completePrescription,
     priorVisits,
     priorVisitsState,
     reloadPriorVisits,

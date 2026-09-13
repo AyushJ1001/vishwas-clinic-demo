@@ -28,6 +28,8 @@ export const consultationDrafts = sqliteTable("consultation_drafts", {
   id: text("id").primaryKey(),
   revision: integer("revision").notNull(),
   consultationJson: text("consultation_json").notNull(),
+  lifecycleStatus: text("lifecycle_status").notNull().default("editing"),
+  completedSnapshotJson: text("completed_snapshot_json"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
