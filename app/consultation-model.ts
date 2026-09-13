@@ -145,6 +145,33 @@ export function createDemoConsultation(): Consultation {
   };
 }
 
+export function createEmptyConsultation(
+  doctorName: ClinicDoctorName,
+  consultationDate: string,
+): Consultation {
+  return {
+    visitType: null,
+    linkedPriorVisit: null,
+    doctorName,
+    patient: { name: "", age: "", sex: "Female" },
+    consultationDate,
+    vitals: {
+      weight: "",
+      temperature: "",
+      pulse: "",
+      systolic: "",
+      diastolic: "",
+      spo2: "",
+    },
+    complaints: [],
+    examinationFindings: [],
+    provisionalDiagnosis: "",
+    advice: [],
+    investigations: [],
+    medicines: [],
+  };
+}
+
 export function toLocalDateInputValue(date: Date) {
   const offset = date.getTimezoneOffset();
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
