@@ -5,6 +5,7 @@ import {
   type Page,
   type Route,
 } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import { readFile } from "node:fs/promises";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createDemoConsultation } from "../../app/consultation-model";
@@ -16,10 +17,50 @@ async function openPrescription(page: Page, testName: string) {
   );
   await page.goto("/");
   await catalogReady;
-  await expect(page.getByRole("status")).toContainText("Saved");
+  await expect(page.getByRole("status")).toContainText("Saved", {
+    timeout: 15_000,
+  });
 }
 
 const draftIdStorageKey = "vishwas-clinic-demo-draft-id";
+
+async function tabTo(page: Page, target: Locator, maxTabs = 120) {
+  for (let index = 0; index < maxTabs; index += 1) {
+    if (
+      await target.evaluate((element) => element === document.activeElement)
+    ) {
+      return;
+    }
+    await page.keyboard.press("Tab");
+  }
+  const activeElement = await page.evaluate(() => ({
+    tag: document.activeElement?.tagName,
+    name: document.activeElement?.getAttribute("aria-label"),
+    text: document.activeElement?.textContent?.trim().slice(0, 80),
+  }));
+  throw new Error(
+    `Could not reach the requested control by keyboard. Active element: ${JSON.stringify(activeElement)}`,
+  );
+}
+
+async function replaceFocusedValue(page: Page, value: string) {
+  await page.keyboard.press("ControlOrMeta+A");
+  if (value) await page.keyboard.type(value);
+  else await page.keyboard.press("Backspace");
+}
+
+async function chooseFirstSelectOption(page: Page) {
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+}
+
+async function expectNoAxeViolations(page: Page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+}
 
 async function setIsolatedDraft(page: Page, testName: string) {
   const draftId = `e2e-${testName}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -456,6 +497,9 @@ test("PDF preparation, sharing, and printing failures keep the completed snapsho
   await expect(
     page.getByRole("button", { name: "Download PDF" }),
   ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Download PDF" }),
+  ).toBeFocused();
 
   await page.getByRole("button", { name: "Print prescription" }).click();
   await expect(page.getByRole("alert")).toContainText(
@@ -525,7 +569,116 @@ test("review lists blocking problems and takes focus to the selected field", asy
   await expect(page.getByLabel("Patient name")).toHaveValue("   ");
   const inlineProblem = page.getByText("Enter the patient's name.");
   await expect(inlineProblem).toBeVisible();
-  await expect(inlineProblem).toHaveCSS("color", "rgb(184, 90, 54)");
+  await expect(inlineProblem).toHaveCSS("color", "rgb(155, 73, 47)");
+});
+
+test("closing review restores focus to the review action", async ({ page }) => {
+  await openPrescription(page, "review-close-focus");
+  const reviewButton = page.getByRole("button", {
+    name: "Review prescription",
+  });
+  await reviewButton.click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  await expect(review.getByRole("button", { name: /Fix / }).first()).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(review).toBeHidden();
+  await expect(reviewButton).toBeFocused();
+});
+
+test("a keyboard-only journey corrects review problems and completes an output action", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await openPrescription(page, "keyboard-only-consultation");
+
+  const newPrescription = page.getByRole("radio", {
+    name: "New prescription",
+  });
+  await tabTo(page, newPrescription);
+  await page.keyboard.press("Space");
+  await expect(newPrescription).toBeChecked();
+
+  const patientName = page.getByLabel("Patient name");
+  await tabTo(page, patientName);
+  await replaceFocusedValue(page, "");
+
+  const complaints = page.getByRole("combobox", {
+    name: "Major complaints",
+    exact: true,
+  });
+  await tabTo(page, complaints);
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("combobox", { name: "Search Major complaints" }),
+  ).toBeFocused();
+  await page.keyboard.type("Headache");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
+  await expect(complaints).toBeFocused();
+
+  const removeHeadache = page.getByRole("button", {
+    name: "Remove Headache from Major complaints",
+  });
+  await tabTo(page, removeHeadache);
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("button", {
+      name: "Remove Dry cough from Major complaints",
+    }),
+  ).toBeFocused();
+
+  const reviewButton = page.getByRole("button", {
+    name: "Review prescription",
+  });
+  await tabTo(page, reviewButton);
+  await page.keyboard.press("Enter");
+
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  const fixPatientName = review.getByRole("button", {
+    name: "Fix patient name",
+  });
+  await expect(fixPatientName).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(patientName).toBeFocused();
+  await page.keyboard.type("Demo Patient Keyboard Journey");
+
+  for (const label of [
+    "Paracetamol 500 mg tablet dose",
+    "Paracetamol 500 mg tablet duration",
+    "Paracetamol 500 mg tablet method",
+    "Levocetirizine 5 mg tablet dose",
+    "Levocetirizine 5 mg tablet duration",
+    "Levocetirizine 5 mg tablet method",
+  ]) {
+    await tabTo(page, page.getByLabel(label));
+    await chooseFirstSelectOption(page);
+  }
+
+  await tabTo(page, reviewButton);
+  await page.keyboard.press("Enter");
+  const completeButton = review.getByRole("button", {
+    name: "Complete prescription",
+  });
+  await expect(completeButton).toBeFocused();
+  await page.keyboard.press("Enter");
+
+  const completed = page.getByRole("status", {
+    name: "Prescription completed",
+  });
+  await expect(completed).toBeFocused();
+  await expect(
+    page.getByRole("article", { name: "Completed prescription" }),
+  ).toContainText("Demo Patient Keyboard Journey");
+
+  const download = page.getByRole("button", { name: "Download PDF" });
+  await expect(download).toBeEnabled();
+  await tabTo(page, download);
+  const downloadEvent = page.waitForEvent("download");
+  await page.keyboard.press("Enter");
+  expect((await downloadEvent).suggestedFilename()).toBe(
+    "vishwas-prescription-demo-patient-keyboard-journey.pdf",
+  );
 });
 
 test("an unlinked follow-up review lists every problem and routes fixes through the prior visit", async ({
@@ -675,7 +828,11 @@ test("completion failure keeps the reviewed draft and can retry", async ({
   );
   await expect(review).toContainText("Demo Patient Retry");
 
-  await review.getByRole("button", { name: "Retry completion" }).click();
+  const retryCompletion = review.getByRole("button", {
+    name: "Retry completion",
+  });
+  await expect(retryCompletion).toBeFocused();
+  await retryCompletion.click();
   await expect(
     page.getByRole("status", { name: "Prescription completed" }),
   ).toBeVisible();
@@ -1029,6 +1186,7 @@ test("a prior visit link can be restored, replaced, removed, and cleared by New"
   await page.getByRole("button", { name: "Remove prior visit link" }).click();
   await expect(linkedVisit).toHaveCount(0);
   await expect(page.getByLabel("Prior demo visit")).toHaveValue("");
+  await expect(page.getByLabel("Prior demo visit")).toBeFocused();
   await expect(page.getByLabel("Patient name")).toBeDisabled();
 
   await page
@@ -1077,6 +1235,7 @@ test("a prior visit loading failure keeps the follow-up safe and can retry", asy
 
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByLabel("Prior demo visit")).toBeEnabled();
+  await expect(page.getByLabel("Prior demo visit")).toBeFocused();
   await page
     .getByLabel("Prior demo visit")
     .selectOption("demo-visit-samira-iyer-2026-06-12");
@@ -1415,9 +1574,69 @@ test("keyboard users can open, search, navigate, select, remove, and dismiss", a
   await remove.focus();
   await remove.press("Enter");
   await expect(remove).toBeHidden();
+  await expect(
+    page.getByRole("button", {
+      name: "Remove Dry cough from Major complaints",
+    }),
+  ).toBeFocused();
   await expect(picker).toHaveAccessibleDescription(
     "Selected: Low-grade fever, Dry cough",
   );
+});
+
+test("catalog picker separates choices from controls and closes when focus leaves", async ({
+  page,
+}) => {
+  await openPrescription(page, "catalog-composite-structure");
+
+  const picker = page.getByRole("combobox", {
+    name: "Major complaints",
+    exact: true,
+  });
+  await picker.click();
+
+  const listbox = page.getByRole("listbox", {
+    name: "Major complaints options",
+  });
+  await expect(listbox.getByRole("button")).toHaveCount(0);
+
+  const feverCategory = page.getByRole("button", {
+    name: "Fever",
+    exact: true,
+  });
+  const respiratoryCategory = page.getByRole("button", {
+    name: "Respiratory",
+    exact: true,
+  });
+  await expect(feverCategory).toHaveAttribute("aria-expanded", "true");
+  await expect(respiratoryCategory).toHaveAttribute("aria-expanded", "false");
+  await respiratoryCategory.click();
+  await expect(respiratoryCategory).toHaveAttribute("aria-expanded", "true");
+  await expect(feverCategory).toHaveAttribute("aria-expanded", "false");
+
+  await page.getByRole("combobox", { name: "Search Major complaints" }).fill(
+    "Missing catalog term",
+  );
+  await expect(listbox.getByText("No matching catalog choices.")).toHaveCount(
+    0,
+  );
+  await expect(
+    listbox.getByRole("button", {
+      name: "Add “Missing catalog term” as a clinic term",
+    }),
+  ).toHaveCount(0);
+
+  await page.keyboard.press("Tab");
+  while (!(await page.getByRole("combobox", { name: "Examination findings", exact: true }).evaluate(
+    (element) => element === document.activeElement,
+  ))) {
+    await page.keyboard.press("Tab");
+  }
+  await expect(picker).toHaveAttribute("aria-expanded", "false");
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("combobox", { name: "Examination findings", exact: true }),
+  ).toBeFocused();
 });
 
 test("catalog loading failure preserves consultation data and retry recovers", async ({
@@ -1623,6 +1842,7 @@ test("custom term save failure keeps the proposed value available for retry", as
       name: "Remove Demo seasonal fatigue from Major complaints",
     }),
   ).toBeVisible();
+  await expect(search).toBeFocused();
   await expect(page.getByLabel("Patient name")).toHaveValue(
     "Demo Patient Retained",
   );
@@ -1640,3 +1860,75 @@ test("catalog help explains how to finish the current consultation", async ({
   ).toBeVisible();
   await expect(page.getByText(/ABDM-recognised terminology/)).toHaveCount(0);
 });
+
+for (const viewport of [
+  { name: "desktop", width: 1440, height: 1000 },
+  { name: "narrow", width: 390, height: 844 },
+]) {
+  test(`editing, picker, review, completion, and output failure pass accessibility scans at ${viewport.name} width`, async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize(viewport);
+    await page.addInitScript(() => {
+      const createObjectUrl = URL.createObjectURL.bind(URL);
+      let failNextDownload = true;
+      URL.createObjectURL = (object) => {
+        if (failNextDownload) {
+          failNextDownload = false;
+          throw new Error("Download unavailable");
+        }
+        return createObjectUrl(object);
+      };
+    });
+    await openPrescription(page, `axe-${viewport.name}`);
+    await expectNoAxeViolations(page);
+
+    const complaints = page.getByRole("combobox", {
+      name: "Major complaints",
+      exact: true,
+    });
+    await complaints.click();
+    await expectNoAxeViolations(page);
+    await page
+      .getByRole("combobox", { name: "Search Major complaints" })
+      .fill("Demo unmatched accessibility term");
+    await page
+      .getByRole("button", {
+        name: "Add “Demo unmatched accessibility term” as a clinic term",
+      })
+      .click();
+    await expectNoAxeViolations(page);
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("radio", { name: "New prescription" }).check();
+    await page.getByLabel("Patient name").fill("");
+    await page.getByRole("button", { name: "Review prescription" }).click();
+    const review = page.getByRole("dialog", { name: "Review prescription" });
+    await expectNoAxeViolations(page);
+
+    await review.getByRole("button", { name: "Fix patient name" }).click();
+    await page.getByLabel("Patient name").fill("Demo Patient Axe Scan");
+    await makeSeededConsultationValid(page);
+    await page.getByRole("button", { name: "Review prescription" }).click();
+    await expect(review).toContainText("Ready to complete");
+    await expectNoAxeViolations(page);
+
+    await review
+      .getByRole("button", { name: "Complete prescription" })
+      .click();
+    await expect(
+      page.getByRole("status", { name: "Prescription completed" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("button", { name: "Download PDF" }),
+    ).toBeEnabled({ timeout: 15_000 });
+    await expectNoAxeViolations(page);
+
+    await page.getByRole("button", { name: "Download PDF" }).click();
+    await expect(page.getByRole("alert")).toContainText(
+      "The PDF could not be downloaded. Try again.",
+    );
+    await expectNoAxeViolations(page);
+  });
+}
