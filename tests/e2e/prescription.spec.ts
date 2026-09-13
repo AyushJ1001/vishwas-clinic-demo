@@ -5,12 +5,14 @@ import {
   type Page,
   type Route,
 } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createDemoConsultation } from "../../app/consultation-model";
 
 async function openPrescription(page: Page, testName: string) {
   await setIsolatedDraft(page, testName);
-  const catalogReady = page.waitForResponse(
-    (response) => response.url().includes("/api/catalog?catalog=symptoms"),
+  const catalogReady = page.waitForResponse((response) =>
+    response.url().includes("/api/catalog?catalog=symptoms"),
   );
   await page.goto("/");
   await catalogReady;
@@ -51,6 +53,449 @@ async function makeSeededConsultationValid(page: Page) {
   }
 }
 
+async function completeSeededPrescription(page: Page, patientName: string) {
+  await makeSeededConsultationValid(page);
+  await page.getByLabel("Patient name").fill(patientName);
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  await page
+    .getByRole("dialog", { name: "Review prescription" })
+    .getByRole("button", { name: "Complete prescription" })
+    .click();
+  await expect(
+    page.getByRole("status", { name: "Prescription completed" }),
+  ).toBeVisible();
+}
+
+test("print is available only for a completed A5 prescription and prints only that document", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.print = () => {
+      document.documentElement.dataset.printCalled = "true";
+    };
+  });
+  await openPrescription(page, "completed-print");
+  await expect(
+    page.getByRole("button", { name: "Print prescription" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download PDF" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: "Share prescription" }),
+  ).toHaveCount(0);
+
+  await completeSeededPrescription(page, "Demo Patient Print Boundary");
+  const completedDocument = page.getByRole("article", {
+    name: "Completed prescription",
+  });
+  await expect(completedDocument).toContainText("Demo Patient Print Boundary");
+  await expect(completedDocument).toHaveAttribute("data-page-number", "1");
+  await expect(completedDocument).toHaveAttribute("data-page-count", "1");
+
+  await page.getByRole("button", { name: "Print prescription" }).click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-print-called",
+    "true",
+  );
+
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByRole("navigation")).toBeHidden();
+  await expect(
+    page.getByRole("status", { name: "Prescription completed" }),
+  ).toBeHidden();
+  await expect(completedDocument).toBeVisible();
+  const printSize = await completedDocument.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { width: style.width, height: style.height };
+  });
+  expect(Number.parseFloat(printSize.width)).toBeCloseTo(559.37, 0);
+  expect(Number.parseFloat(printSize.height)).toBeCloseTo(793.7, 0);
+});
+
+test("downloaded PDF is a readable A5 document with the completed Unicode content", async ({
+  page,
+}) => {
+  const requestedFonts: string[] = [];
+  page.on("request", (request) => requestedFonts.push(request.url()));
+  await openPrescription(page, "completed-pdf");
+  await completeSeededPrescription(page, "Demo Patient माधुरी देशमुख");
+  const downloadButton = page.getByRole("button", { name: "Download PDF" });
+  await expect(downloadButton).toBeEnabled();
+
+  const downloadEvent = page.waitForEvent("download");
+  await downloadButton.click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe(
+    "vishwas-prescription-demo-patient.pdf",
+  );
+  const path = await download.path();
+  expect(path).not.toBeNull();
+  const bytes = await readFile(path!);
+  expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+  expect(bytes.byteLength).toBeGreaterThan(4_000);
+
+  const pdf = await getDocument({ data: new Uint8Array(bytes) }).promise;
+  expect(pdf.numPages).toBe(1);
+  const pdfPage = await pdf.getPage(1);
+  const viewport = pdfPage.getViewport({ scale: 1 });
+  expect(viewport.width).toBeCloseTo(419.53, 1);
+  expect(viewport.height).toBeCloseTo(595.28, 1);
+  const content = await pdfPage.getTextContent();
+  const text = content.items
+    .map((item) => ("str" in item ? item.str : ""))
+    .join(" ");
+  for (const expected of [
+    "VISHWAS CLINIC",
+    "Dr. Makarand Vishwas Apte",
+    "MBBS, MD (Anatomy)",
+    "Demo Patient माधुरी देशमुख",
+    "Temperature 100.2 °F",
+    "SpO₂ 98%",
+    "Low-grade fever",
+    "Throat congestion",
+    "Viral upper respiratory tract infection",
+    "Paracetamol 500 mg tablet",
+    "Paracetamol IP 500 mg",
+    "1–0–1 · After food · 5 days",
+    "Warm saline gargles",
+    "No substitutes · Bring the prescription at the next visit",
+    "Page 1 of 1",
+  ]) {
+    expect(text).toContain(expected);
+  }
+  expect(
+    requestedFonts.some(
+      (url) =>
+        url.includes("NotoSansSC") &&
+        url.includes("prescription-font-request="),
+    ),
+  ).toBe(false);
+});
+
+test("downloaded PDF preserves a long multilingual patient identity without overlapping demographics", async ({
+  page,
+}) => {
+  const requestedFonts: string[] = [];
+  page.on("request", (request) => requestedFonts.push(request.url()));
+  const patientName =
+    "Demo Patient 李 Zoë D’Souza Chandrashekhar Venkataraman Narayanaswamy";
+  await openPrescription(page, "long-multilingual-patient-pdf");
+  await completeSeededPrescription(page, patientName);
+
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PDF" }).click();
+  const path = await (await downloadEvent).path();
+  expect(path).not.toBeNull();
+  const bytes = await readFile(path!);
+  expect(bytes.byteLength).toBeLessThan(500_000);
+  const pdf = await getDocument({ data: new Uint8Array(bytes) }).promise;
+  const pdfPage = await pdf.getPage(1);
+  const content = await pdfPage.getTextContent();
+  const textItems = content.items.flatMap((item) =>
+    "str" in item
+      ? [
+          {
+            text: item.str,
+            x: item.transform[4],
+            y: item.transform[5],
+            right: item.transform[4] + item.width,
+          },
+        ]
+      : [],
+  );
+  const extractedText = textItems.map((item) => item.text).join(" ");
+  expect(extractedText).toContain(patientName);
+
+  const ageAndSex = textItems.find((item) => item.text.startsWith("Age/Sex:"));
+  const consultationDate = textItems.find((item) => item.text.startsWith("Date:"));
+  expect(ageAndSex).toBeDefined();
+  expect(consultationDate).toBeDefined();
+  expect(ageAndSex!.right).toBeLessThanOrEqual(consultationDate!.x - 4);
+
+  const nameRows = textItems.filter(
+    (item) =>
+      item.text.includes("Demo Patient") ||
+      item.text.includes("李") ||
+      item.text.includes("Narayanaswamy"),
+  );
+  expect(nameRows.length).toBeGreaterThan(0);
+  expect(Math.max(...nameRows.map((item) => item.right))).toBeLessThanOrEqual(
+    395,
+  );
+  expect(Math.min(...nameRows.map((item) => item.y))).toBeGreaterThan(
+    ageAndSex!.y + 4,
+  );
+  expect(
+    requestedFonts.some(
+      (url) =>
+        url.includes("NotoSansSC") &&
+        url.includes("prescription-font-request="),
+    ),
+  ).toBe(true);
+});
+
+test("supported file sharing receives the prepared PDF and treats cancellation as harmless", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    const state = {
+      canShareCalls: 0,
+      shareCalls: 0,
+      file: null as File | null,
+      shareWasSynchronous: false,
+      directClickActive: false,
+    };
+    Object.defineProperty(window, "__prescriptionShareState", { value: state });
+    Object.defineProperty(navigator, "canShare", {
+      configurable: true,
+      value: (data: ShareData) => {
+        state.canShareCalls += 1;
+        return data.files?.length === 1;
+      },
+    });
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async (data: ShareData) => {
+        state.shareCalls += 1;
+        state.file = data.files?.[0] ?? null;
+        if (state.directClickActive) state.shareWasSynchronous = true;
+        if (state.shareCalls === 1) {
+          throw new DOMException("Share cancelled", "AbortError");
+        }
+      },
+    });
+  });
+  await openPrescription(page, "supported-file-share");
+  await completeSeededPrescription(page, "Demo Patient Mobile Share");
+  const shareButton = page.getByRole("button", { name: "Share prescription" });
+  await expect(shareButton).toBeEnabled();
+
+  await shareButton.evaluate((button) => {
+    const state = (
+      window as typeof window & {
+        __prescriptionShareState: { directClickActive: boolean };
+      }
+    ).__prescriptionShareState;
+    state.directClickActive = true;
+    (button as HTMLButtonElement).click();
+    state.directClickActive = false;
+  });
+  await expect(shareButton).toBeEnabled();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await shareButton.click();
+  await expect(
+    page.locator('[role="status"]').filter({ hasText: "Prescription shared." }),
+  ).toBeVisible();
+  const shared = await page.evaluate(() => {
+    const state = (
+      window as typeof window & {
+        __prescriptionShareState: {
+          canShareCalls: number;
+          shareCalls: number;
+          file: File;
+          shareWasSynchronous: boolean;
+        };
+      }
+    ).__prescriptionShareState;
+    return {
+      canShareCalls: state.canShareCalls,
+      shareCalls: state.shareCalls,
+      name: state.file.name,
+      type: state.file.type,
+      size: state.file.size,
+      shareWasSynchronous: state.shareWasSynchronous,
+    };
+  });
+  expect(shared).toEqual({
+    canShareCalls: 2,
+    shareCalls: 2,
+    name: "vishwas-prescription-demo-patient-mobile-share.pdf",
+    type: "application/pdf",
+    size: expect.any(Number),
+    shareWasSynchronous: true,
+  });
+  expect(shared.size).toBeGreaterThan(4_000);
+});
+
+test("download failure keeps the completed prescription and succeeds on retry", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const createObjectUrl = URL.createObjectURL.bind(URL);
+    let failNextDownload = true;
+    URL.createObjectURL = (object) => {
+      if (failNextDownload) {
+        failNextDownload = false;
+        throw new Error("Download unavailable");
+      }
+      return createObjectUrl(object);
+    };
+  });
+  await openPrescription(page, "download-failure-retry");
+  await completeSeededPrescription(page, "Demo Patient Download Recovery");
+  const completed = page.getByRole("article", {
+    name: "Completed prescription",
+  });
+  const downloadButton = page.getByRole("button", { name: "Download PDF" });
+
+  await downloadButton.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "The PDF could not be downloaded. Try again.",
+  );
+  await expect(completed).toContainText("Demo Patient Download Recovery");
+
+  const downloadEvent = page.waitForEvent("download");
+  await downloadButton.click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe(
+    "vishwas-prescription-demo-patient-download-recovery.pdf",
+  );
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(completed).toContainText("Demo Patient Download Recovery");
+});
+
+test("unsupported file sharing explains the fallback and downloads the same PDF", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "canShare", {
+      configurable: true,
+      value: () => false,
+    });
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: () => {
+        throw new Error("navigator.share must not be called");
+      },
+    });
+  });
+  await openPrescription(page, "unsupported-file-share");
+  await completeSeededPrescription(page, "Demo Patient Share Fallback");
+  const shareButton = page.getByRole("button", { name: "Share prescription" });
+  await expect(shareButton).toBeEnabled();
+
+  const fallbackEvent = page.waitForEvent("download");
+  await shareButton.click();
+  const fallbackDownload = await fallbackEvent;
+  await expect(
+    page
+      .locator('[role="status"]')
+      .filter({ hasText: "File sharing is not supported" }),
+  ).toContainText("The same PDF was downloaded instead.");
+  const directEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PDF" }).click();
+  const directDownload = await directEvent;
+  const [fallbackPath, directPath] = await Promise.all([
+    fallbackDownload.path(),
+    directDownload.path(),
+  ]);
+  expect(fallbackPath).not.toBeNull();
+  expect(directPath).not.toBeNull();
+  const [fallbackBytes, directBytes] = await Promise.all([
+    readFile(fallbackPath!),
+    readFile(directPath!),
+  ]);
+  expect(fallbackBytes.equals(directBytes)).toBe(true);
+});
+
+test("PDF preparation, sharing, and printing failures keep the completed snapshot and recover", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = { printCalls: 0, shareCalls: 0 };
+    Object.defineProperty(window, "__prescriptionFailureState", {
+      value: state,
+    });
+    const NativeFile = File;
+    let failFileCreation = true;
+    Object.defineProperty(window, "File", {
+      configurable: true,
+      value: class FlakyFile extends NativeFile {
+        constructor(
+          fileBits: BlobPart[],
+          fileName: string,
+          options?: FilePropertyBag,
+        ) {
+          if (failFileCreation) {
+            failFileCreation = false;
+            throw new Error("File creation unavailable");
+          }
+          super(fileBits, fileName, options);
+        }
+      },
+    });
+    window.print = () => {
+      state.printCalls += 1;
+      if (state.printCalls === 1) throw new Error("Print unavailable");
+    };
+    Object.defineProperty(navigator, "canShare", {
+      configurable: true,
+      value: () => true,
+    });
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async () => {
+        state.shareCalls += 1;
+        if (state.shareCalls === 1) throw new Error("Share unavailable");
+      },
+    });
+  });
+  await openPrescription(page, "output-failure-retry");
+  await completeSeededPrescription(page, "Demo Patient Stable Snapshot");
+  const completed = page.getByRole("article", {
+    name: "Completed prescription",
+  });
+  await expect(completed).toContainText("Demo Patient Stable Snapshot");
+  await expect(page.getByRole("alert")).toContainText(
+    "The PDF could not be prepared. The completed prescription is still available.",
+  );
+
+  await page.getByRole("button", { name: "Retry PDF preparation" }).click();
+  await expect(
+    page.getByRole("button", { name: "Download PDF" }),
+  ).toBeEnabled();
+
+  await page.getByRole("button", { name: "Print prescription" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "The print dialog did not open. Try again or download the PDF.",
+  );
+  await page.getByRole("button", { name: "Print prescription" }).click();
+  await expect(completed).toContainText("Demo Patient Stable Snapshot");
+
+  await page.getByRole("button", { name: "Share prescription" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "The prescription could not be shared. Try again or download the PDF.",
+  );
+  await expect(
+    page.getByRole("button", { name: "Download PDF" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Share prescription" }).click();
+  await expect(
+    page.locator('[role="status"]').filter({ hasText: "Prescription shared." }),
+  ).toBeVisible();
+  await expect(completed).toContainText("Demo Patient Stable Snapshot");
+
+  const attempts = await page.evaluate(
+    () =>
+      (
+        window as typeof window & {
+          __prescriptionFailureState: {
+            printCalls: number;
+            shareCalls: number;
+          };
+        }
+      ).__prescriptionFailureState,
+  );
+  expect(attempts).toEqual({ printCalls: 2, shareCalls: 2 });
+
+  await page.reload();
+  await expect(
+    page.getByRole("article", { name: "Completed prescription" }),
+  ).toContainText("Demo Patient Stable Snapshot");
+});
+
 test("review lists blocking problems and takes focus to the selected field", async ({
   page,
 }) => {
@@ -74,9 +519,7 @@ test("review lists blocking problems and takes focus to the selected field", asy
     review.getByRole("button", { name: "Complete prescription" }),
   ).toBeDisabled();
 
-  await review
-    .getByRole("button", { name: "Fix patient name" })
-    .click();
+  await review.getByRole("button", { name: "Fix patient name" }).click();
   await expect(review).toBeHidden();
   await expect(page.getByLabel("Patient name")).toBeFocused();
   await expect(page.getByLabel("Patient name")).toHaveValue("   ");
@@ -136,9 +579,7 @@ test("a reviewed prescription completes once, locks, and recovers after refresh"
     review.getByRole("article", { name: "Prescription under review" }),
   ).toContainText("Demo Patient Completion");
   await expect(review).toContainText("Ready to complete");
-  await review
-    .getByRole("button", { name: "Complete prescription" })
-    .click();
+  await review.getByRole("button", { name: "Complete prescription" }).click();
 
   await expect(
     page.getByRole("status", { name: "Prescription completed" }),
@@ -191,14 +632,13 @@ test("phone review fits the viewport and keeps clinical text readable", async ({
   expect(bounds.right).toBeLessThanOrEqual(390);
   expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth);
 
-  for (const text of [
-    "Major complaints:",
-    "1–0–1 · After food · 5 days",
-  ]) {
+  for (const text of ["Major complaints:", "1–0–1 · After food · 5 days"]) {
     const fontSize = await document
       .getByText(text, { exact: true })
       .first()
-      .evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+      .evaluate((element) =>
+        Number.parseFloat(getComputedStyle(element).fontSize),
+      );
     expect(fontSize).toBeGreaterThanOrEqual(14);
   }
 });
@@ -229,9 +669,7 @@ test("completion failure keeps the reviewed draft and can retry", async ({
 
   await page.getByRole("button", { name: "Review prescription" }).click();
   const review = page.getByRole("dialog", { name: "Review prescription" });
-  await review
-    .getByRole("button", { name: "Complete prescription" })
-    .click();
+  await review.getByRole("button", { name: "Complete prescription" }).click();
   await expect(review.getByRole("alert")).toContainText(
     "Prescription could not be completed. Your draft is still here.",
   );
@@ -408,7 +846,10 @@ test("completion API rejects clinically invalid saved drafts", async ({
   request,
 }) => {
   const invalidCases = [
-    ["age", { patient: { name: "Demo Patient Invalid", age: "2.5", sex: "Female" } }],
+    [
+      "age",
+      { patient: { name: "Demo Patient Invalid", age: "2.5", sex: "Female" } },
+    ],
     ["date", { consultationDate: "2026-02-30" }],
   ] as const;
 
@@ -441,9 +882,7 @@ test("consultation values appear unchanged in the draft prescription", async ({
   const today = await page.evaluate(() => {
     const now = new Date();
     const offset = now.getTimezoneOffset();
-    return new Date(now.getTime() - offset * 60_000)
-      .toISOString()
-      .slice(0, 10);
+    return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
   });
   await expect(page.getByLabel("Consultation date")).toHaveValue(today);
 
@@ -513,7 +952,9 @@ test("consultation values appear unchanged in the draft prescription", async ({
   await expect(preview).toContainText("Rest as advised");
   await expect(preview).toContainText("Complete blood count");
   await expect(preview).toContainText("0–0–1 · With water · 7 days");
-  await expect(page.getByText("Draft prescription", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Draft prescription", { exact: true }),
+  ).toBeVisible();
 });
 
 test("follow-up prescribing requires a linked prior demo visit", async ({
@@ -527,7 +968,9 @@ test("follow-up prescribing requires a linked prior demo visit", async ({
     name: "Prescription type",
   });
   await expect(visitType.getByRole("radio")).toHaveCount(2);
-  await visitType.getByRole("radio", { name: "Follow-up prescription" }).check();
+  await visitType
+    .getByRole("radio", { name: "Follow-up prescription" })
+    .check();
 
   await expect(page.getByLabel("Patient name")).toBeDisabled();
   await expect(
@@ -830,7 +1273,10 @@ test("leaving while changes are unsaved warns before discarding work", async ({
     expect(dialog.message()).toContain("unsaved changes");
     await dialog.dismiss();
   });
-  await page.getByRole("link", { name: "Receipts", exact: true }).first().click();
+  await page
+    .getByRole("link", { name: "Receipts", exact: true })
+    .first()
+    .click();
   await warning;
 
   await expect(page).toHaveURL("/");
@@ -1011,7 +1457,9 @@ test("catalog loading failure preserves consultation data and retry recovers", a
     exact: true,
   });
   await picker.click();
-  await expect(page.getByText("Loading clinic terms for Major complaints…")).toBeVisible();
+  await expect(
+    page.getByText("Loading clinic terms for Major complaints…"),
+  ).toBeVisible();
 
   await firstRequest!.fulfill({ status: 503, body: "Unavailable" });
   await expect(
@@ -1029,7 +1477,9 @@ test("catalog loading failure preserves consultation data and retry recovers", a
     })
     .click();
   await retryStarted;
-  await expect(page.getByText("Loading clinic terms for Major complaints…")).toBeVisible();
+  await expect(
+    page.getByText("Loading clinic terms for Major complaints…"),
+  ).toBeVisible();
   await retryRequest!.fulfill({
     status: 200,
     contentType: "application/json",
@@ -1131,7 +1581,9 @@ test("custom term save failure keeps the proposed value available for retry", as
   await expect(
     page.getByLabel("Category for new Major complaints term"),
   ).toBeVisible();
-  await expect(page.getByLabel("New category for Major complaints")).toBeVisible();
+  await expect(
+    page.getByLabel("New category for Major complaints"),
+  ).toBeVisible();
 
   const saveButton = page.getByRole("button", {
     name: "Save Demo seasonal fatigue to Major complaints catalog",
