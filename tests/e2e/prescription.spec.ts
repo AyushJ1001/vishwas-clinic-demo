@@ -2523,9 +2523,31 @@ test("catalog picker separates choices from controls and closes when focus leave
   });
   await expect(feverCategory).toHaveAttribute("aria-expanded", "true");
   await expect(respiratoryCategory).toHaveAttribute("aria-expanded", "false");
+  const feverOptions = page.getByRole("group", {
+    name: "Fever",
+    exact: true,
+  });
+  const feverOptionsBottom = await feverOptions.evaluate(
+    (element) => element.getBoundingClientRect().bottom,
+  );
+  const respiratoryCategoryTop = await respiratoryCategory.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  expect(feverOptionsBottom).toBeLessThanOrEqual(respiratoryCategoryTop);
   await respiratoryCategory.click();
   await expect(respiratoryCategory).toHaveAttribute("aria-expanded", "true");
   await expect(feverCategory).toHaveAttribute("aria-expanded", "false");
+
+  await page.evaluate(() => {
+    const liveInput = document.createElement("input");
+    liveInput.id = "impeccable-live-page-chat-input";
+    document.body.appendChild(liveInput);
+    liveInput.focus();
+  });
+  await expect(picker).toHaveAttribute("aria-expanded", "true");
+  await page.evaluate(() =>
+    document.getElementById("impeccable-live-page-chat-input")?.remove(),
+  );
 
   await page.getByRole("combobox", { name: "Search Major complaints" }).fill(
     "Missing catalog term",

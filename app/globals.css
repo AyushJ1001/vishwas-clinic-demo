@@ -31,7 +31,7 @@ button {
 .field-label {
   display: block;
   margin-bottom: 0.55rem;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -85,12 +85,10 @@ button {
   );
   background-size: 100% 16px;
 }
-.eyebrow {
-  margin-bottom: 1rem;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+.consultation-context {
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
   color: #9b492f;
 }
 .picker-trigger {
@@ -221,8 +219,8 @@ button {
   font-weight: 800;
 }
 .rx-logo {
-  width: 2.15rem;
-  height: 2.15rem;
+  width: 1.875rem;
+  height: 1.875rem;
   object-fit: contain;
 }
 .primary-action {

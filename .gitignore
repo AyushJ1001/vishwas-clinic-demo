@@ -39,3 +39,8 @@ next-env.d.ts
 /outputs/
 /work/
 *.tsbuildinfo
+
+# local Impeccable session state
+.impeccable/hook.cache.json
+.impeccable/live/roots.json
+.impeccable/live/sessions/
