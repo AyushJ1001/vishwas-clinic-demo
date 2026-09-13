@@ -1132,6 +1132,110 @@ test("a reviewed prescription completes once, locks, and recovers after refresh"
   await expect(page.getByLabel("Select doctor")).toBeDisabled();
 });
 
+test("starting another consultation preserves the completed prescription and recovers from failure", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("Saved");
+  const completionResponse = page.waitForResponse((response) =>
+    response.url().endsWith("/complete") && response.request().method() === "POST",
+  );
+  await completeSeededPrescription(page, "Demo Patient Previous Visit");
+  const { snapshot } = await (await completionResponse).json();
+  const completedDocument = page.getByRole("article", {
+    name: "Completed prescription",
+  });
+  const completedText = await completedDocument.allInnerTexts();
+  let failNextDraft = true;
+  await page.route("**/api/consultation-drafts/**", async (route) => {
+    if (route.request().method() === "PUT" && failNextDraft) {
+      failNextDraft = false;
+      await route.fulfill({ status: 503, body: "Temporary demo outage" });
+      return;
+    }
+    await route.continue();
+  });
+
+  const startAnother = page.getByRole("button", {
+    name: "Start another consultation",
+  });
+  await tabTo(page, startAnother);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alert")).toContainText(
+    "The next consultation could not be started. This completed prescription is still available. Try again.",
+  );
+  await expect(startAnother).toBeFocused();
+  expect(await completedDocument.allInnerTexts()).toEqual(completedText);
+  await expect(page.getByRole("button", { name: "Download PDF" })).toBeEnabled();
+  await page.reload();
+  await expect(completedDocument).toContainText("Demo Patient Previous Visit");
+
+  await tabTo(page, startAnother);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("radio", { name: "New prescription" })).toBeFocused();
+  await expect(page.getByLabel("Patient name")).toHaveValue("");
+  await expect(page.getByLabel("Age")).toHaveValue("");
+  await expect(page.getByRole("radiogroup", { name: "Prescription type" }).getByRole("radio", { checked: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Remove Paracetamol 500 mg tablet", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await page.reload();
+  await expect(page.getByLabel("Patient name")).toHaveValue("");
+  await expect(completedDocument).toHaveCount(0);
+
+  const previous = await request.get(`/api/consultation-drafts/${snapshot.draftId}`);
+  expect(previous.ok()).toBe(true);
+  expect((await previous.json()).draft.completedSnapshot).toEqual(snapshot);
+});
+
+test("an older tab cannot save its patient into a newly started consultation", async ({ page, context }) => {
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await makeSeededConsultationValid(page);
+  await page.getByLabel("Patient name").fill("Demo Patient Original Tab");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved");
+  const olderTab = await context.newPage();
+  await olderTab.goto("/");
+  await expect(olderTab.getByLabel("Patient name")).toHaveValue("Demo Patient Original Tab");
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  await page.getByRole("dialog", { name: "Review prescription" }).getByRole("button", { name: "Complete prescription" }).click();
+  await page.getByRole("button", { name: "Start another consultation" }).click();
+  await expect(page.getByLabel("Patient name")).toHaveValue("");
+  await page.getByLabel("Patient name").fill("Demo Patient New Consultation");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved");
+
+  await olderTab.getByLabel("Patient name").fill("Demo Patient Stale Tab Edit");
+  await expect(olderTab.getByRole("alert")).toContainText("Draft save failed. Your changes are still here.");
+  await page.reload();
+  await expect(page.getByLabel("Patient name")).toHaveValue("Demo Patient New Consultation");
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await olderTab.close();
+});
+
+test("phone completion keeps readable patient identity beside the output actions", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openPrescription(page, "completed-phone-handoff");
+  await page.getByLabel("Consultation date").fill("2026-09-10");
+  await completeSeededPrescription(page, "Demo Patient Phone Handoff");
+  const confirmation = page.getByRole("status", { name: "Prescription completed" });
+  await expect(confirmation).toContainText("Demo Patient Phone Handoff");
+  await expect(confirmation).toContainText("10/09/2026");
+  const patientText = confirmation.getByText("Demo Patient Phone Handoff", { exact: true });
+  expect(await patientText.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+  await page.keyboard.press("ControlOrMeta+Home");
+  for (const name of ["Print prescription", "Download PDF", "Share prescription"]) {
+    const action = page.getByRole("button", { name, exact: true });
+    await expect(action).toBeEnabled();
+    const bounds = await action.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
+  }
+});
+
 test("phone review fits the viewport and keeps clinical text readable", async ({
   page,
 }) => {
@@ -1328,6 +1432,33 @@ test("desktop prioritizes the current consultation beside the live paper", async
   expect(previewBox).not.toBeNull();
   expect(formBox!.x + formBox!.width).toBeLessThan(previewBox!.x);
   expect(Math.abs(formBox!.y - previewBox!.y)).toBeLessThanOrEqual(2);
+});
+
+test("medicine instructions retain visible labels and readable selected values on desktop", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openPrescription(page, "medicine-visible-labels");
+  for (const label of ["Dose", "Duration", "Method"]) {
+    await expect(page.getByText(label, { exact: true })).toHaveCount(2);
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+  }
+  for (const medicine of ["Paracetamol 500 mg tablet", "Levocetirizine 5 mg tablet"]) {
+    await page.getByLabel(`${medicine} dose`).selectOption("As needed");
+    await page.getByLabel(`${medicine} duration`).selectOption("Until review");
+    await page.getByLabel(`${medicine} method`).selectOption("Before food");
+    for (const instruction of ["dose", "duration", "method"]) {
+      const selectedTextFits = await page.getByLabel(`${medicine} ${instruction}`).evaluate((element) => {
+        const style = getComputedStyle(element);
+        const context = document.createElement("canvas").getContext("2d")!;
+        context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        const textWidth = context.measureText(element.querySelector("option:checked")!.textContent!).width;
+        // Leave 24px for the native select arrow in addition to its padding.
+        return textWidth <= element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 24;
+      });
+      expect(selectedTextFits).toBe(true);
+    }
+  }
 });
 
 test("consultation controls wrap without clipping at supported breakpoints", async ({
@@ -1863,6 +1994,78 @@ test("follow-up prescribing requires a linked prior demo visit", async ({
     page.locator(".preview-wrap .prescription-pages"),
   ).not.toContainText("Demo Patient Kavya Mehta");
 });
+
+for (const viewport of [
+  { name: "desktop", width: 1440, height: 900 },
+  { name: "phone", width: 390, height: 844 },
+]) {
+  for (const visitType of ["new", "followup"] as const) {
+    test(`${viewport.name} ${visitType} journey saves, resumes, completes, and downloads the reviewed consultation`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await openPrescription(page, `release-${viewport.name}-${visitType}`);
+      const visitLabel = visitType === "new" ? "New prescription" : "Follow-up prescription";
+      await page.getByRole("radio", { name: visitLabel }).check();
+      if (visitType === "followup") {
+        await page.getByLabel("Prior demo visit").selectOption("demo-visit-kavya-mehta-2026-08-18");
+        await expect(page.getByRole("region", { name: "Linked prior visit" })).toContainText("18 August 2026");
+      }
+      const patientName = visitType === "followup" ? "Demo Patient Kavya Mehta" : "Demo Patient Release Journey";
+      await page.getByLabel("Age", { exact: true }).fill("42");
+      await page.getByLabel("Sex", { exact: true }).selectOption("Other");
+      await page.getByLabel("Consultation date").fill("2026-09-11");
+      await chooseCatalogItem(page, page.getByRole("combobox", { name: "Examination findings", exact: true }), "examination findings", "Alert and oriented");
+      for (const medicine of ["Paracetamol 500 mg tablet", "Levocetirizine 5 mg tablet"]) {
+        await page.getByLabel(`${medicine} dose`).selectOption("1–0–1");
+        await page.getByLabel(`${medicine} duration`).selectOption("5 days");
+        await page.getByLabel(`${medicine} method`).selectOption("After food");
+      }
+      await page.getByLabel("Patient name").fill(patientName);
+      await page.getByRole("button", { name: "Save draft" }).click();
+      await expect(page.getByRole("status")).toContainText("Saved");
+      await page.reload();
+      await expect(page.getByLabel("Patient name")).toHaveValue(patientName);
+      await expect(page.getByRole("radio", { name: visitLabel })).toBeChecked();
+      await expect(page.getByLabel("Age", { exact: true })).toHaveValue("42");
+      if (visitType === "followup") {
+        await expect(page.getByRole("region", { name: "Linked prior visit" })).toContainText("Demo Patient Kavya Mehta");
+      }
+      await page.getByRole("button", { name: "Review prescription" }).click();
+      const review = page.getByRole("dialog", { name: "Review prescription" });
+      await expect(review).toContainText("Ready to complete");
+      const reviewedText = await review.getByRole("article", { name: "Prescription under review" }).allInnerTexts();
+      expect(reviewedText.join(" ")).toContain("Alert and oriented");
+      await review.getByRole("button", { name: "Complete prescription" }).click();
+      await expect(page.getByRole("status", { name: "Prescription completed" })).toContainText(patientName);
+      const completedPages = page.getByRole("article", { name: "Completed prescription" });
+      expect(await completedPages.allInnerTexts()).toEqual(reviewedText);
+      if (visitType === "followup") {
+        await page.getByText("Prescription details", { exact: true }).click();
+        const linkedVisit = page.getByRole("region", { name: "Linked prior visit" });
+        await expect(linkedVisit).toContainText("Demo Patient Kavya Mehta");
+        await expect(linkedVisit).toContainText("18 August 2026");
+        await expect(linkedVisit).toContainText("Dr. Gauri Makarand Apte");
+      }
+      const downloadEvent = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Download PDF" }).click();
+      const download = await downloadEvent;
+      const path = await download.path();
+      expect(path).not.toBeNull();
+      const pdf = await getDocument({ data: new Uint8Array(await readFile(path!)) }).promise;
+      const extractedPages: string[] = [];
+      for (let index = 1; index <= pdf.numPages; index += 1) {
+        const content = await (await pdf.getPage(index)).getTextContent();
+        extractedPages.push(content.items.map((item) => "str" in item ? item.str : "").join(" "));
+      }
+      const extractedText = extractedPages.join(" ");
+      for (const value of [patientName, "42/Other", "11/09/2026", "Alert and oriented", "After food", "5 days"]) {
+        expect(extractedText).toContain(value);
+      }
+      await page.reload();
+      await expect(page.getByRole("status", { name: "Prescription completed" })).toContainText(patientName);
+      expect(await completedPages.allInnerTexts()).toEqual(reviewedText);
+    });
+  }
+}
 
 test("a prior visit link can be restored, replaced, removed, and cleared by New", async ({
   page,

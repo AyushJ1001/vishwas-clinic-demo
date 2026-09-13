@@ -15,6 +15,7 @@ import {
 } from "./consultation-draft-repository";
 import {
   createDemoConsultation,
+  createEmptyConsultation,
   toLocalDateInputValue,
   type Consultation,
   type CompletedPrescriptionSnapshot,
@@ -47,6 +48,7 @@ export function useConsultationDraft(): {
   completionState: CompletionState;
   completedSnapshot: CompletedPrescriptionSnapshot | null;
   completePrescription: () => Promise<void>;
+  startAnotherConsultation: () => Promise<void>;
   priorVisits: PriorVisitSnapshot[];
   priorVisitsState: PriorVisitsLoadState;
   reloadPriorVisits: () => Promise<void>;
@@ -222,6 +224,24 @@ export function useConsultationDraft(): {
     }
   }, [completedSnapshot, performSave, repository]);
 
+  const startAnotherConsultation = useCallback(async () => {
+    if (!completedSnapshot) return;
+    const draft = await repository.startNew(
+      createEmptyConsultation(
+        completedSnapshot.doctor.name,
+        toLocalDateInputValue(new Date()),
+      ),
+    );
+    revisionRef.current = draft.revision;
+    editFingerprintRef.current = JSON.stringify(draft.consultation);
+    consultationRef.current = draft.consultation;
+    setConsultation(draft.consultation);
+    setSavedAt(draft.updatedAt);
+    setSaveState("saved");
+    setCompletionState("idle");
+    setCompletedSnapshot(null);
+  }, [completedSnapshot, repository]);
+
   useEffect(() => {
     if (saveState !== "unsaved" || completedSnapshot) return;
     const timer = window.setTimeout(() => {
@@ -254,6 +274,7 @@ export function useConsultationDraft(): {
     completionState,
     completedSnapshot,
     completePrescription,
+    startAnotherConsultation,
     priorVisits,
     priorVisitsState,
     reloadPriorVisits,

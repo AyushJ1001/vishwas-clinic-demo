@@ -749,6 +749,7 @@ function FieldError({ id, children }: { id: string; children: string }) {
 function MedicineInstructionSelect({
   id,
   label,
+  fieldLabel,
   value,
   options,
   placeholder,
@@ -757,6 +758,7 @@ function MedicineInstructionSelect({
 }: {
   id: string;
   label: string;
+  fieldLabel: string;
   value: string;
   options: string[];
   placeholder: string;
@@ -765,6 +767,12 @@ function MedicineInstructionSelect({
 }) {
   return (
     <div className="min-w-0">
+      <label
+        htmlFor={id}
+        className="mb-2 block text-sm font-semibold text-[#536760]"
+      >
+        {fieldLabel}
+      </label>
       <select
         id={id}
         aria-label={label}
@@ -985,6 +993,7 @@ function PrescriptionPage() {
     completionState,
     completedSnapshot,
     completePrescription,
+    startAnotherConsultation,
     priorVisits,
     priorVisitsState,
     reloadPriorVisits,
@@ -1090,7 +1099,17 @@ function PrescriptionPage() {
         doctorName={completedSnapshot.doctor.name}
         doctorSelectionLocked
       >
-        <CompletedPrescriptionView snapshot={completedSnapshot} />
+        <CompletedPrescriptionView
+          snapshot={completedSnapshot}
+          onStartAnother={async () => {
+            await startAnotherConsultation();
+            setReviewOpen(false);
+            setReviewAttempted(false);
+            window.requestAnimationFrame(() =>
+              document.getElementById("prescription-type-new")?.focus(),
+            );
+          }}
+        />
       </Shell>
     );
   }
@@ -1625,6 +1644,7 @@ function PrescriptionPage() {
                     <MedicineInstructionSelect
                       id={`medicine-${i}-dose`}
                       label={`${medicine.name} dose`}
+                      fieldLabel="Dose"
                       value={medicine.dose}
                       error={errorFor(`medicine-${i}-dose`)}
                       placeholder="Choose dose"
@@ -1643,6 +1663,7 @@ function PrescriptionPage() {
                     <MedicineInstructionSelect
                       id={`medicine-${i}-duration`}
                       label={`${medicine.name} duration`}
+                      fieldLabel="Duration"
                       value={medicine.duration}
                       error={errorFor(`medicine-${i}-duration`)}
                       placeholder="Choose duration"
@@ -1662,6 +1683,7 @@ function PrescriptionPage() {
                     <MedicineInstructionSelect
                       id={`medicine-${i}-method`}
                       label={`${medicine.name} method`}
+                      fieldLabel="Method"
                       value={medicine.method}
                       error={errorFor(`medicine-${i}-method`)}
                       placeholder="Choose method"
@@ -2271,9 +2293,24 @@ type PdfOutputState =
 
 function CompletedPrescriptionView({
   snapshot,
+  onStartAnother,
 }: {
   snapshot: CompletedPrescriptionSnapshot;
+  onStartAnother: () => Promise<void>;
 }) {
+  const [nextConsultationState, setNextConsultationState] = useState<
+    "idle" | "starting" | "failed"
+  >("idle");
+  const startAnotherRef = useRef<HTMLButtonElement>(null);
+  const startAnother = async () => {
+    setNextConsultationState("starting");
+    try {
+      await onStartAnother();
+    } catch {
+      setNextConsultationState("failed");
+      window.requestAnimationFrame(() => startAnotherRef.current?.focus());
+    }
+  };
   const document = useMemo(
     () => createCompletedPrescriptionDocument(snapshot),
     [snapshot],
@@ -2413,12 +2450,13 @@ function CompletedPrescriptionView({
       });
     }
   };
+  const linkedPriorVisit = snapshot.consultation.linkedPriorVisit;
   const completedTime = new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(snapshot.completedAt));
   return (
-    <section className="completed-prescription-layout mx-auto grid max-w-[1200px] gap-6 px-5 py-12 lg:grid-cols-[.65fr_1.35fr] lg:px-10 lg:py-16">
+    <section className="completed-prescription-layout mx-auto grid max-w-[1200px] gap-6 px-5 py-6 lg:grid-cols-[.65fr_1.35fr] lg:px-10 lg:py-16">
       <div className="min-w-0">
         <div
           ref={completedStatusRef}
@@ -2427,24 +2465,20 @@ function CompletedPrescriptionView({
           tabIndex={-1}
           className="rounded-[24px] bg-[#15362f] p-6 text-white"
         >
-          <SealCheck size={30} weight="fill" />
-          <h1 className="mt-4 text-3xl font-bold">Prescription completed</h1>
-          <p className="mt-3 leading-relaxed text-white/75">
-            The reviewed prescription is locked. Refreshing this page will
-            reopen the same completed document.
+          <div className="flex items-center gap-3">
+            <SealCheck size={26} weight="fill" className="shrink-0" />
+            <h1 className="text-xl font-bold">Prescription completed</h1>
+          </div>
+          <p className="mt-4 break-words text-lg font-bold">
+            {snapshot.consultation.patient.name}
           </p>
-          <dl className="mt-6 space-y-4 border-t border-white/15 pt-5 text-sm">
-            <div>
-              <dt className="text-white/60">Completed</dt>
-              <dd className="mt-1 font-semibold tabular-nums">
-                {completedTime}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-white/60">Prescription ID</dt>
-              <dd className="mt-1 break-all font-semibold">{snapshot.id}</dd>
-            </div>
-          </dl>
+          <p className="mt-1 text-sm text-white/80">
+            {getVisitTypeLabel(snapshot.consultation.visitType)} ·{" "}
+            {formatConsultationDate(snapshot.consultation.consultationDate)}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-white/75">
+            This prescription is locked. Refreshing reopens the same document.
+          </p>
         </div>
         <section
           aria-labelledby="prescription-output-heading"
@@ -2454,7 +2488,7 @@ function CompletedPrescriptionView({
             Use this prescription
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-[#536760]">
-            Print the locked A5 document, save its PDF, or share that same PDF.
+            Print, download or share this locked A5 document.
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
             <button
@@ -2509,6 +2543,62 @@ function CompletedPrescriptionView({
               className={`output-feedback ${outputMessage.kind === "error" ? "output-feedback-error" : "output-feedback-status"}`}
             >
               {outputMessage.text}
+            </p>
+          )}
+          <details className="mt-4 border-t border-[#15362f]/15 pt-2 text-sm">
+            <summary className="min-h-11 cursor-pointer content-center font-semibold">
+              Prescription details
+            </summary>
+            <dl className="space-y-3 py-3">
+              <div>
+                <dt className="text-[#536760]">Completed</dt>
+                <dd className="mt-1 font-semibold tabular-nums">
+                  {completedTime}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[#536760]">Prescription ID</dt>
+                <dd className="mt-1 break-all font-semibold">{snapshot.id}</dd>
+              </div>
+            </dl>
+            {linkedPriorVisit && (
+              <section
+                aria-label="Linked prior visit"
+                className="border-t border-[#15362f]/15 py-3"
+              >
+                <h3 className="font-semibold">Linked prior visit</h3>
+                <p className="mt-2">{linkedPriorVisit.patient.name}</p>
+                <p>{formatPriorVisitDate(linkedPriorVisit.consultationDate)}</p>
+                <p>{linkedPriorVisit.doctorName}</p>
+                <p className="mt-2 leading-relaxed text-[#536760]">
+                  {linkedPriorVisit.clinicalSummary}
+                </p>
+              </section>
+            )}
+          </details>
+        </section>
+        <section className="mt-4 rounded-[24px] bg-[#fbfaf5] p-5">
+          <p className="mb-3 text-sm leading-relaxed text-[#536760]">
+            Download or share this prescription before moving to the next
+            patient. Starting another consultation leaves this completed record
+            unchanged.
+          </p>
+          <button
+            ref={startAnotherRef}
+            type="button"
+            onClick={() => void startAnother()}
+            disabled={nextConsultationState === "starting"}
+            className="output-action"
+          >
+            <Plus size={18} weight="bold" />
+            {nextConsultationState === "starting"
+              ? "Starting consultation…"
+              : "Start another consultation"}
+          </button>
+          {nextConsultationState === "failed" && (
+            <p role="alert" className="output-feedback output-feedback-error">
+              The next consultation could not be started. This completed
+              prescription is still available. Try again.
             </p>
           )}
         </section>
