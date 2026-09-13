@@ -7,7 +7,7 @@
   box-sizing: border-box;
 }
 html {
-  scroll-behavior: smooth;
+  scroll-padding-bottom: calc(7.5rem + env(safe-area-inset-bottom));
 }
 body {
   margin: 0;
@@ -184,7 +184,8 @@ button {
   border-radius: 12px;
   background: #fff;
   padding: 0.7rem 0.6rem;
-  font-size: 0.77rem;
+  min-height: 44px;
+  font-size: 0.875rem;
   outline: none;
 }
 .small-input:focus {
@@ -234,6 +235,182 @@ button {
   font-size: 0.85rem;
   font-weight: 800;
   box-shadow: 0 12px 28px rgba(216, 95, 57, 0.2);
+}
+.mobile-consultation-actions {
+  position: fixed;
+  z-index: 45;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid rgba(21, 54, 47, 0.12);
+  background: rgba(244, 241, 233, 0.97);
+  padding: 0.65rem max(1rem, env(safe-area-inset-right))
+    calc(0.65rem + env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+  box-shadow: 0 -12px 34px rgba(21, 54, 47, 0.12);
+}
+.mobile-patient-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.mobile-review-action {
+  padding-inline: 1rem;
+  font-size: 0.75rem;
+}
+.mobile-review-label-short {
+  display: none;
+}
+.desktop-review-action {
+  display: none;
+}
+.doctor-control {
+  max-width: 100%;
+  min-height: 44px;
+}
+.doctor-control select {
+  width: 100%;
+  text-overflow: ellipsis;
+}
+.medicine-list {
+  container-type: inline-size;
+}
+.medicine-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  border: 1px solid rgba(21, 54, 47, 0.1);
+  border-radius: 16px;
+  background: white;
+  padding: 1rem;
+}
+.medicine-remove {
+  justify-self: start;
+}
+@container (min-width: 420px) {
+  .medicine-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .medicine-identity {
+    grid-column: 1 / -1;
+  }
+}
+@container (min-width: 680px) {
+  .medicine-row {
+    grid-template-columns:
+      minmax(11rem, 1fr) repeat(3, minmax(7rem, 0.7fr))
+      44px;
+    align-items: start;
+  }
+  .medicine-identity {
+    grid-column: auto;
+  }
+}
+.review-dialog {
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1120px, calc(100vw - 1.5rem));
+  height: calc(100dvh - 1.5rem);
+  max-width: none;
+  max-height: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: 24px;
+}
+.review-dialog[open] {
+  display: grid;
+}
+.review-dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.review-preview-panel {
+  align-self: start;
+  overflow: hidden;
+}
+.review-zoom-button,
+.review-fit-button {
+  display: inline-grid;
+  min-width: 44px;
+  min-height: 44px;
+  place-items: center;
+  border-radius: 999px;
+  color: white;
+}
+.review-fit-button {
+  padding-inline: 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.review-zoom-button:hover:not(:disabled),
+.review-fit-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+.review-zoom-button:focus-visible,
+.review-fit-button:focus-visible,
+.review-prescription-canvas:focus-visible {
+  outline: 3px solid rgba(255, 190, 166, 0.9);
+  outline-offset: 2px;
+}
+.review-zoom-button:disabled,
+.review-fit-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+.review-prescription-canvas {
+  width: 100%;
+  height: min(56dvh, 640px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 12px;
+  background: #e6e1d6;
+}
+.review-document-scale {
+  width: 100%;
+  min-width: 0;
+}
+.review-document-scale > div {
+  transform-origin: top left;
+}
+@media (min-width: 1024px) {
+  .mobile-consultation-actions {
+    display: none;
+  }
+  .desktop-review-action {
+    display: flex;
+  }
+}
+@media (max-width: 1023px) {
+  .review-dialog {
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+  }
+}
+@media (max-width: 639px) {
+  .review-dialog-body {
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  }
+  .review-prescription-canvas {
+    height: min(52dvh, 500px);
+  }
+}
+@media (max-width: 380px) {
+  .doctor-control {
+    flex-basis: 100%;
+  }
+  .mobile-review-label-short {
+    display: inline;
+  }
+  .mobile-review-label-long {
+    display: none;
+  }
 }
 .prescription-pages {
   display: grid;

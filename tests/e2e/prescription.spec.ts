@@ -796,6 +796,343 @@ test("phone review fits the viewport and keeps clinical text readable", async ({
   }
 });
 
+test("phone keeps the current consultation and review action within thumb reach", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openPrescription(page, "phone-persistent-review");
+
+  const actions = page.getByRole("region", {
+    name: "Current consultation actions",
+  });
+  await expect(actions).toBeVisible();
+  await expect(actions).toContainText("Demo Patient Ananya Deshmukh");
+  await expect(actions).toContainText("Prescription type needed");
+  await expect(actions).toContainText("Saved");
+  await expect(
+    page.locator('[role="status"]').filter({ hasText: "Saved" }),
+  ).toHaveCount(1);
+
+  const reviewButton = actions.getByRole("button", {
+    name: "Review prescription",
+  });
+  const buttonBox = await reviewButton.boundingBox();
+  expect(buttonBox).not.toBeNull();
+  expect(buttonBox!.height).toBeGreaterThanOrEqual(44);
+  expect(buttonBox!.y + buttonBox!.height).toBeLessThanOrEqual(844);
+  expect(buttonBox!.y).toBeGreaterThan(700);
+  await expect(
+    page.getByRole("button", { name: "Review prescription" }),
+  ).toHaveCount(1);
+
+  await page.getByLabel("Patient name").fill("Demo Patient Mobile Context");
+  await page.getByRole("radio", { name: "New prescription" }).check();
+  await expect(actions).toContainText("Demo Patient Mobile Context");
+  await expect(actions).toContainText("New consultation");
+
+  await page.getByLabel("Levocetirizine 5 mg tablet method").scrollIntoViewIfNeeded();
+  const methodBox = await page
+    .getByLabel("Levocetirizine 5 mg tablet method")
+    .boundingBox();
+  const actionsBox = await actions.boundingBox();
+  expect(methodBox).not.toBeNull();
+  expect(actionsBox).not.toBeNull();
+  expect(methodBox!.y + methodBox!.height).toBeLessThanOrEqual(actionsBox!.y);
+});
+
+test("phone review expands to the viewport and zooms on a scrollable canvas", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openPrescription(page, "phone-review-zoom");
+  const opener = page.getByRole("button", { name: "Review prescription" });
+  await opener.click();
+
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  await expect(review).toBeVisible();
+  const dialogBox = await review.boundingBox();
+  expect(dialogBox).not.toBeNull();
+  expect(dialogBox!.x).toBe(0);
+  expect(dialogBox!.y).toBe(0);
+  expect(dialogBox!.width).toBe(390);
+  expect(dialogBox!.height).toBe(844);
+
+  const canvas = review.getByRole("region", {
+    name: "Prescription preview canvas",
+  });
+  const zoom = review.getByLabel("Review zoom");
+  await expect(zoom).toHaveText("100%");
+  await expect(review.getByRole("button", { name: "Zoom out" })).toBeDisabled();
+  const fitBounds = await canvas.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(fitBounds.scrollWidth).toBeLessThanOrEqual(fitBounds.clientWidth);
+
+  await review.getByRole("button", { name: "Zoom in" }).click();
+  await expect(zoom).toHaveText("125%");
+  await review.getByRole("button", { name: "Zoom in" }).click();
+  await expect(zoom).toHaveText("150%");
+  await review.getByRole("button", { name: "Zoom out" }).click();
+  await expect(zoom).toHaveText("125%");
+  const zoomedBounds = await canvas.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(zoomedBounds.scrollWidth).toBeGreaterThan(zoomedBounds.clientWidth);
+  expect(zoomedBounds.scrollHeight).toBeGreaterThan(zoomedBounds.clientHeight);
+  const scrollPosition = await canvas.evaluate((element) => {
+    element.scrollLeft = 60;
+    element.scrollTop = 60;
+    return { left: element.scrollLeft, top: element.scrollTop };
+  });
+  expect(scrollPosition.left).toBeGreaterThan(0);
+  expect(scrollPosition.top).toBeGreaterThan(0);
+
+  await review.getByRole("button", { name: "Fit width" }).click();
+  await expect(zoom).toHaveText("100%");
+  await page.keyboard.press("Escape");
+  await expect(review).toBeHidden();
+  await expect(opener).toBeFocused();
+});
+
+test("reduced motion keeps the draft preview steady and uses instant scrolling", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openPrescription(page, "reduced-motion-preview");
+  const preview = page.getByRole("article", {
+    name: "Draft prescription preview",
+  });
+  const initial = await preview.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      transform: style.transform,
+      opacity: style.opacity,
+      scrollBehavior: getComputedStyle(document.documentElement).scrollBehavior,
+    };
+  });
+  expect(initial).toEqual({
+    transform: "none",
+    opacity: "1",
+    scrollBehavior: "auto",
+  });
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const afterScroll = await preview.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { transform: style.transform, opacity: style.opacity };
+  });
+  expect(afterScroll).toEqual({ transform: "none", opacity: "1" });
+});
+
+test("desktop prioritizes the current consultation beside the live paper", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openPrescription(page, "desktop-consultation-priority");
+
+  const context = page.getByRole("region", { name: "Current consultation" });
+  await expect(context).toBeVisible();
+  await expect(context).toContainText("Demo Patient Ananya Deshmukh");
+  await expect(context).toContainText("Prescription type needed");
+  await expect(context).toContainText("Saved");
+  await expect(
+    context.getByRole("button", { name: "Review prescription" }),
+  ).toBeVisible();
+
+  const form = page.getByRole("region", { name: "Consultation form" });
+  const preview = page.locator(".preview-wrap");
+  const [formBox, previewBox] = await Promise.all([
+    form.boundingBox(),
+    preview.boundingBox(),
+  ]);
+  expect(formBox).not.toBeNull();
+  expect(previewBox).not.toBeNull();
+  expect(formBox!.x + formBox!.width).toBeLessThan(previewBox!.x);
+  expect(Math.abs(formBox!.y - previewBox!.y)).toBeLessThanOrEqual(2);
+});
+
+test("consultation controls wrap without clipping at supported breakpoints", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await openPrescription(page, "responsive-breakpoints");
+
+  for (const width of [320, 640, 768, 1024]) {
+    await page.setViewportSize({ width, height: 700 });
+    const layout = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+
+    const doctor = page.getByLabel("Select doctor");
+    const doctorBox = await doctor.boundingBox();
+    expect(doctorBox).not.toBeNull();
+    expect(doctorBox!.x).toBeGreaterThanOrEqual(0);
+    expect(doctorBox!.x + doctorBox!.width).toBeLessThanOrEqual(width);
+
+    const medicineRow = page
+      .getByRole("button", {
+        name: "Remove Paracetamol 500 mg tablet",
+        exact: true,
+      })
+      .locator("..");
+    const rowBounds = await medicineRow.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return {
+        left: box.left,
+        right: box.right,
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      };
+    });
+    expect(rowBounds.left).toBeGreaterThanOrEqual(0);
+    expect(rowBounds.right).toBeLessThanOrEqual(width);
+    expect(rowBounds.scrollWidth).toBeLessThanOrEqual(rowBounds.clientWidth);
+
+    const mobileActions = page.getByRole("region", {
+      name: "Current consultation actions",
+    });
+    if (width < 1024) await expect(mobileActions).toBeVisible();
+    else await expect(mobileActions).toBeHidden();
+  }
+
+  await page.setViewportSize({ width: 320, height: 700 });
+  const [brandBox, doctorBox] = await Promise.all([
+    page.getByRole("link", { name: /Vishwas Clinic/ }).boundingBox(),
+    page.getByLabel("Select doctor").boundingBox(),
+  ]);
+  expect(brandBox).not.toBeNull();
+  expect(doctorBox).not.toBeNull();
+  expect(brandBox!.y + brandBox!.height).toBeLessThanOrEqual(doctorBox!.y);
+});
+
+test("phone catalog, review, and removal controls keep 44 pixel targets with safe spacing", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openPrescription(page, "phone-touch-targets");
+  const actionNames = [
+    "Review prescription",
+    "Remove Low-grade fever from Major complaints",
+    "Remove Dry cough from Major complaints",
+    "Remove Paracetamol 500 mg tablet",
+  ];
+  for (const name of actionNames) {
+    const target = page.getByRole("button", { name, exact: true });
+    const box = await target.boundingBox();
+    expect(box, name).not.toBeNull();
+    expect(box!.width, name).toBeGreaterThanOrEqual(44);
+    expect(box!.height, name).toBeGreaterThanOrEqual(44);
+  }
+
+  const firstRemove = await page
+    .getByRole("button", {
+      name: "Remove Low-grade fever from Major complaints",
+      exact: true,
+    })
+    .boundingBox();
+  const secondRemove = await page
+    .getByRole("button", {
+      name: "Remove Dry cough from Major complaints",
+      exact: true,
+    })
+    .boundingBox();
+  expect(firstRemove).not.toBeNull();
+  expect(secondRemove).not.toBeNull();
+  expect(secondRemove!.x - (firstRemove!.x + firstRemove!.width)).toBeGreaterThanOrEqual(
+    8,
+  );
+
+  await page
+    .getByRole("combobox", { name: "Major complaints", exact: true })
+    .click();
+  for (const target of [
+    page.getByRole("button", { name: "Fever", exact: true }),
+    page.getByRole("option", { name: "Low-grade fever", exact: true }),
+  ]) {
+    const box = await target.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+
+  await page
+    .getByRole("combobox", { name: "Search Major complaints" })
+    .fill("Demo touch target term");
+  const addCustom = page.getByRole("button", {
+    name: "Add “Demo touch target term” as a clinic term",
+  });
+  const addCustomBox = await addCustom.boundingBox();
+  expect(addCustomBox).not.toBeNull();
+  expect(addCustomBox!.width).toBeGreaterThanOrEqual(44);
+  expect(addCustomBox!.height).toBeGreaterThanOrEqual(44);
+  await addCustom.click();
+  for (const target of [
+    page.getByRole("button", {
+      name: "Save Demo touch target term to Major complaints catalog",
+    }),
+    page.getByRole("button", { name: "Cancel", exact: true }),
+  ]) {
+    const box = await target.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  for (const name of [
+    "Close prescription review",
+    "Zoom out",
+    "Zoom in",
+    "Fit width",
+    "Complete prescription",
+    "Return to editing",
+  ]) {
+    const box = await review.getByRole("button", { name }).boundingBox();
+    expect(box, name).not.toBeNull();
+    expect(box!.width, name).toBeGreaterThanOrEqual(44);
+    expect(box!.height, name).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test("phone landscape review remains operable without page clipping", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await openPrescription(page, "phone-landscape-review");
+  await makeSeededConsultationValid(page);
+  await page.getByRole("button", { name: "Review prescription" }).click();
+
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  const dialogBox = await review.boundingBox();
+  expect(dialogBox).not.toBeNull();
+  expect(dialogBox!.x).toBe(0);
+  expect(dialogBox!.y).toBe(0);
+  expect(dialogBox!.width).toBe(844);
+  expect(dialogBox!.height).toBe(390);
+
+  const canvas = review.getByRole("region", {
+    name: "Prescription preview canvas",
+  });
+  await canvas.scrollIntoViewIfNeeded();
+  await review.getByRole("button", { name: "Zoom in" }).click();
+  await expect(review.getByLabel("Review zoom")).toHaveText("125%");
+  const canvasBounds = await canvas.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(canvasBounds.scrollWidth).toBeGreaterThan(canvasBounds.clientWidth);
+});
+
 test("completion failure keeps the reviewed draft and can retry", async ({
   page,
 }) => {
