@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -94,10 +94,23 @@ function CatalogPicker({
   onChange: (value: string | string[]) => void;
   multiple?: boolean;
 }) {
+  const pickerId = useId();
+  const labelId = `${pickerId}-label`;
+  const selectionId = `${pickerId}-selection`;
+  const listboxId = `${pickerId}-listbox`;
+  const customErrorId = `${pickerId}-custom-error`;
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [activeOption, setActiveOption] = useState("");
   const [expanded, setExpanded] = useState(groups[0]?.group ?? "");
   const [savedGroups, setSavedGroups] = useState<CatalogGroup[]>([]);
+  const [loadState, setLoadState] = useState<
+    "loading" | "ready" | "empty" | "error"
+  >("loading");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [adding, setAdding] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(groups[0]?.group ?? "");
   const [newGroup, setNewGroup] = useState("");
@@ -107,16 +120,30 @@ function CatalogPicker({
   const values = Array.isArray(value) ? value : value ? [value] : [];
   useEffect(() => {
     if (!open) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
+    const dismissPicker = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
         setOpen(false);
         setAdding(false);
         setQuery("");
+        setActiveOption("");
+        requestAnimationFrame(() => triggerRef.current?.focus());
       }
     };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    const dismissOnOutsidePress = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setAdding(false);
+        setQuery("");
+        setActiveOption("");
+      }
+    };
+    window.addEventListener("keydown", dismissPicker);
+    window.addEventListener("pointerdown", dismissOnOutsidePress);
+    return () => {
+      window.removeEventListener("keydown", dismissPicker);
+      window.removeEventListener("pointerdown", dismissOnOutsidePress);
+    };
   }, [open]);
   useEffect(() => {
     let active = true;
@@ -139,13 +166,16 @@ function CatalogPicker({
             ]);
           }
           setSavedGroups([...map].map(([group, items]) => ({ group, items })));
+          setLoadState(data.entries?.length ? "ready" : "empty");
         },
       )
-      .catch(() => undefined);
+      .catch(() => {
+        if (active) setLoadState("error");
+      });
     return () => {
       active = false;
     };
-  }, [catalogName]);
+  }, [catalogName, loadAttempt]);
   const mergedGroups = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const group of [...groups, ...savedGroups]) {
@@ -172,6 +202,52 @@ function CatalogPicker({
       (item) => item.toLowerCase() === query.trim().toLowerCase(),
     ),
   );
+  const visibleOptions = filtered.flatMap((group) =>
+    expanded === group.group || query
+      ? group.items.map((item) => ({ group: group.group, item }))
+      : [],
+  );
+  const optionKey = (group: string, item: string) => `${group}\u0000${item}`;
+  const optionId = (group: string, item: string) => {
+    const groupIndex = mergedGroups.findIndex((entry) => entry.group === group);
+    const itemIndex = mergedGroups[groupIndex]?.items.indexOf(item) ?? -1;
+    return `${pickerId}-option-${groupIndex}-${itemIndex}`;
+  };
+  const activeOptionValue = visibleOptions.find(
+    ({ group, item }) => optionKey(group, item) === activeOption,
+  );
+  const moveActiveOption = (direction: 1 | -1) => {
+    if (!visibleOptions.length) return;
+    const currentIndex = visibleOptions.findIndex(
+      ({ group, item }) => optionKey(group, item) === activeOption,
+    );
+    const nextIndex =
+      currentIndex < 0
+        ? direction === 1
+          ? 0
+          : visibleOptions.length - 1
+        : (currentIndex + direction + visibleOptions.length) %
+          visibleOptions.length;
+    const next = visibleOptions[nextIndex];
+    setActiveOption(optionKey(next.group, next.item));
+    requestAnimationFrame(() =>
+      document.getElementById(optionId(next.group, next.item))?.scrollIntoView({
+        block: "nearest",
+      }),
+    );
+  };
+  const closePicker = (restoreFocus = false) => {
+    setOpen(false);
+    setAdding(false);
+    setQuery("");
+    setActiveOption("");
+    if (restoreFocus)
+      requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+  const openPicker = () => {
+    setOpen(true);
+    requestAnimationFrame(() => searchRef.current?.focus());
+  };
   const select = (item: string) => {
     if (multiple)
       onChange(
@@ -181,7 +257,7 @@ function CatalogPicker({
       );
     else {
       onChange(item);
-      setOpen(false);
+      closePicker(true);
     }
   };
   const saveCustomItem = async () => {
@@ -216,14 +292,35 @@ function CatalogPicker({
     }
   };
   return (
-    <div className="relative">
-      <span className="field-label">{label}</span>
+    <div className="relative" ref={pickerRef}>
+      <span className="field-label" id={labelId}>
+        {label}
+      </span>
+      <span className="sr-only" id={selectionId}>
+        {values.length ? `Selected: ${values.join(", ")}` : "No values selected"}
+      </span>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => (open ? closePicker() : openPicker())}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            openPicker();
+          }
+        }}
         className="picker-trigger"
-        aria-label={label}
+        role="combobox"
+        aria-labelledby={labelId}
+        aria-describedby={selectionId}
         aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={listboxId}
+        aria-activedescendant={
+          activeOptionValue
+            ? optionId(activeOptionValue.group, activeOptionValue.item)
+            : undefined
+        }
       >
         <span className={values.length ? "" : "text-[#7b8b85]"}>
           {multiple
@@ -242,6 +339,7 @@ function CatalogPicker({
               key={item}
               onClick={() => select(item)}
               className="selected-chip"
+              aria-label={`Remove ${item} from ${label}`}
             >
               {item}
               <X size={11} />
@@ -254,14 +352,79 @@ function CatalogPicker({
           <div className="flex items-center gap-2 border-b border-[#15362f]/10 px-3 py-2">
             <MagnifyingGlass size={15} />
             <input
+              ref={searchRef}
               autoFocus
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setActiveOption("");
+                setSaveState("idle");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  moveActiveOption(event.key === "ArrowDown" ? 1 : -1);
+                } else if (event.key === "Enter" && activeOptionValue) {
+                  event.preventDefault();
+                  select(activeOptionValue.item);
+                } else if (
+                  event.key === "Backspace" &&
+                  !query &&
+                  multiple &&
+                  values.length
+                ) {
+                  onChange(values.slice(0, -1));
+                }
+              }}
               placeholder={`Search ${label.toLowerCase()}`}
               className="w-full bg-transparent py-1 text-sm outline-none"
+              role="combobox"
+              aria-label={`Search ${label}`}
+              aria-expanded="true"
+              aria-controls={listboxId}
+              aria-activedescendant={
+                activeOptionValue
+                  ? optionId(activeOptionValue.group, activeOptionValue.item)
+                  : undefined
+              }
             />
           </div>
-          <div className="max-h-72 overflow-y-auto p-2">
+          <div
+            className="max-h-72 overflow-y-auto p-2"
+            id={listboxId}
+            role="listbox"
+            aria-label={`${label} options`}
+            aria-multiselectable={multiple || undefined}
+          >
+            {loadState === "loading" && (
+              <p className="catalog-status catalog-loading" role="status">
+                Loading clinic terms for {label}…
+              </p>
+            )}
+            {loadState === "empty" && (
+              <p className="catalog-status catalog-empty" role="status">
+                No clinic terms saved for {label} yet. Standard choices are
+                ready.
+              </p>
+            )}
+            {loadState === "error" && (
+              <div className="catalog-error" role="alert">
+                <p>
+                  Clinic terms for {label} could not be loaded. Standard choices
+                  are still available.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoadState("loading");
+                    setLoadAttempt((attempt) => attempt + 1);
+                  }}
+                  aria-label={`Retry loading clinic terms for ${label}`}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
             {filtered.map((group) => (
               <div key={group.group} className="mb-1">
                 <button
@@ -283,8 +446,15 @@ function CatalogPicker({
                       <button
                         type="button"
                         key={item}
+                        id={optionId(group.group, item)}
                         onClick={() => select(item)}
-                        className="flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[#15362f] hover:text-white"
+                        onMouseEnter={() =>
+                          setActiveOption(optionKey(group.group, item))
+                        }
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[#15362f] hover:text-white ${activeOption === optionKey(group.group, item) ? "bg-[#15362f] text-white" : ""}`}
+                        role="option"
+                        aria-selected={values.includes(item)}
+                        tabIndex={-1}
                       >
                         <span>{item}</span>
                         {values.includes(item) && (
@@ -296,10 +466,16 @@ function CatalogPicker({
                 )}
               </div>
             ))}
+            {query.trim() && filtered.length === 0 && (
+              <p className="catalog-status">No matching catalog choices.</p>
+            )}
             {query.trim() && !exactMatch && !adding && (
               <button
                 type="button"
-                onClick={() => setAdding(true)}
+                onClick={() => {
+                  setAdding(true);
+                  setSaveState("idle");
+                }}
                 className="mt-2 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#b85a36]/50 bg-[#fff7f0] px-3 py-3 text-left text-sm font-semibold text-[#9b492f]"
               >
                 <Plus size={15} weight="bold" /> Add “{query.trim()}” as a
@@ -319,6 +495,10 @@ function CatalogPicker({
                   value={selectedGroup}
                   onChange={(event) => setSelectedGroup(event.target.value)}
                   className="input-field mt-3"
+                  aria-label={`Category for new ${label} term`}
+                  aria-describedby={
+                    saveState === "error" ? customErrorId : undefined
+                  }
                 >
                   {mergedGroups.map((group) => (
                     <option key={group.group}>{group.group}</option>
@@ -329,10 +509,19 @@ function CatalogPicker({
                   onChange={(event) => setNewGroup(event.target.value)}
                   placeholder="Or create a new category"
                   className="input-field mt-2"
+                  aria-label={`New category for ${label}`}
+                  aria-describedby={
+                    saveState === "error" ? customErrorId : undefined
+                  }
                 />
                 {saveState === "error" && (
-                  <p className="mt-2 text-xs text-red-700">
-                    Could not save. Please try again.
+                  <p
+                    className="mt-2 text-xs text-red-700"
+                    id={customErrorId}
+                    role="alert"
+                  >
+                    Could not save &quot;{query.trim()}&quot; to {label}. Check
+                    the connection and try again.
                   </p>
                 )}
                 <div className="mt-3 flex gap-2">
@@ -341,12 +530,20 @@ function CatalogPicker({
                     onClick={saveCustomItem}
                     disabled={saveState === "saving"}
                     className="rounded-full bg-[#15362f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                    aria-label={`Save ${query.trim()} to ${label} catalog`}
                   >
-                    {saveState === "saving" ? "Saving…" : "Save to catalog"}
+                    {saveState === "saving"
+                      ? "Saving clinic term…"
+                      : saveState === "error"
+                        ? "Try saving again"
+                        : "Save to catalog"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAdding(false)}
+                    onClick={() => {
+                      setAdding(false);
+                      setSaveState("idle");
+                    }}
                     className="rounded-full px-3 py-2 text-xs font-bold text-[#60736c]"
                   >
                     Cancel
@@ -1053,9 +1250,10 @@ function PrescriptionPage() {
             </div>
             <div className="mt-8 rounded-2xl bg-[#ece7dc] px-4 py-3 text-[11px] leading-relaxed text-[#60736c]">
               <b className="text-[#15362f]">Demo workspace:</b> use fictional
-              patient details only. Your draft saves automatically after a
-              short pause, and clinic-added terms remain available for this
-              demonstration.
+              patient details only. Search or use the categories above to
+              record this consultation. If the right term is missing, type it
+              and save it as a clinic term. Your draft saves automatically
+              after a short pause.
             </div>
             </fieldset>
           </div>
