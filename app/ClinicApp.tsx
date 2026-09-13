@@ -27,6 +27,15 @@ import {
   symptoms,
   type CatalogGroup,
 } from "./clinic-data";
+import {
+  createDemoConsultation,
+  formatConsultationDate,
+  toLocalDateInputValue,
+  type ClinicDoctorName,
+  type Consultation,
+  type PatientSex,
+  type PrescribedMedicine,
+} from "./consultation-model";
 
 gsap.registerPlugin(ScrollTrigger);
 export type RouteName =
@@ -59,7 +68,6 @@ const clinicDoctors = {
     specialty: "CC EBDM, CCMTD · Diabetes & Thyroid Consultation",
   },
 } as const;
-type ClinicDoctorName = keyof typeof clinicDoctors;
 
 function CatalogPicker({
   label,
@@ -109,7 +117,13 @@ function CatalogPicker({
   useEffect(() => {
     let active = true;
     fetch(`/api/catalog?catalog=${catalogName}`)
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{
+              entries?: { group_name: string; item_name: string }[];
+            }>)
+          : Promise.reject(new Error("catalog load failed")),
+      )
       .then(
         (data: { entries?: { group_name: string; item_name: string }[] }) => {
           if (!active) return;
@@ -204,6 +218,8 @@ function CatalogPicker({
         type="button"
         onClick={() => setOpen(!open)}
         className="picker-trigger"
+        aria-label={label}
+        aria-expanded={open}
       >
         <span className={values.length ? "" : "text-[#7b8b85]"}>
           {multiple
@@ -499,41 +515,65 @@ function Shell({
 
 function PrescriptionPage() {
   const root = useRef<HTMLDivElement>(null);
-  const [patientName, setPatientName] = useState("Ananya Deshmukh");
-  const [weight, setWeight] = useState("62");
-  const [temperature, setTemperature] = useState("100.2");
-  const [pulse, setPulse] = useState("88");
-  const [systolic, setSystolic] = useState("118");
-  const [diastolic, setDiastolic] = useState("76");
-  const [spo2, setSpo2] = useState("98");
-  const [doctorName, setDoctorName] = useState<ClinicDoctorName>(
-    "Dr. Makarand Vishwas Apte",
-  );
-  const [complaints, setComplaints] = useState<string[]>([
-    "Low-grade fever",
-    "Dry cough",
-  ]);
-  const [exam, setExam] = useState<string[]>(["Throat congestion"]);
-  const [diagnosis, setDiagnosis] = useState(
-    "Viral upper respiratory tract infection",
-  );
-  const [selectedAdvice, setAdvice] = useState<string[]>([
-    "Warm saline gargles",
-    "Maintain hydration",
-  ]);
-  const [tests, setTests] = useState<string[]>([]);
-  const [drugs, setDrugs] = useState<string[]>([
-    "Paracetamol 500 mg tablet",
-    "Levocetirizine 5 mg tablet",
-  ]);
-  const [drugDirections, setDrugDirections] = useState<Record<string, string>>(
-    {},
-  );
-  const [drugDurations, setDrugDurations] = useState<Record<string, string>>(
-    {},
-  );
-  const [drugMethods, setDrugMethods] = useState<Record<string, string>>({});
-  const [visitType, setVisitType] = useState<"new" | "followup" | null>(null);
+  const [consultation, setConsultation] =
+    useState<Consultation>(createDemoConsultation);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setConsultation((current) =>
+        current.consultationDate
+          ? current
+          : {
+              ...current,
+              consultationDate: toLocalDateInputValue(new Date()),
+            },
+      );
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  const updatePatient = (
+    field: keyof Consultation["patient"],
+    value: string,
+  ) => {
+    setConsultation((current) => ({
+      ...current,
+      patient: { ...current.patient, [field]: value },
+    }));
+  };
+  const updateVital = (
+    field: keyof Consultation["vitals"],
+    value: string,
+  ) => {
+    setConsultation((current) => ({
+      ...current,
+      vitals: { ...current.vitals, [field]: value },
+    }));
+  };
+  const selectMedicines = (names: string[]) => {
+    setConsultation((current) => ({
+      ...current,
+      medicines: names.map(
+        (name) =>
+          current.medicines.find((medicine) => medicine.name === name) ?? {
+            name,
+            dose: "",
+            duration: "",
+            method: "",
+          },
+      ),
+    }));
+  };
+  const updateMedicine = (
+    name: string,
+    field: keyof Omit<PrescribedMedicine, "name">,
+    value: string,
+  ) => {
+    setConsultation((current) => ({
+      ...current,
+      medicines: current.medicines.map((medicine) =>
+        medicine.name === name ? { ...medicine, [field]: value } : medicine,
+      ),
+    }));
+  };
   useGSAP(
     () => {
       gsap.fromTo(
@@ -556,16 +596,18 @@ function PrescriptionPage() {
   return (
     <Shell
       active="prescription"
-      doctorName={doctorName}
-      onDoctorChange={setDoctorName}
+      doctorName={consultation.doctorName}
+      onDoctorChange={(doctorName) =>
+        setConsultation((current) => ({ ...current, doctorName }))
+      }
     >
       <div ref={root}>
         <header className="mx-auto grid max-w-[1500px] gap-8 px-5 pb-14 pt-14 lg:grid-cols-[1.1fr_.9fr] lg:px-10 lg:pb-20 lg:pt-20">
           <div>
             <p className="eyebrow">
-              {visitType === "followup"
+              {consultation.visitType === "followup"
                 ? "Follow-up consultation · VC-1048"
-                : visitType === "new"
+                : consultation.visitType === "new"
                   ? "New consultation · VC-1048"
                   : "Consultation type required · VC-1048"}
             </p>
@@ -605,15 +647,22 @@ function PrescriptionPage() {
                   <button
                     type="button"
                     key={key}
-                    onClick={() => setVisitType(key as "new" | "followup")}
-                    className={`rounded-2xl border p-4 text-left transition ${visitType === key ? "border-[#15362f] bg-[#15362f] text-white" : "border-[#15362f]/15 bg-white hover:border-[#15362f]/45"}`}
+                    onClick={() =>
+                      setConsultation((current) => ({
+                        ...current,
+                        visitType: key as "new" | "followup",
+                      }))
+                    }
+                    className={`rounded-2xl border p-4 text-left transition ${consultation.visitType === key ? "border-[#15362f] bg-[#15362f] text-white" : "border-[#15362f]/15 bg-white hover:border-[#15362f]/45"}`}
                   >
                     <span className="flex items-center justify-between text-sm font-bold">
                       {title}{" "}
-                      {visitType === key && <Check size={16} weight="bold" />}
+                      {consultation.visitType === key && (
+                        <Check size={16} weight="bold" />
+                      )}
                     </span>
                     <span
-                      className={`mt-1 block text-xs ${visitType === key ? "text-white/70" : "text-[#6d7e77]"}`}
+                      className={`mt-1 block text-xs ${consultation.visitType === key ? "text-white/70" : "text-[#6d7e77]"}`}
                     >
                       {copy}
                     </span>
@@ -623,20 +672,25 @@ function PrescriptionPage() {
             </fieldset>
             <div className="grid gap-5 sm:grid-cols-2">
               <label>
-                <span className="field-label">Patient</span>
+                <span className="field-label">Patient name</span>
                 <input
                   className="input-field"
-                  value={patientName}
-                  onChange={(event) => setPatientName(event.target.value)}
+                  value={consultation.patient.name}
+                  onChange={(event) =>
+                    updatePatient("name", event.target.value)
+                  }
                 />
               </label>
               <label>
                 <span className="field-label">Visit type</span>
                 <select
                   className="input-field"
-                  value={visitType ?? ""}
+                  value={consultation.visitType ?? ""}
                   onChange={(event) =>
-                    setVisitType(event.target.value as "new" | "followup")
+                    setConsultation((current) => ({
+                      ...current,
+                      visitType: event.target.value as "new" | "followup",
+                    }))
                   }
                   required
                 >
@@ -648,36 +702,81 @@ function PrescriptionPage() {
                 </select>
               </label>
             </div>
+            <div className="mt-5 grid gap-5 sm:grid-cols-[.6fr_1fr_1.2fr]">
+              <label>
+                <span className="field-label">Age</span>
+                <input
+                  aria-label="Age"
+                  className="input-field"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max="130"
+                  value={consultation.patient.age}
+                  onChange={(event) => updatePatient("age", event.target.value)}
+                />
+              </label>
+              <label>
+                <span className="field-label">Sex</span>
+                <select
+                  aria-label="Sex"
+                  className="input-field"
+                  value={consultation.patient.sex}
+                  onChange={(event) =>
+                    updatePatient("sex", event.target.value as PatientSex)
+                  }
+                >
+                  <option>Female</option>
+                  <option>Male</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label>
+                <span className="field-label">Consultation date</span>
+                <input
+                  aria-label="Consultation date"
+                  className="input-field tabular-nums"
+                  type="date"
+                  value={consultation.consultationDate}
+                  onChange={(event) =>
+                    setConsultation((current) => ({
+                      ...current,
+                      consultationDate: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </div>
             <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-5">
               <UnitInput
                 label="Weight"
-                value={weight}
+                value={consultation.vitals.weight}
                 unit="kg"
-                onChange={setWeight}
+                onChange={(value) => updateVital("weight", value)}
               />
               <UnitInput
                 label="Temperature"
-                value={temperature}
+                value={consultation.vitals.temperature}
                 unit="°F"
-                onChange={setTemperature}
+                onChange={(value) => updateVital("temperature", value)}
               />
               <UnitInput
                 label="Pulse"
-                value={pulse}
+                value={consultation.vitals.pulse}
                 unit="/min"
-                onChange={setPulse}
+                onChange={(value) => updateVital("pulse", value)}
               />
               <BloodPressureInput
-                systolic={systolic}
-                diastolic={diastolic}
-                onSystolicChange={setSystolic}
-                onDiastolicChange={setDiastolic}
+                systolic={consultation.vitals.systolic}
+                diastolic={consultation.vitals.diastolic}
+                onSystolicChange={(value) => updateVital("systolic", value)}
+                onDiastolicChange={(value) => updateVital("diastolic", value)}
               />
               <UnitInput
                 label="SpO₂"
-                value={spo2}
+                value={consultation.vitals.spo2}
                 unit="%"
-                onChange={setSpo2}
+                onChange={(value) => updateVital("spo2", value)}
               />
             </div>
             <div className="mt-8 grid gap-6 sm:grid-cols-2">
@@ -685,16 +784,26 @@ function PrescriptionPage() {
                 label="Major complaints"
                 catalogName="symptoms"
                 groups={symptoms}
-                value={complaints}
-                onChange={(v) => setComplaints(v as string[])}
+                value={consultation.complaints}
+                onChange={(complaints) =>
+                  setConsultation((current) => ({
+                    ...current,
+                    complaints: complaints as string[],
+                  }))
+                }
                 multiple
               />
               <CatalogPicker
                 label="Examination findings"
                 catalogName="findings"
                 groups={findings}
-                value={exam}
-                onChange={(v) => setExam(v as string[])}
+                value={consultation.examinationFindings}
+                onChange={(examinationFindings) =>
+                  setConsultation((current) => ({
+                    ...current,
+                    examinationFindings: examinationFindings as string[],
+                  }))
+                }
                 multiple
               />
             </div>
@@ -703,8 +812,13 @@ function PrescriptionPage() {
                 label="Provisional diagnosis"
                 catalogName="diagnoses"
                 groups={diagnoses}
-                value={diagnosis}
-                onChange={(v) => setDiagnosis(v as string)}
+                value={consultation.provisionalDiagnosis}
+                onChange={(provisionalDiagnosis) =>
+                  setConsultation((current) => ({
+                    ...current,
+                    provisionalDiagnosis: provisionalDiagnosis as string,
+                  }))
+                }
               />
             </div>
             <div className="mt-7 grid gap-6 sm:grid-cols-2">
@@ -712,16 +826,26 @@ function PrescriptionPage() {
                 label="Advice"
                 catalogName="advice"
                 groups={advice}
-                value={selectedAdvice}
-                onChange={(v) => setAdvice(v as string[])}
+                value={consultation.advice}
+                onChange={(selectedAdvice) =>
+                  setConsultation((current) => ({
+                    ...current,
+                    advice: selectedAdvice as string[],
+                  }))
+                }
                 multiple
               />
               <CatalogPicker
                 label="Investigations"
                 catalogName="investigations"
                 groups={investigations}
-                value={tests}
-                onChange={(v) => setTests(v as string[])}
+                value={consultation.investigations}
+                onChange={(investigationsValue) =>
+                  setConsultation((current) => ({
+                    ...current,
+                    investigations: investigationsValue as string[],
+                  }))
+                }
                 multiple
               />
             </div>
@@ -730,36 +854,40 @@ function PrescriptionPage() {
                 label="Medicines"
                 catalogName="medicines"
                 groups={medicines}
-                value={drugs}
-                onChange={(v) => setDrugs(v as string[])}
+                value={consultation.medicines.map((medicine) => medicine.name)}
+                onChange={(value) => selectMedicines(value as string[])}
                 multiple
               />
               <div className="mt-5 space-y-3">
-                {drugs.map((drug, i) => (
+                {consultation.medicines.map((medicine, i) => (
                   <div
-                    key={drug}
+                    key={medicine.name}
                     className="grid gap-3 rounded-2xl border border-[#15362f]/10 bg-white p-4 sm:grid-cols-[1fr_110px_100px_120px_auto]"
                   >
                     <div>
                       <b className="text-sm">
-                        {i + 1}. {drug}
+                        {i + 1}. {medicine.name}
                       </b>
                       <p className="mt-1 text-[10px] text-[#6d7e77]">
-                        {ingredientByMedicine[drug] ||
+                        {ingredientByMedicine[medicine.name] ||
                           "Composition from medicine catalog"}
                       </p>
                     </div>
                     <select
-                      aria-label={`${drug} dose`}
+                      aria-label={`${medicine.name} dose`}
                       className="input-field min-h-10 py-2 text-xs"
-                      value={drugDirections[drug] ?? "1–0–1"}
+                      value={medicine.dose}
                       onChange={(event) =>
-                        setDrugDirections({
-                          ...drugDirections,
-                          [drug]: event.target.value,
-                        })
+                        updateMedicine(
+                          medicine.name,
+                          "dose",
+                          event.target.value,
+                        )
                       }
                     >
+                      <option value="" disabled>
+                        Choose dose
+                      </option>
                       {[
                         "1–0–1",
                         "1–0–0",
@@ -772,16 +900,20 @@ function PrescriptionPage() {
                       ))}
                     </select>
                     <select
-                      aria-label={`${drug} duration`}
+                      aria-label={`${medicine.name} duration`}
                       className="input-field min-h-10 py-2 text-xs"
-                      value={drugDurations[drug] ?? "5 days"}
+                      value={medicine.duration}
                       onChange={(event) =>
-                        setDrugDurations({
-                          ...drugDurations,
-                          [drug]: event.target.value,
-                        })
+                        updateMedicine(
+                          medicine.name,
+                          "duration",
+                          event.target.value,
+                        )
                       }
                     >
+                      <option value="" disabled>
+                        Choose duration
+                      </option>
                       {[
                         "1 day",
                         "3 days",
@@ -795,16 +927,20 @@ function PrescriptionPage() {
                       ))}
                     </select>
                     <select
-                      aria-label={`${drug} method`}
+                      aria-label={`${medicine.name} method`}
                       className="input-field min-h-10 py-2 text-xs"
-                      value={drugMethods[drug] ?? "After food"}
+                      value={medicine.method}
                       onChange={(event) =>
-                        setDrugMethods({
-                          ...drugMethods,
-                          [drug]: event.target.value,
-                        })
+                        updateMedicine(
+                          medicine.name,
+                          "method",
+                          event.target.value,
+                        )
                       }
                     >
+                      <option value="" disabled>
+                        Choose method
+                      </option>
                       {[
                         "After food",
                         "Before food",
@@ -817,8 +953,14 @@ function PrescriptionPage() {
                       ))}
                     </select>
                     <button
+                      type="button"
+                      aria-label={`Remove ${medicine.name}`}
                       onClick={() =>
-                        setDrugs(drugs.filter((item) => item !== drug))
+                        selectMedicines(
+                          consultation.medicines
+                            .filter((item) => item.name !== medicine.name)
+                            .map((item) => item.name),
+                        )
                       }
                       className="grid h-10 w-10 place-items-center rounded-xl bg-[#f0ece3]"
                     >
@@ -837,23 +979,7 @@ function PrescriptionPage() {
             </div>
           </div>
           <div className="preview-wrap col-span-12 lg:col-span-5">
-            <PrescriptionPreview
-              complaints={complaints}
-              diagnosis={diagnosis}
-              adviceItems={selectedAdvice}
-              tests={tests}
-              drugs={drugs}
-              patientName={patientName}
-              weight={weight}
-              temperature={temperature}
-              pulse={pulse}
-              bloodPressure={`${systolic}/${diastolic}`}
-              spo2={spo2}
-              doctor={clinicDoctors[doctorName]}
-              drugDirections={drugDirections}
-              drugDurations={drugDurations}
-              drugMethods={drugMethods}
-            />
+            <PrescriptionPreview consultation={consultation} />
           </div>
         </section>
       </div>
@@ -861,50 +987,27 @@ function PrescriptionPage() {
   );
 }
 
-function PrescriptionPreview({
-  complaints,
-  diagnosis,
-  adviceItems,
-  tests,
-  drugs,
-  patientName,
-  weight,
-  temperature,
-  pulse,
-  bloodPressure,
-  spo2,
-  doctor,
-  drugDirections,
-  drugDurations,
-  drugMethods,
-}: {
-  complaints: string[];
-  diagnosis: string;
-  adviceItems: string[];
-  tests: string[];
-  drugs: string[];
-  patientName: string;
-  weight: string;
-  temperature: string;
-  pulse: string;
-  bloodPressure: string;
-  spo2: string;
-  doctor: (typeof clinicDoctors)[ClinicDoctorName];
-  drugDirections: Record<string, string>;
-  drugDurations: Record<string, string>;
-  drugMethods: Record<string, string>;
-}) {
+function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
+  const doctor = clinicDoctors[consultation.doctorName];
+  const { patient, vitals } = consultation;
   return (
     <div className="rounded-[30px] bg-[#123930] p-5 text-white shadow-[0_30px_80px_rgba(21,54,47,.2)]">
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-[.18em] text-white/60">
-          A5 prescription preview
+        <span className="text-xs font-semibold uppercase tracking-[.18em] text-white/70">
+          Draft prescription
         </span>
-        <button className="rounded-full bg-white p-2.5 text-[#15362f]">
+        <button
+          type="button"
+          aria-label="Print draft prescription"
+          className="rounded-full bg-white p-2.5 text-[#15362f]"
+        >
           <Printer size={16} />
         </button>
       </div>
-      <article className="document-preview mx-auto aspect-[148/210] h-auto w-full max-w-[470px] overflow-visible bg-[#fffef9] p-6 text-[#202c29] shadow-2xl sm:p-8">
+      <article
+        aria-label="Draft prescription preview"
+        className="document-preview mx-auto aspect-[148/210] h-auto w-full max-w-[470px] overflow-visible bg-[#fffef9] p-6 text-[#202c29] shadow-2xl sm:p-8"
+      >
         <header className="text-center">
           <h2 className="text-2xl font-black tracking-[.04em]">
             VISHWAS CLINIC
@@ -941,35 +1044,46 @@ function PrescriptionPreview({
         </header>
         <div className="mt-3 grid grid-cols-[1.4fr_.6fr_.6fr] text-[8px]">
           <span>
-            Name: <b>{patientName || "—"}</b>
+            Name: <b>{patient.name || "—"}</b>
           </span>
-          <span>Age/Sex: 32/F</span>
-          <span>Date: 30/08/26</span>
+          <span>
+            Age/Sex: {patient.age || "—"}/{patient.sex || "—"}
+          </span>
+          <span>
+            Date: {formatConsultationDate(consultation.consultationDate)}
+          </span>
         </div>
         <div className="mt-3 grid grid-cols-5 text-[8px]">
-          <span>Wt: {weight || "—"}</span>
-          <span>Temp: {temperature || "—"} °F</span>
-          <span>Pulse: {pulse || "—"} /min</span>
-          <span>BP: {bloodPressure || "—"} mmHg</span>
-          <span>SpO₂: {spo2 || "—"}%</span>
+          <span>Wt: {vitals.weight || "—"}</span>
+          <span>Temp: {vitals.temperature || "—"} °F</span>
+          <span>Pulse: {vitals.pulse || "—"} /min</span>
+          <span>
+            BP: {vitals.systolic || "—"}/{vitals.diastolic || "—"} mmHg
+          </span>
+          <span>SpO₂: {vitals.spo2 || "—"}%</span>
         </div>
         <p className="mt-4 text-[8px]">
-          <b>Major complaints:</b> {complaints.join(", ")}
+          <b>Major complaints:</b> {consultation.complaints.join(", ") || "—"}
+        </p>
+        <p className="mt-2 text-[8px]">
+          <b>Examination findings:</b>{" "}
+          {consultation.examinationFindings.join(", ") || "—"}
         </p>
         <p className="mt-5 border-b pb-2 text-[8px]">
-          <b>Provisional diagnosis:</b> {diagnosis}
+          <b>Provisional diagnosis:</b>{" "}
+          {consultation.provisionalDiagnosis || "—"}
         </p>
         <div className="grid min-h-[52%] grid-cols-[32%_68%]">
           <aside className="border-r px-1 py-3 text-[7px]">
             <b>Advice</b>
             <ul className="mt-2 list-disc space-y-1 pl-3">
-              {adviceItems.map((item) => (
+              {consultation.advice.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
             <b className="mt-5 block">Investigations</b>
             <ul className="mt-2 list-disc space-y-1 pl-3">
-              {tests.map((item) => (
+              {consultation.investigations.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
@@ -986,19 +1100,19 @@ function PrescriptionPreview({
               </span>
             </div>
             <div className="mt-4 space-y-3">
-              {drugs.map((drug, i) => (
-                <div key={drug} className="text-[8px]">
+              {consultation.medicines.map((medicine, i) => (
+                <div key={medicine.name} className="text-[8px]">
                   <b>
-                    {i + 1}. {drug}
+                    {i + 1}. {medicine.name}
                   </b>
                   <p className="text-[6px] text-[#65716d]">
-                    {ingredientByMedicine[drug] ||
+                    {ingredientByMedicine[medicine.name] ||
                       "Composition from medicine catalog"}
                   </p>
                   <p className="mt-1">
-                    {drugDirections[drug] ?? "1–0–1"} ·{" "}
-                    {drugMethods[drug] ?? "After food"} ·{" "}
-                    {drugDurations[drug] ?? "5 days"}
+                    {medicine.dose || "Dose not set"} ·{" "}
+                    {medicine.method || "Method not set"} ·{" "}
+                    {medicine.duration || "Duration not set"}
                   </p>
                 </div>
               ))}
@@ -1016,7 +1130,9 @@ function PrescriptionPreview({
 
 function ReceiptPage() {
   const [amount, setAmount] = useState("600");
-  const [patientName, setPatientName] = useState("Ananya Deshmukh");
+  const [patientName, setPatientName] = useState(
+    "Demo Patient Ananya Deshmukh",
+  );
   return (
     <Shell active="receipts">
       <RouteHeader
@@ -1074,7 +1190,9 @@ function ReceiptPage() {
 }
 
 function CertificatePage() {
-  const [patientName, setPatientName] = useState("Ananya Deshmukh");
+  const [patientName, setPatientName] = useState(
+    "Demo Patient Ananya Deshmukh",
+  );
   const [diagnosis, setDiagnosis] = useState(
     "Viral upper respiratory tract infection",
   );
