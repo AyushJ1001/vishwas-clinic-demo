@@ -181,6 +181,8 @@ const {
   registrationSize,
   ruleThickness,
   ruleGap: gap,
+  leftColumnShare,
+  bulletIndent,
 } = prescriptionTypography;
 
 // Noto Sans ascent and descent, in em, used to place a baseline inside a line
@@ -221,7 +223,7 @@ function drawPage(
   documentPage: PrescriptionDocumentPage,
   fonts: PdfFonts,
 ) {
-  const [pageWidth, pageHeight] = PageSizes.A5;
+  const { pageWidth, pageHeight } = prescriptionTypography;
   const left = margin;
   const right = pageWidth - margin;
   const contentWidth = right - left;
@@ -341,19 +343,35 @@ function drawPage(
   wrapped(formatPrescriptionVitals(documentPage.vitals).join(" · "), regular);
   rule();
 
-  documentPage.clinical.forEach((chunk, index) => {
-    if (index > 0) top -= gap;
-    line(`${chunk.label}${chunk.continued ? " (continued)" : ""}:`, bold);
-    top = drawPlannedLines(pdfPage, chunk.lines, left, top - lineHeight, fonts);
-  });
-  rule();
+  if (documentPage.clinical.length) {
+    documentPage.clinical.forEach((chunk, index) => {
+      if (index > 0) top -= gap;
+      let lines = chunk.lines;
+      if (chunk.continued) {
+        line(`${chunk.label} (continued):`, bold);
+        top -= lineHeight;
+      } else {
+        const label = `${chunk.label}: `;
+        line(label, bold);
+        line(
+          lines[0].text,
+          regular,
+          "left",
+          left + textWidth(label, bold, fonts, fontSize),
+        );
+        top -= lineHeight;
+        lines = lines.slice(1);
+      }
+      top = drawPlannedLines(pdfPage, lines, left, top, fonts);
+    });
+    rule();
+  }
 
   const footerRows = [...documentPage.footer];
   const footerTop =
     margin + (footerRows.length + 1) * lineHeight + gap + ruleThickness;
   const columnsTop = top;
-  const divider = left + contentWidth * 0.32;
-  const bulletIndent = fontSize;
+  const divider = left + contentWidth * leftColumnShare;
 
   documentPage.leftColumn.forEach((section, index) => {
     if (index > 0) top -= gap;

@@ -150,10 +150,29 @@ test("an exactly full A5 prescription remains one page in review and completion"
   page,
   request,
 }) => {
-  // Three one-line clinical sections cost 9 of 23 modeled lines. These four
-  // one-line advice items plus the empty investigations row cost the remaining
-  // 14 lines in the independently budgeted left column.
-  const exactFitAdvice = ["Fit one", "Fit two", "Fit three", "Fit four"];
+  // After the letterhead and three one-line clinical sections, eighteen
+  // one-line advice items plus the empty investigations row fill the left
+  // column exactly; a nineteenth item would start a second page.
+  const exactFitAdvice = [
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+  ].map((count) => `Fit ${count}`);
   await openSavedConsultation(page, request, "exact-fit", {
     ...validPaginationConsultation(),
     advice: exactFitAdvice,
@@ -167,7 +186,17 @@ test("an exactly full A5 prescription remains one page in review and completion"
   ).toHaveCount(1);
   await expect(
     review.getByRole("article", { name: "Prescription under review" }),
-  ).toContainText("Fit four");
+  ).toContainText("Fit eighteen");
+  const lastAdviceClipping = await review
+    .locator(".rx-left-column")
+    .evaluate((column) => {
+      const lastItem = column.querySelector("li:last-of-type")!;
+      return (
+        lastItem.getBoundingClientRect().bottom -
+        column.getBoundingClientRect().bottom
+      );
+    });
+  expect(lastAdviceClipping).toBeLessThanOrEqual(0);
 
   await review.getByRole("button", { name: "Complete prescription" }).click();
   await expect(
@@ -258,7 +287,7 @@ test("overflow keeps identical two-page breaks and content across mobile review,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const advice = Array.from(
-    { length: 2 },
+    { length: 8 },
     (_, index) =>
       `Overflow advice ${index + 1}: drink measured fluids and record symptoms twice daily`,
   );

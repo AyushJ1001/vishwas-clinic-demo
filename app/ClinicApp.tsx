@@ -1990,24 +1990,28 @@ function PrescriptionDocument({
                 </p>
                 <p>{formatPrescriptionVitals(page.vitals).join(" · ")}</p>
               </div>
-              <div className="prescription-clinical rx-block">
-                {page.clinical.map((chunk) => (
-                  <section
-                    key={`${chunk.key}-${chunk.continued}`}
-                    className="rx-section"
-                  >
-                    <b>
-                      {chunk.label}
-                      {chunk.continued ? " (continued)" : ""}:
-                    </b>
-                    {chunk.lines.map((line, index) => (
-                      <span key={`${line.text}-${index}`} className="block">
-                        {line.text}{" "}
-                      </span>
-                    ))}
-                  </section>
-                ))}
-              </div>
+              {page.clinical.length > 0 && (
+                <div className="prescription-clinical rx-block">
+                  {page.clinical.map((chunk) => (
+                    <section
+                      key={`${chunk.key}-${chunk.continued}`}
+                      className="rx-section"
+                    >
+                      {chunk.continued && (
+                        <b className="block">{chunk.label} (continued):</b>
+                      )}
+                      {chunk.lines.map((line, index) => (
+                        <span key={`${line.text}-${index}`} className="block">
+                          {index === 0 && !chunk.continued && (
+                            <b>{chunk.label}: </b>
+                          )}
+                          {line.text}{" "}
+                        </span>
+                      ))}
+                    </section>
+                  ))}
+                </div>
+              )}
               {(page.leftColumn.length > 0 || page.medicines.length > 0) && (
                 <div className="prescription-columns">
                   <aside className="rx-left-column">
@@ -2035,16 +2039,18 @@ function PrescriptionDocument({
                     ))}
                   </aside>
                   <section className="rx-medicine-column">
-                    <div className="rx-medicine-heading">
-                      <Image
-                        src="/icons/prescription-fill.svg"
-                        alt="Prescription"
-                        width={34}
-                        height={34}
-                        className="rx-logo"
-                      />
-                      <span>Read the instructions carefully</span>
-                    </div>
+                    {page.medicines.length > 0 && (
+                      <div className="rx-medicine-heading">
+                        <Image
+                          src="/icons/prescription-fill.svg"
+                          alt="Prescription"
+                          width={34}
+                          height={34}
+                          className="rx-logo"
+                        />
+                        <span>Read the instructions carefully</span>
+                      </div>
+                    )}
                     <div className="prescription-medicines">
                       {page.medicines.map((medicine) => (
                         <div key={medicine.key} className="rx-section">
