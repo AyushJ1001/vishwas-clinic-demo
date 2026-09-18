@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  index,
   integer,
   sqliteTable,
   text,
@@ -33,3 +34,18 @@ export const consultationDrafts = sqliteTable("consultation_drafts", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const patients = sqliteTable(
+  "patients",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    nameNormalized: text("name_normalized").notNull(),
+    age: text("age").notNull().default(""),
+    sex: text("sex").notNull().default("Other"),
+    phone: text("phone").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [index("idx_patients_name_normalized").on(table.nameNormalized)],
+);

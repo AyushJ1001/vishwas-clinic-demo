@@ -34,6 +34,14 @@ export type PriorVisitSnapshot = {
   clinicalSummary: string;
 };
 
+export type PatientRecord = {
+  id: number;
+  name: string;
+  age: string;
+  sex: PatientSex;
+  phone: string;
+};
+
 export type Consultation = {
   visitType: "new" | "followup" | null;
   linkedPriorVisit: PriorVisitSnapshot | null;
@@ -102,6 +110,18 @@ export type SaveConsultationDraftResult = {
 
 export type ListPriorVisitsResult = {
   visits: PriorVisitSnapshot[];
+};
+
+export type SearchPatientsResult = {
+  patients: PatientRecord[];
+};
+
+export type PatientImportSummary = {
+  requested: number;
+  imported: number;
+  updated: number;
+  skipped: number;
+  problems: string[];
 };
 
 export function createDemoConsultation(): Consultation {

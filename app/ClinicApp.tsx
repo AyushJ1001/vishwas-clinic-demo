@@ -21,6 +21,7 @@ import {
   Receipt,
   SealCheck,
   ShareNetwork,
+  UploadSimple,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -39,10 +40,13 @@ import {
   formatPriorVisitDate,
   type ClinicDoctorName,
   type Consultation,
+  type PatientImportSummary,
+  type PatientRecord,
   type PatientSex,
   type PrescribedMedicine,
   type CompletedPrescriptionSnapshot,
 } from "./consultation-model";
+import { normalizePatientName, parsePatientImportText } from "./patient-import";
 import {
   clinicDoctors,
   clinicIdentity,
@@ -69,16 +73,19 @@ import {
   preparePrescriptionPdf,
   retryPrescriptionPdf,
 } from "./prescription-output";
+import { PatientNameSearch } from "./patient-search";
 
 gsap.registerPlugin(ScrollTrigger);
 export type RouteName =
   | "prescription"
+  | "patients"
   | "receipts"
   | "certificate"
   | "summaries";
 
 const routes: { href: string; label: string; key: RouteName }[] = [
   { href: "/", label: "Prescription", key: "prescription" },
+  { href: "/patients", label: "Patients", key: "patients" },
   { href: "/receipts", label: "Receipts", key: "receipts" },
   {
     href: "/medical-certificate",
@@ -1075,14 +1082,37 @@ function PrescriptionPage() {
   const clinicalEntryBlocked =
     saveState === "loading" ||
     (consultation.visitType === "followup" && !consultation.linkedPriorVisit);
+  const [patientSynced, setPatientSynced] = useState(false);
   const updatePatient = (
     field: keyof Consultation["patient"],
     value: string,
   ) => {
+    if (field === "name") setPatientSynced(false);
     setConsultation((current) => ({
       ...current,
       patient: { ...current.patient, [field]: value },
     }));
+  };
+  const applyPatientRecord = (record: PatientRecord) => {
+    setPatientSynced(true);
+    setConsultation((current) => {
+      const patient = {
+        name: record.name,
+        age: record.age || current.patient.age,
+        sex: record.sex,
+      };
+      if (current.visitType !== "followup") return { ...current, patient };
+      const normalized = normalizePatientName(record.name);
+      const linkedPriorVisit =
+        [...priorVisits]
+          .filter(
+            (visit) =>
+              normalizePatientName(visit.patient.name) === normalized,
+          )
+          .sort((a, b) => b.consultationDate.localeCompare(a.consultationDate))
+          .at(0) ?? current.linkedPriorVisit;
+      return { ...current, patient, linkedPriorVisit };
+    });
   };
   const updateVital = (field: keyof Consultation["vitals"], value: string) => {
     setConsultation((current) => ({
@@ -1306,9 +1336,17 @@ function PrescriptionPage() {
                       const linkedPriorVisit = priorVisits.find(
                         (visit) => visit.id === event.target.value,
                       );
+                      setPatientSynced(Boolean(linkedPriorVisit));
                       setConsultation((current) => ({
                         ...current,
                         linkedPriorVisit: linkedPriorVisit ?? null,
+                        patient: linkedPriorVisit
+                          ? {
+                              name: linkedPriorVisit.patient.name,
+                              age: linkedPriorVisit.patient.age,
+                              sex: linkedPriorVisit.patient.sex,
+                            }
+                          : current.patient,
                       }));
                     }}
                   >
@@ -1440,28 +1478,47 @@ function PrescriptionPage() {
                 </span>
               )}
             <div className="grid gap-5 sm:grid-cols-2">
-              <label>
-                <span className="field-label">Patient name</span>
-                <input
+              <div>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <label htmlFor="patient-name" className="field-label">
+                    Patient name
+                  </label>
+                  <Link
+                    href="/patients"
+                    className="text-xs font-bold text-[#9b492f] underline decoration-dotted underline-offset-4 transition hover:text-[#b85a36] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      window.location.assign("/patients");
+                    }}
+                  >
+                    Import patient records
+                  </Link>
+                </div>
+                <PatientNameSearch
                   id="patient-name"
-                  className="input-field"
-                  aria-invalid={Boolean(errorFor("patient-name"))}
-                  aria-describedby={
-                      errorFor("patient-name")
-                        ? "patient-name-error"
-                        : undefined
-                  }
                   value={consultation.patient.name}
-                  onChange={(event) =>
-                    updatePatient("name", event.target.value)
+                  disabled={saveState === "loading"}
+                  invalid={Boolean(errorFor("patient-name"))}
+                  describedBy={
+                    errorFor("patient-name")
+                      ? "patient-name-error"
+                      : undefined
                   }
+                  onNameChange={(name) => updatePatient("name", name)}
+                  onPatientSelected={applyPatientRecord}
                 />
+                {patientSynced && !errorFor("patient-name") && (
+                  <p className="patient-sync-note">
+                    <Check size={13} weight="bold" />
+                    Synced from saved patient details
+                  </p>
+                )}
                 {errorFor("patient-name") && (
                   <FieldError id="patient-name-error">
                     {errorFor("patient-name")!}
                   </FieldError>
                 )}
-              </label>
+              </div>
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-[.6fr_1fr_1.2fr]">
               <label>
@@ -2941,8 +2998,342 @@ function A5Document({
   );
 }
 
+const sampleImportText = [
+  "name,age,sex,phone",
+  "Ananya Deshmukh,32,Female,98765 43210",
+  "Rohan Shah,36,Male,98220 11223",
+  "Kavya Mehta,44,Female",
+  "Samira Iyer,51,female,98450 77661",
+  "Vikram Oak,27,m,97000 55442",
+].join("\n");
+
+type ImportState = "idle" | "importing" | "done" | "failed";
+type DirectoryState = "loading" | "ready" | "failed";
+
+function PatientImportCard({ onImported }: { onImported: () => void }) {
+  const [text, setText] = useState("");
+  const [importState, setImportState] = useState<ImportState>("idle");
+  const [summary, setSummary] = useState<PatientImportSummary | null>(null);
+  const [failureMessage, setFailureMessage] = useState("");
+  const fileInputId = useId();
+  const parsed = useMemo(() => parsePatientImportText(text), [text]);
+  const hasRows = parsed.rows.length > 0;
+
+  const importPatients = async () => {
+    setImportState("importing");
+    setFailureMessage("");
+    try {
+      const response = await fetch("/api/patients/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = (await response.json()) as {
+        summary?: PatientImportSummary;
+        error?: string;
+      };
+      if (!response.ok || !data.summary) {
+        throw new Error(data.error ?? "Import failed");
+      }
+      setSummary(data.summary);
+      setImportState("done");
+      onImported();
+    } catch {
+      setSummary(null);
+      setFailureMessage(
+        "The import could not be saved. Check the file and try again.",
+      );
+      setImportState("failed");
+    }
+  };
+
+  return (
+    <article
+      aria-labelledby="patient-import-heading"
+      className="col-span-12 rounded-[30px] border border-[#15362f]/10 bg-[#fbfaf5] p-6 lg:col-span-7 lg:p-9"
+    >
+      <p className="eyebrow">Bulk import</p>
+      <h2
+        id="patient-import-heading"
+        className="mt-2 text-3xl font-medium tracking-[-.03em]"
+      >
+        Import existing patient details
+      </h2>
+      <p className="mt-3 max-w-xl text-base leading-relaxed text-[#536760]">
+        Paste rows from the clinic register, or upload a CSV or JSON export.
+        Name is required; age, sex, and phone are optional. Patients already
+        saved under the same name are updated instead of duplicated.
+      </p>
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <label
+          htmlFor={fileInputId}
+          className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#15362f] shadow-sm transition hover:bg-[#f0ece3] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#d85f39]"
+        >
+          <UploadSimple size={16} weight="bold" />
+          Choose CSV or JSON file
+        </label>
+        <input
+          id={fileInputId}
+          className="sr-only"
+          type="file"
+          accept=".csv,.json,.txt,text/csv,application/json,text/plain"
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            setSummary(null);
+            setImportState("idle");
+            setText(await file.text());
+            event.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          className="min-h-11 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#15362f] shadow-sm transition hover:bg-[#f0ece3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
+          onClick={() => {
+            setSummary(null);
+            setImportState("idle");
+            setText(sampleImportText);
+          }}
+        >
+          Fill a sample list
+        </button>
+        {text && (
+          <button
+            type="button"
+            className="min-h-11 rounded-full px-4 py-2 text-sm font-bold text-[#536760] transition hover:text-[#15362f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
+            onClick={() => {
+              setText("");
+              setSummary(null);
+              setImportState("idle");
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      <label htmlFor="patient-import-text" className="field-label mt-6 block">
+        Or paste patient rows
+      </label>
+      <textarea
+        id="patient-import-text"
+        className="input-field min-h-40 font-mono text-sm"
+        value={text}
+        placeholder={"name,age,sex,phone\nAnanya Deshmukh,32,Female,98765 43210\nRohan Shah,36,Male"}
+        onChange={(event) => {
+          setText(event.target.value);
+          setImportState("idle");
+          setSummary(null);
+        }}
+      />
+      {text.trim() && (
+        <div className="mt-4 rounded-2xl border border-[#15362f]/10 bg-white p-4">
+          {hasRows ? (
+            <p className="text-sm font-bold" role="status">
+              {parsed.rows.length} patient row
+              {parsed.rows.length === 1 ? "" : "s"} ready to import.
+            </p>
+          ) : (
+            <p className="text-sm font-semibold text-[#9b492f]" role="status">
+              No importable patient rows were found yet.
+            </p>
+          )}
+          {parsed.problems.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[#9b492f]">
+              {parsed.problems.map((problem, index) => (
+                <li key={index}>
+                  <b>{problem.source}:</b> {problem.message}
+                </li>
+              ))}
+            </ul>
+          )}
+          {hasRows && (
+            <ul className="mt-3 divide-y divide-[#15362f]/8">
+              {parsed.rows.slice(0, 5).map((row, index) => (
+                <li
+                  key={index}
+                  className="flex flex-wrap items-baseline justify-between gap-x-4 py-2 text-sm"
+                >
+                  <span className="font-bold">{row.name}</span>
+                  <span className="text-[#536760]">
+                    {[
+                      row.age ? `Age ${row.age}` : "Age not given",
+                      row.sex,
+                      row.phone,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {parsed.rows.length > 5 && (
+            <p className="mt-2 text-xs text-[#536760]">
+              …and {parsed.rows.length - 5} more.
+            </p>
+          )}
+        </div>
+      )}
+      <button
+        type="button"
+        className="primary-action mt-6 min-h-11"
+        disabled={!hasRows || importState === "importing"}
+        onClick={() => void importPatients()}
+      >
+        <SealCheck size={17} weight="bold" />
+        {importState === "importing"
+          ? "Saving patient records…"
+          : `Import ${parsed.rows.length || ""} patient${parsed.rows.length === 1 ? "" : "s"}`.trimEnd()}
+      </button>
+      {importState === "done" && summary && (
+        <p
+          className="mt-4 rounded-2xl bg-[#eef3ec] px-4 py-3 text-sm font-bold text-[#2c5e42]"
+          role="status"
+        >
+          {summary.imported} new patient record
+          {summary.imported === 1 ? "" : "s"} saved
+          {summary.updated > 0
+            ? ` · ${summary.updated} existing record${summary.updated === 1 ? "" : "s"} updated.`
+            : "."}
+          {summary.skipped > 0 &&
+            ` ${summary.skipped} row${summary.skipped === 1 ? "" : "s"} skipped.`}
+        </p>
+      )}
+      {importState === "failed" && (
+        <p
+          className="mt-4 rounded-2xl border border-red-800/20 bg-red-50 px-4 py-3 text-sm font-bold text-red-900"
+          role="alert"
+        >
+          {failureMessage}
+        </p>
+      )}
+    </article>
+  );
+}
+
+function PatientDirectoryCard({ reloadKey }: { reloadKey: number }) {
+  const [search, setSearch] = useState("");
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
+  const [state, setState] = useState<DirectoryState>("loading");
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setState("loading");
+      fetch(
+        `/api/patients?q=${encodeURIComponent(search.trim())}&limit=25`,
+        { signal: controller.signal },
+      )
+        .then((response) =>
+          response.ok
+            ? (response.json() as Promise<{ patients?: PatientRecord[] }>)
+            : Promise.reject(new Error("patient directory failed")),
+        )
+        .then((data) => {
+          setPatients(data.patients ?? []);
+          setState("ready");
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setState("failed");
+        });
+    }, 200);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [reloadKey, search]);
+  return (
+    <article
+      aria-labelledby="patient-directory-heading"
+      className="col-span-12 rounded-[30px] border border-[#15362f]/10 bg-[#fbfaf5] p-6 lg:p-9"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">Directory</p>
+          <h2
+            id="patient-directory-heading"
+            className="mt-2 text-2xl font-medium tracking-[-.03em]"
+          >
+            Saved patient records
+          </h2>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#536760]">
+            These records power the patient name search on the prescription
+            form. Completed prescriptions are added here automatically.
+          </p>
+        </div>
+        <label className="min-w-0 flex-1 sm:max-w-xs">
+          <span className="field-label">Search by name</span>
+          <input
+            className="input-field"
+            type="search"
+            aria-label="Search saved patient records"
+            placeholder="e.g. Mehta"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+      </div>
+      {state === "failed" ? (
+        <p className="mt-5 text-sm font-bold text-red-900" role="alert">
+          Saved patient records could not be loaded.
+        </p>
+      ) : state === "loading" ? (
+        <p className="mt-5 text-sm font-semibold text-[#536760]" role="status">
+          Loading patient records…
+        </p>
+      ) : patients.length === 0 ? (
+        <p className="mt-5 text-sm font-semibold text-[#536760]" role="status">
+          {search
+            ? "No saved patient matches that name."
+            : "No patient records yet. Import a list or complete a prescription to start the directory."}
+        </p>
+      ) : (
+        <ul className="mt-5 grid gap-x-8 sm:grid-cols-2 lg:grid-cols-3">
+          {patients.map((patient) => (
+            <li
+              key={patient.id}
+              className="flex min-w-0 items-baseline justify-between gap-4 border-b border-[#15362f]/8 py-3"
+            >
+              <span className="min-w-0 truncate text-sm font-bold">
+                {patient.name}
+              </span>
+              <span className="flex-none text-xs font-semibold text-[#536760]">
+                {[
+                  patient.age ? `Age ${patient.age}` : "Age not given",
+                  patient.sex,
+                  patient.phone,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+}
+
+function PatientsPage() {
+  const [reloadKey, setReloadKey] = useState(0);
+  return (
+    <Shell active="patients">
+      <RouteHeader
+        eyebrow="Patient records"
+        title="Bring the register. The clinic remembers."
+        copy="Import an existing patient list once, then pick any saved patient by typing their name on the prescription form."
+      />
+      <section className="mx-auto grid max-w-[1500px] grid-cols-12 items-start gap-5 px-5 pb-40 lg:px-10">
+        <PatientImportCard onImported={() => setReloadKey((key) => key + 1)} />
+        <PatientDirectoryCard reloadKey={reloadKey} />
+      </section>
+    </Shell>
+  );
+}
+
 export default function ClinicApp({ route }: { route: RouteName }) {
   if (route === "receipts") return <ReceiptPage />;
+  if (route === "patients") return <PatientsPage />;
   if (route === "certificate") return <CertificatePage />;
   if (route === "summaries") return <SummaryPage />;
   return <PrescriptionPage />;
