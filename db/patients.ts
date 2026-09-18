@@ -88,6 +88,12 @@ export async function upsertPatient(
   input: ParsedPatientRow,
 ): Promise<{ record: PatientRecord; created: boolean }> {
   await ensurePatientsTable();
+  return upsertPatientRow(input);
+}
+
+async function upsertPatientRow(
+  input: ParsedPatientRow,
+): Promise<{ record: PatientRecord; created: boolean }> {
   const name = input.name.trim();
   const timestamp = new Date().toISOString();
   const existing = await findPatientByName(name);
@@ -132,7 +138,7 @@ export async function upsertPatient(
       name,
       normalizePatientName(name),
       input.age,
-      input.sex,
+      input.sex || "Other",
       input.phone,
       timestamp,
       timestamp,
@@ -143,7 +149,7 @@ export async function upsertPatient(
       id: Number(result.meta.last_row_id),
       name,
       age: input.age,
-      sex: input.sex,
+      sex: input.sex || "Other",
       phone: input.phone,
     },
     created: true,
@@ -169,7 +175,7 @@ export async function importPatients(
       );
       continue;
     }
-    const { created } = await upsertPatient(row);
+    const { created } = await upsertPatientRow(row);
     if (created) summary.imported += 1;
     else summary.updated += 1;
   }

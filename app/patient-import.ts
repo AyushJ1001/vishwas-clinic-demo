@@ -3,7 +3,8 @@ import type { PatientSex } from "./consultation-model";
 export type ParsedPatientRow = {
   name: string;
   age: string;
-  sex: PatientSex;
+  // Blank means "not given", so an import never overwrites a known value.
+  sex: PatientSex | "";
   phone: string;
 };
 
@@ -23,15 +24,14 @@ export function normalizePatientName(name: string) {
   return name.trim().toLowerCase().replace(/\s+/gu, " ");
 }
 
-export function normalizePatientSex(value: unknown): PatientSex {
+export function normalizePatientSex(value: unknown): PatientSex | "" {
   const text = String(value ?? "")
     .trim()
     .toLowerCase();
   if (["f", "female", "femail", "woman", "w"].includes(text)) return "Female";
   if (["m", "male", "man"].includes(text)) return "Male";
-  if (["o", "other", "nonbinary", "non-binary", "unknown"].includes(text))
-    return "Other";
-  return "Other";
+  if (["o", "other", "nonbinary", "non-binary"].includes(text)) return "Other";
+  return "";
 }
 
 function normalizeAge(value: unknown) {
@@ -101,7 +101,6 @@ const csvHeaderKeys: Record<string, string> = {
   name: "name",
   patient: "name",
   patientname: "name",
-  "patient name": "name",
   fullname: "name",
   age: "age",
   ageyears: "age",
@@ -115,23 +114,29 @@ const csvHeaderKeys: Record<string, string> = {
   contactnumber: "phone",
 };
 
+function normalizeHeader(cell: string) {
+  return cell.toLowerCase().replace(/[\s_-]+/gu, "");
+}
+
 function rowsFromCsv(text: string, problems: PatientParseProblem[]) {
+  // Keep each line's position in the pasted text so problems point at the
+  // row the doctor actually sees, even when blank lines are skipped.
   const lines = text
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+    .map((line, index) => ({ text: line.trim(), number: index + 1 }))
+    .filter((line) => line.text.length > 0);
   if (!lines.length) return [];
-  const headerCells = splitCsvLine(lines[0]).map((cell) =>
-    cell.toLowerCase().replace(/[\s_-]+/gu, " ").trim(),
-  );
-  const hasHeader = headerCells.some((cell) => cell in csvHeaderKeys);
+  const headerCells = splitCsvLine(lines[0].text).map(normalizeHeader);
+  const hasHeader = headerCells.some((cell) => Object.hasOwn(csvHeaderKeys, cell));
   const columns = hasHeader
-    ? headerCells.map((cell) => csvHeaderKeys[cell] ?? "")
+    ? headerCells.map((cell) =>
+        Object.hasOwn(csvHeaderKeys, cell) ? csvHeaderKeys[cell] : "",
+      )
     : ["name", "age", "sex", "phone"];
   if (hasHeader) lines.shift();
   const rows: ParsedPatientRow[] = [];
-  lines.forEach((line, index) => {
-    const cells = splitCsvLine(line);
+  lines.forEach((line) => {
+    const cells = splitCsvLine(line.text);
     const record: RawPatientRow = {};
     columns.forEach((column, columnIndex) => {
       if (column) record[column] = cells[columnIndex] ?? "";
@@ -139,7 +144,7 @@ function rowsFromCsv(text: string, problems: PatientParseProblem[]) {
     const row = rowFromObject(record);
     if (!row || !normalizePatientName(row.name)) {
       problems.push({
-        source: `Row ${index + (hasHeader ? 2 : 1)}`,
+        source: `Row ${line.number}`,
         message: "Name is missing, so the row was skipped.",
       });
       return;
@@ -208,7 +213,7 @@ export function isValidPatientInput(value: unknown): value is ParsedPatientRow {
       typeof row.age === "string" &&
       /^\d*$/.test(row.age) &&
       typeof row.sex === "string" &&
-      patientSexes.has(row.sex) &&
+      (row.sex === "" || patientSexes.has(row.sex)) &&
       typeof row.phone === "string" &&
       row.phone.length <= 20,
   );

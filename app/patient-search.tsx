@@ -41,6 +41,11 @@ export function PatientNameSearch({
   const [activeIndex, setActiveIndex] = useState(-1);
   const query = value.trim();
   const panelOpen = open && !disabled && Boolean(query);
+  const listboxShown = panelOpen && results.length > 0;
+  const emptyMessage =
+    state === "ready" && results.length === 0
+      ? `No saved patient matches “${query}”. A record will be created when this prescription is completed.`
+      : "";
 
   useEffect(() => {
     if (!open) return;
@@ -117,11 +122,11 @@ export function PatientNameSearch({
         type="text"
         autoComplete="off"
         role="combobox"
-        aria-expanded={panelOpen}
+        aria-expanded={listboxShown}
         aria-haspopup="listbox"
-        aria-controls={panelOpen ? listboxId : undefined}
+        aria-controls={listboxShown ? listboxId : undefined}
         aria-activedescendant={
-          panelOpen && activeIndex >= 0
+          listboxShown && activeIndex >= 0
             ? `${id}-patient-option-${activeIndex}`
             : undefined
         }
@@ -148,7 +153,7 @@ export function PatientNameSearch({
           } else if (event.key === "ArrowUp") {
             event.preventDefault();
             moveActive(-1);
-          } else if (event.key === "Enter" && panelOpen && activeIndex >= 0) {
+          } else if (event.key === "Enter" && listboxShown && activeIndex >= 0) {
             event.preventDefault();
             const patient = results[activeIndex];
             if (patient) selectPatient(patient);
@@ -165,17 +170,10 @@ export function PatientNameSearch({
         className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#536760]"
       />
       {panelOpen && (
-        <div
-          id={listboxId}
-          role="listbox"
-          aria-label="Matching patient records"
-          className="picker-panel"
-        >
+        <div className="picker-panel">
           <div className="picker-scroll patient-search-scroll">
             {state === "loading" && (
-              <p className="patient-search-status" role="status">
-                Searching patient records…
-              </p>
+              <p className="patient-search-status">Searching patient records…</p>
             )}
             {state === "failed" && (
               <p className="patient-search-status" role="alert">
@@ -183,39 +181,52 @@ export function PatientNameSearch({
                 name.
               </p>
             )}
-            {state === "ready" && results.length === 0 && (
-              <p className="patient-search-status">
-                No saved patient matches “{query}”. A record will be created
-                when this prescription is completed.
-              </p>
+            {emptyMessage && (
+              <p className="patient-search-status">{emptyMessage}</p>
             )}
-            {results.map((patient, index) => (
-              <button
-                type="button"
-                key={patient.id}
-                id={`${id}-patient-option-${index}`}
-                role="option"
-                aria-selected={index === activeIndex}
-                data-active={index === activeIndex ? "true" : undefined}
-                tabIndex={-1}
-                className="picker-option patient-search-option"
-                onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => selectPatient(patient)}
+            {results.length > 0 && (
+              <div
+                id={listboxId}
+                role="listbox"
+                aria-label="Matching patient records"
               >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-bold">
-                    {patient.name}
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs font-semibold text-[#536760]">
-                    {describePatient(patient)}
-                  </span>
-                </span>
-              </button>
-            ))}
+                {results.map((patient, index) => (
+                  <button
+                    type="button"
+                    key={patient.id}
+                    id={`${id}-patient-option-${index}`}
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    data-active={index === activeIndex ? "true" : undefined}
+                    tabIndex={-1}
+                    className="picker-option patient-search-option"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => selectPatient(patient)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-bold">
+                        {patient.name}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs font-semibold text-[#536760]">
+                        {describePatient(patient)}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
+      {/* Announced without a status role so the page keeps a single status
+          region for the consultation save state. */}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {panelOpen && state === "ready"
+          ? emptyMessage ||
+            `${results.length} saved patient${results.length === 1 ? "" : "s"} found.`
+          : ""}
+      </span>
     </div>
   );
 }

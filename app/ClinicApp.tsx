@@ -1103,14 +1103,18 @@ function PrescriptionPage() {
       };
       if (current.visitType !== "followup") return { ...current, patient };
       const normalized = normalizePatientName(record.name);
+      const isSamePatient = (visit: { patient: { name: string } }) =>
+        normalizePatientName(visit.patient.name) === normalized;
+      // Never keep a visit that belongs to someone else: a follow-up linked
+      // to the wrong patient's history is worse than asking for a new link.
       const linkedPriorVisit =
         [...priorVisits]
-          .filter(
-            (visit) =>
-              normalizePatientName(visit.patient.name) === normalized,
-          )
+          .filter(isSamePatient)
           .sort((a, b) => b.consultationDate.localeCompare(a.consultationDate))
-          .at(0) ?? current.linkedPriorVisit;
+          .at(0) ??
+        (current.linkedPriorVisit && isSamePatient(current.linkedPriorVisit)
+          ? current.linkedPriorVisit
+          : null);
       return { ...current, patient, linkedPriorVisit };
     });
   };

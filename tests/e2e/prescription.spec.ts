@@ -1088,6 +1088,13 @@ test("an unlinked follow-up review lists every problem and routes fixes through 
   await page
     .getByLabel("Prior demo visit")
     .selectOption("demo-visit-kavya-mehta-2026-08-18");
+  // Linking syncs the visit's patient name; blank it again to keep routing
+  // the remaining patient-name problem through review.
+  await expect(page.getByLabel("Patient name")).toHaveValue(
+    "Demo Patient Kavya Mehta",
+  );
+  await page.getByLabel("Patient name").fill("   ");
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Review prescription" }).click();
   await review.getByRole("button", { name: "Fix patient name" }).click();
   await expect(page.getByLabel("Patient name")).toBeFocused();
@@ -1987,12 +1994,14 @@ test("follow-up prescribing requires a linked prior demo visit", async ({
     "Thyroid review; fatigue improving and observations stable.",
   );
   await expect(page.getByLabel("Patient name")).toBeEnabled();
+  // Linking a prior visit syncs that patient's demographics into the form.
   await expect(page.getByLabel("Patient name")).toHaveValue(
-    "Demo Patient Ananya Deshmukh",
+    "Demo Patient Kavya Mehta",
   );
+  await expect(page.getByText("Synced from saved patient details")).toBeVisible();
   await expect(
     page.locator(".preview-wrap .prescription-pages"),
-  ).not.toContainText("Demo Patient Kavya Mehta");
+  ).toContainText("Demo Patient Kavya Mehta");
 });
 
 for (const viewport of [
