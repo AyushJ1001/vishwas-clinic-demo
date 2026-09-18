@@ -5,16 +5,34 @@ import {
   getConsultationDraft,
 } from "../../../../../db/consultation-drafts";
 import { listCompletedDemoVisits } from "../../../../../db/prior-visits";
+import { upsertPatient } from "../../../../../db/patients";
 import {
   consultationFingerprint,
   isConsultationShape,
   validateConsultation,
 } from "../../../../consultation-validation";
+import type { Consultation } from "../../../../consultation-model";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 function isDraftId(value: string) {
   return /^[a-zA-Z0-9-]{8,120}$/.test(value);
+}
+
+async function registerPatient(consultation: Consultation) {
+  try {
+    await upsertPatient({
+      name: consultation.patient.name,
+      age: /^\d+$/.test(consultation.patient.age.trim())
+        ? consultation.patient.age.trim()
+        : "",
+      sex: consultation.patient.sex,
+      phone: "",
+    });
+  } catch {
+    // The patient directory is a convenience: completing the prescription
+    // must succeed even when the directory cannot be updated.
+  }
 }
 
 export async function POST(request: Request, context: RouteContext) {
@@ -48,6 +66,10 @@ export async function POST(request: Request, context: RouteContext) {
         expectedConsultation: body.expectedConsultation,
         consultation: body.expectedConsultation,
       });
+      if (!snapshot) {
+        return NextResponse.json({ error: "Draft not found" }, { status: 404 });
+      }
+      await registerPatient(snapshot.consultation);
       return NextResponse.json({ snapshot });
     }
 
@@ -90,6 +112,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (!snapshot) {
       return NextResponse.json({ error: "Draft not found" }, { status: 404 });
     }
+    await registerPatient(consultation);
     return NextResponse.json({ snapshot });
   } catch (error) {
     if (error instanceof ConsultationRevisionConflictError) {
