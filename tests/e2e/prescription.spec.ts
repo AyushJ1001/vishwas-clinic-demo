@@ -2552,6 +2552,91 @@ test("catalog picker separates choices from controls and closes when focus leave
   ).toBeFocused();
 });
 
+test("multi-select picker keeps its panel open and reveals categories in place", async ({
+  page,
+}) => {
+  await openPrescription(page, "catalog-multiselect-stays-open");
+
+  const picker = page.getByRole("combobox", {
+    name: "Major complaints",
+    exact: true,
+  });
+  await picker.click();
+  await expect(picker).toHaveAttribute("aria-expanded", "true");
+
+  const respiratory = page.getByRole("button", {
+    name: "Respiratory",
+    exact: true,
+  });
+  await respiratory.click();
+  await expect(picker).toHaveAttribute("aria-expanded", "true");
+  await expect(respiratory).toHaveAttribute("aria-expanded", "true");
+
+  const option = page.getByRole("option", {
+    name: "Productive cough",
+    exact: true,
+  });
+  const firstOption = page.getByRole("option", {
+    name: "Dry cough",
+    exact: true,
+  });
+  await expect(option).toBeVisible();
+  await expect(firstOption).toBeVisible();
+  const headerBox = await respiratory.boundingBox();
+  const optionBox = await firstOption.boundingBox();
+  expect(headerBox).not.toBeNull();
+  expect(optionBox).not.toBeNull();
+  expect(optionBox!.y).toBeGreaterThan(headerBox!.y);
+  expect(optionBox!.y - (headerBox!.y + headerBox!.height)).toBeLessThan(20);
+
+  await option.click();
+  await expect(option).toHaveAttribute("aria-selected", "true");
+  await expect(picker).toHaveAttribute("aria-expanded", "true");
+
+  await page.mouse.click(2, 2);
+  await expect(picker).toHaveAttribute("aria-expanded", "false");
+});
+
+test.describe("touch catalog picker", () => {
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 844 },
+  });
+
+  test("tapping a category expands it without dismissing the panel", async ({
+    page,
+  }) => {
+    await openPrescription(page, "catalog-touch-stays-open");
+
+    const picker = page.getByRole("combobox", {
+      name: "Major complaints",
+      exact: true,
+    });
+    await picker.tap();
+    await expect(picker).toHaveAttribute("aria-expanded", "true");
+
+    const respiratory = page.getByRole("button", {
+      name: "Respiratory",
+      exact: true,
+    });
+    await respiratory.tap();
+    await expect(picker).toHaveAttribute("aria-expanded", "true");
+    await expect(respiratory).toHaveAttribute("aria-expanded", "true");
+
+    const option = page.getByRole("option", {
+      name: "Productive cough",
+      exact: true,
+    });
+    await option.tap();
+    await expect(option).toHaveAttribute("aria-selected", "true");
+    await expect(picker).toHaveAttribute("aria-expanded", "true");
+
+    await page.touchscreen.tap(6, 6);
+    await expect(picker).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
 test("catalog loading failure preserves consultation data and retry recovers", async ({
   page,
 }) => {

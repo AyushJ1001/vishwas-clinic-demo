@@ -266,13 +266,14 @@ function CatalogPicker({
     requestAnimationFrame(() => searchRef.current?.focus());
   };
   const select = (item: string) => {
-    if (multiple)
+    if (multiple) {
       onChange(
         values.includes(item)
           ? values.filter((v) => v !== item)
           : [...values, item],
       );
-    else {
+      requestAnimationFrame(() => searchRef.current?.focus());
+    } else {
       onChange(item);
       closePicker(true);
     }
@@ -315,10 +316,10 @@ function CatalogPicker({
       className="relative"
       ref={pickerRef}
       onBlur={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (open && (!nextTarget || !event.currentTarget.contains(nextTarget))) {
-          closePicker();
-        }
+        if (!open) return;
+        const nextTarget = event.relatedTarget as Node | null;
+        if (!nextTarget || event.currentTarget.contains(nextTarget)) return;
+        closePicker();
       }}
       onKeyDown={(event) => {
         if (open && event.key === "Escape") {
@@ -404,8 +405,8 @@ function CatalogPicker({
       )}
       {open && (
         <div className="picker-panel">
-          <div className="flex items-center gap-2 border-b border-[#15362f]/10 px-3 py-2">
-            <MagnifyingGlass size={15} />
+          <div className="picker-search">
+            <MagnifyingGlass size={15} weight="bold" />
             <input
               ref={searchRef}
               autoFocus
@@ -432,7 +433,6 @@ function CatalogPicker({
                 }
               }}
               placeholder={`Search ${label.toLowerCase()}`}
-              className="w-full bg-transparent py-1 text-sm outline-none"
               role="combobox"
               aria-label={`Search ${label}`}
               aria-expanded="true"
@@ -443,8 +443,22 @@ function CatalogPicker({
                   : undefined
               }
             />
+            {query && (
+              <button
+                type="button"
+                className="picker-search-clear"
+                aria-label={`Clear ${label} search`}
+                onClick={() => {
+                  setQuery("");
+                  setActiveOption("");
+                  requestAnimationFrame(() => searchRef.current?.focus());
+                }}
+              >
+                <X size={13} weight="bold" />
+              </button>
+            )}
           </div>
-          <div className="max-h-72 overflow-y-auto p-2">
+          <div className="picker-scroll">
             {loadState === "loading" && (
               <p className="catalog-status catalog-loading" role="status">
                 Loading clinic terms for {label}…
@@ -476,68 +490,101 @@ function CatalogPicker({
               </div>
             )}
             {!query && (
-              <div role="group" aria-label={`${label} categories`}>
-                {filtered.map((group) => (
-                <button
-                  type="button"
-                  key={group.group}
-                  id={categoryId(group.group)}
-                  onClick={() =>
-                    setExpanded(expanded === group.group ? "" : group.group)
-                  }
-                  className="flex min-h-11 min-w-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold uppercase tracking-[.11em] text-[#536760] hover:bg-[#ece7dc]"
-                  aria-expanded={expanded === group.group}
-                  aria-controls={groupId(group.group)}
-                >
-                  <span>{group.group}</span>
-                  <CaretDown
-                    className={`transition ${expanded === group.group || query ? "rotate-180" : ""}`}
-                    size={13}
-                  />
-                </button>
-                ))}
+              <div
+                role="group"
+                aria-label={`${label} categories`}
+                className="picker-categories"
+              >
+                {filtered.map((group, index) => {
+                  const selectedCount = group.items.filter((item) =>
+                    values.includes(item),
+                  ).length;
+                  const isExpanded = expanded === group.group;
+                  return (
+                    <button
+                      type="button"
+                      key={group.group}
+                      id={categoryId(group.group)}
+                      style={query ? undefined : { order: index * 2 }}
+                      onClick={() => setExpanded(isExpanded ? "" : group.group)}
+                      className="picker-category"
+                      aria-label={group.group}
+                      aria-expanded={isExpanded}
+                      aria-controls={
+                        isExpanded ? groupId(group.group) : undefined
+                      }
+                    >
+                      <span className="picker-category-label">
+                        {group.group}
+                        {selectedCount > 0 && (
+                          <span
+                            className="picker-category-count"
+                            aria-hidden="true"
+                          >
+                            {selectedCount}
+                          </span>
+                        )}
+                      </span>
+                      <span className="picker-category-meta" aria-hidden="true">
+                        <span className="picker-category-total">
+                          {group.items.length}
+                        </span>
+                        <CaretDown size={13} weight="bold" />
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
             <div
               id={listboxId}
               role="listbox"
+              className="picker-listbox"
               aria-label={`${label} options`}
               aria-multiselectable={multiple || undefined}
             >
-            {filtered.map((group) => (
-              <div
-                key={group.group}
-                id={groupId(group.group)}
-                role="group"
-                aria-label={group.group}
-                className="mb-1"
-              >
-                {(expanded === group.group || query) && (
-                  <div className="grid gap-1 py-1">
-                    {group.items.map((item) => (
-                      <button
-                        type="button"
-                        key={item}
-                        id={optionId(group.group, item)}
-                        onClick={() => select(item)}
-                        onMouseEnter={() =>
-                          setActiveOption(optionKey(group.group, item))
-                        }
-                        className={`flex min-h-11 min-w-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[#15362f] hover:text-white ${activeOption === optionKey(group.group, item) ? "bg-[#15362f] text-white" : ""}`}
-                        role="option"
-                        aria-selected={values.includes(item)}
-                        tabIndex={-1}
-                      >
-                        <span>{item}</span>
-                        {values.includes(item) && (
-                          <Check size={14} weight="bold" />
-                        )}
-                      </button>
-                    ))}
+              {filtered.map((group, index) => {
+                const isExpanded = expanded === group.group || Boolean(query);
+                if (!isExpanded) return null;
+                return (
+                  <div
+                    key={group.group}
+                    id={groupId(group.group)}
+                    role="group"
+                    aria-label={group.group}
+                    style={query ? undefined : { order: index * 2 + 1 }}
+                  >
+                    <div className="picker-options">
+                      {group.items.map((item) => {
+                        const selected = values.includes(item);
+                        return (
+                          <button
+                            type="button"
+                            key={item}
+                            id={optionId(group.group, item)}
+                            onClick={() => select(item)}
+                            onMouseEnter={() =>
+                              setActiveOption(optionKey(group.group, item))
+                            }
+                            className="picker-option"
+                            role="option"
+                            aria-selected={selected}
+                            tabIndex={-1}
+                            data-active={
+                              activeOption === optionKey(group.group, item)
+                                ? "true"
+                                : undefined
+                            }
+                          >
+                            <span>{item}</span>
+                            {selected && <Check size={14} weight="bold" />}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              })}
             </div>
             {query.trim() && filtered.length === 0 && (
               <p className="catalog-status">No matching catalog choices.</p>
