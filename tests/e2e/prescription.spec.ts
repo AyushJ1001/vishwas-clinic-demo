@@ -621,13 +621,13 @@ test("downloaded PDF preserves a long multilingual patient identity without over
   const extractedText = textItems.map((item) => item.text).join(" ");
   expect(extractedText).toContain(patientName);
 
-  const ageAndSex = textItems.find((item) => item.text.startsWith("Age/Sex:"));
+  const ageAndGender = textItems.find((item) => item.text.startsWith("Age/Gender:"));
   const consultationDate = textItems.find((item) =>
     item.text.startsWith("Date:"),
   );
-  expect(ageAndSex).toBeDefined();
+  expect(ageAndGender).toBeDefined();
   expect(consultationDate).toBeDefined();
-  expect(ageAndSex!.right).toBeLessThanOrEqual(consultationDate!.x - 4);
+  expect(ageAndGender!.right).toBeLessThanOrEqual(consultationDate!.x - 4);
 
   const nameRows = textItems.filter(
     (item) =>
@@ -640,7 +640,7 @@ test("downloaded PDF preserves a long multilingual patient identity without over
     395,
   );
   expect(Math.min(...nameRows.map((item) => item.y))).toBeGreaterThan(
-    ageAndSex!.y + 4,
+    ageAndGender!.y + 4,
   );
   expect(
     requestedFonts.some(
@@ -1896,7 +1896,7 @@ test("consultation values appear unchanged in the draft prescription", async ({
 
   await page.getByLabel("Patient name").fill("Demo Patient Rivera");
   await page.getByLabel("Age").fill("47");
-  await page.getByLabel("Sex").selectOption("Other");
+  await page.getByLabel("Gender").selectOption("Other");
   await page.getByLabel("Consultation date").fill("2026-09-09");
 
   await chooseCatalogItem(
@@ -2011,7 +2011,7 @@ for (const viewport of [
       }
       const patientName = visitType === "followup" ? "Demo Patient Kavya Mehta" : "Demo Patient Release Journey";
       await page.getByLabel("Age", { exact: true }).fill("42");
-      await page.getByLabel("Sex", { exact: true }).selectOption("Other");
+      await page.getByLabel("Gender", { exact: true }).selectOption("Other");
       await page.getByLabel("Consultation date").fill("2026-09-11");
       await chooseCatalogItem(page, page.getByRole("combobox", { name: "Examination findings", exact: true }), "examination findings", "Alert and oriented");
       for (const medicine of ["Paracetamol 500 mg tablet", "Levocetirizine 5 mg tablet"]) {

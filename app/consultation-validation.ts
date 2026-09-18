@@ -203,7 +203,12 @@ export function validateConsultation(
     );
   }
   if (!patientSexes.has(consultation.patient.sex)) {
-    add("patient-sex", "patient-sex", "sex", "Choose Female, Male, or Other.");
+    add(
+      "patient-sex",
+      "patient-sex",
+      "gender",
+      "Choose Female, Male, or Other.",
+    );
   }
   if (!isRealDate(consultation.consultationDate)) {
     add(

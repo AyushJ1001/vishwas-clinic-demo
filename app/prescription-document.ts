@@ -12,6 +12,18 @@ export const prescriptionFooter = [
   "Prescription is valid for the given person and duration only",
 ] as const;
 
+// Shared by the on-screen preview and the PDF so both render the same A5 sheet.
+// All measurements are in points (1pt = 1/72 inch).
+export const prescriptionTypography = {
+  pageMargin: 24,
+  fontSize: 9,
+  lineHeight: 12,
+  titleSize: 16,
+  registrationSize: 7,
+  ruleThickness: 0.75,
+  ruleGap: 5,
+} as const;
+
 export const emptyPrescriptionValue = "—";
 export const emptyPrescriptionList = "None entered";
 
