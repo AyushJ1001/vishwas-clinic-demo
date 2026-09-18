@@ -134,6 +134,192 @@ button {
   background: #fffef9;
   box-shadow: 0 22px 60px rgba(21, 54, 47, 0.18);
 }
+.picker-search {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-bottom: 1px solid rgba(21, 54, 47, 0.1);
+  padding: 0.6rem 0.75rem;
+  color: #536760;
+}
+.picker-search input {
+  min-width: 0;
+  flex: 1 1 auto;
+  background: transparent;
+  padding: 0.3rem 0;
+  color: #15362f;
+  font-size: 0.875rem;
+  outline: none;
+}
+.picker-search input::placeholder {
+  color: #60736c;
+}
+.picker-search input:focus-visible {
+  outline: none;
+}
+.picker-search-clear {
+  display: inline-flex;
+  height: 1.6rem;
+  width: 1.6rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #ece7dc;
+  color: #15362f;
+  transition:
+    background-color 0.15s ease-out,
+    color 0.15s ease-out;
+}
+.picker-search-clear:hover {
+  background: #15362f;
+  color: #fff;
+}
+.picker-scroll {
+  display: flex;
+  max-height: 18rem;
+  flex-direction: column;
+  gap: 0.125rem;
+  overflow-y: auto;
+  padding: 0.5rem;
+  scrollbar-color: rgba(21, 54, 47, 0.3) transparent;
+  scrollbar-width: thin;
+}
+.picker-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.picker-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(21, 54, 47, 0.24);
+  background-clip: padding-box;
+}
+.picker-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(21, 54, 47, 0.38);
+  background-clip: padding-box;
+}
+.picker-categories {
+  display: contents;
+}
+.picker-listbox {
+  display: contents;
+}
+.picker-category {
+  display: flex;
+  min-height: 44px;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-radius: 12px;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  color: #4c615a;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  transition:
+    background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.picker-category:hover {
+  background: #ece7dc;
+  color: #15362f;
+}
+.picker-category[aria-expanded="true"] {
+  background: #ece7dc;
+  color: #15362f;
+}
+.picker-category-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+}
+.picker-category-count {
+  display: inline-flex;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #15362f;
+  padding: 0 0.35rem;
+  color: #fff;
+  font-size: 0.62rem;
+  letter-spacing: 0.01em;
+}
+.picker-category-meta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  color: #45564f;
+}
+.picker-category-total {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.picker-category svg {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.picker-category[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.picker-options {
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.125rem 0.25rem 0.4rem 0.6rem;
+  animation: picker-options-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes picker-options-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.picker-option {
+  display: flex;
+  min-height: 44px;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem 0.5rem 0.85rem;
+  text-align: left;
+  color: #15362f;
+  font-size: 0.875rem;
+  transition:
+    background-color 0.15s ease-out,
+    color 0.15s ease-out;
+}
+.picker-option:hover,
+.picker-option[data-active="true"],
+.picker-option[aria-selected="true"] {
+  background: #15362f;
+  color: #fff;
+}
+.picker-option svg {
+  flex: 0 0 auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .picker-options {
+    animation: none;
+  }
+  .picker-category,
+  .picker-category svg,
+  .picker-option,
+  .picker-search-clear {
+    transition: none;
+  }
+}
 .selected-chip {
   display: inline-flex;
   align-items: center;
