@@ -67,43 +67,39 @@ export function PrescriptionReviewDialog({
         event.preventDefault();
         if (!isCompleting) onClose();
       }}
-      className="review-dialog m-auto bg-[#f4f1e9] p-0 text-[#15362f] shadow-[0_28px_90px_rgba(21,54,47,.3)] backdrop:bg-[#102c27]/70"
+      className="review-dialog m-auto bg-paper p-0 text-ink"
     >
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-[#15362f]/10 bg-[#f4f1e9] px-5 py-4 sm:px-7">
-        <div>
-          <h2 id="review-prescription-heading" className="text-2xl font-bold">
-            Review prescription
-          </h2>
-          <p className="mt-1 text-sm text-[#536760]">
-            Check the final paper before locking this prescription.
-          </p>
-        </div>
+      <div className="review-dialog-header">
+        <h2 id="review-prescription-heading" className="page-title">
+          Review prescription
+        </h2>
         <button
           type="button"
           aria-label="Close prescription review"
           disabled={isCompleting}
           onClick={onClose}
-          className="grid min-h-11 min-w-11 place-items-center rounded-xl bg-white transition hover:bg-[#ece7dc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39] disabled:opacity-50"
+          className="icon-button"
         >
           <X size={18} />
         </button>
       </div>
-      <div className="review-dialog-body grid min-w-0 gap-6 p-5 lg:grid-cols-[minmax(0,.72fr)_minmax(0,1.28fr)] lg:p-7">
+      <div className="review-dialog-body">
         <section aria-labelledby="review-check-heading" className="min-w-0">
-          <h3 id="review-check-heading" className="text-lg font-bold">
-            Completion check
+          <h3 id="review-check-heading" className="section-title">
+            Before completing
           </h3>
           {problems.length ? (
             <>
               <p
                 role="alert"
-                className="mt-2 text-sm leading-relaxed text-[#536760]"
+                className="status-line mt-2"
+                data-tone="attention"
               >
                 Fix {problems.length}{" "}
                 {problems.length === 1 ? "problem" : "problems"} before
                 completion.
               </p>
-              <ul className="mt-4 space-y-2">
+              <ul className="mt-3 space-y-2">
                 {problems.map((problem) => {
                   const mustLinkPriorVisit =
                     requiresPriorVisit &&
@@ -124,7 +120,7 @@ export function PrescriptionReviewDialog({
                         ref={problem === problems[0] ? firstProblemRef : undefined}
                         type="button"
                         onClick={() => onFixProblem(correction)}
-                        className="flex min-h-11 w-full items-start justify-between gap-4 rounded-xl bg-white px-4 py-3 text-left text-sm font-semibold transition hover:bg-[#ece7dc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
+                        className="btn btn-secondary review-problem-button"
                         aria-label={
                           mustLinkPriorVisit
                             ? `Choose the earlier prescription before fixing ${problem.fieldLabel}`
@@ -132,8 +128,8 @@ export function PrescriptionReviewDialog({
                         }
                       >
                         <span>{problem.message}</span>
-                        <span aria-hidden="true">
-                          {mustLinkPriorVisit ? "Link visit first" : "Fix"}
+                        <span aria-hidden="true" className="tag tag-muted">
+                          Fix
                         </span>
                       </button>
                     </li>
@@ -142,28 +138,25 @@ export function PrescriptionReviewDialog({
               </ul>
             </>
           ) : (
-            <div className="mt-4 rounded-2xl bg-[#e4ece7] p-4 text-sm">
-              <p className="font-bold">Ready to complete</p>
-              <p className="mt-1 leading-relaxed text-[#435c54]">
-                Completion saves the latest revision and locks this document.
-              </p>
-            </div>
+            <p className="notice notice-done mt-3 font-semibold">
+              Ready to complete
+            </p>
           )}
           {isFailed && (
             <p
               role="alert"
-              className="mt-4 rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-900"
+              className="notice notice-error mt-3 font-semibold"
             >
               Prescription could not be completed. Your draft is still here.
             </p>
           )}
-          <div className="mt-5 flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               ref={completeButtonRef}
               type="button"
               onClick={onComplete}
               disabled={problems.length > 0 || isCompleting}
-              className="primary-action min-h-11 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn btn-primary"
             >
               {isCompleting
                 ? "Completing prescription…"
@@ -175,23 +168,23 @@ export function PrescriptionReviewDialog({
               type="button"
               onClick={onClose}
               disabled={isCompleting}
-              className="min-h-11 rounded-full bg-white px-5 py-2.5 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39] disabled:opacity-50"
+              className="btn btn-secondary"
             >
               Return to editing
             </button>
           </div>
         </section>
-        <div className="review-preview-panel min-w-0 rounded-[20px] bg-[#123930] p-3 sm:p-5">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-white">
-            <p className="text-sm font-bold">Prescription preview</p>
+        <div className="review-preview-panel min-w-0">
+          <div className="review-preview-toolbar">
+            <p className="section-title">Prescription preview</p>
             <div
-              className="flex items-center gap-1 rounded-full bg-white/10 p-1"
+              className="review-zoom-controls"
               aria-label="Prescription zoom controls"
               role="group"
             >
               <button
                 type="button"
-                className="review-zoom-button"
+                className="icon-button review-zoom-button"
                 aria-label="Zoom out"
                 aria-controls="review-prescription-canvas"
                 disabled={reviewZoom === 100}
@@ -209,7 +202,7 @@ export function PrescriptionReviewDialog({
               </output>
               <button
                 type="button"
-                className="review-zoom-button"
+                className="icon-button review-zoom-button"
                 aria-label="Zoom in"
                 aria-controls="review-prescription-canvas"
                 disabled={reviewZoom === 200}
@@ -221,7 +214,7 @@ export function PrescriptionReviewDialog({
               </button>
               <button
                 type="button"
-                className="review-fit-button"
+                className="icon-button review-fit-button"
                 aria-controls="review-prescription-canvas"
                 disabled={reviewZoom === 100}
                 onClick={() => {
@@ -278,4 +271,3 @@ export const fieldsOpenBeforeLinking = new Set([
   "patient-sex",
   "consultation-date",
 ]);
-

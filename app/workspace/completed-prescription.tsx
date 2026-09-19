@@ -200,160 +200,170 @@ export function CompletedPrescriptionView({
     timeStyle: "short",
   }).format(new Date(snapshot.completedAt));
   return (
-    <section className="completed-prescription-layout mx-auto grid max-w-[1200px] gap-6 px-5 py-6 lg:grid-cols-[.65fr_1.35fr] lg:px-10 lg:py-16">
-      <div className="min-w-0">
-        <div
-          ref={completedStatusRef}
-          role="status"
-          aria-label="Prescription completed"
-          tabIndex={-1}
-          className="rounded-[24px] bg-[#15362f] p-6 text-white"
-        >
-          <div className="flex items-center gap-3">
-            <SealCheck size={26} weight="fill" className="shrink-0" />
-            <h1 className="text-xl font-bold">Prescription completed</h1>
-          </div>
-          <p className="mt-4 break-words text-lg font-bold">
-            {snapshot.consultation.patient.name}
-          </p>
-          <p className="mt-1 text-sm text-white/80">
-            {getVisitTypeLabel(snapshot.consultation.visitType)} ·{" "}
-            {formatConsultationDate(snapshot.consultation.consultationDate)}
-          </p>
-          <p className="mt-3 text-sm leading-relaxed text-white/75">
-            This prescription is locked. Refreshing reopens the same document.
-          </p>
-        </div>
-        <section
-          aria-labelledby="prescription-output-heading"
-          className="completed-output mt-4 rounded-[24px] bg-[#fbfaf5] p-5"
-        >
-          <h2 id="prescription-output-heading" className="text-lg font-bold">
-            Use this prescription
-          </h2>
-          <p className="mt-1 text-sm leading-relaxed text-[#536760]">
-            Print, download or share this locked A5 document.
-          </p>
-          <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-            <button
-              type="button"
-              onClick={printPrescription}
-              className="output-action"
-            >
-              <Printer size={18} weight="bold" />
-              Print prescription
-            </button>
-            <button
-              ref={downloadButtonRef}
-              type="button"
-              onClick={downloadPdf}
-              disabled={pdfState.status !== "ready"}
-              className="output-action"
-            >
-              <DownloadSimple size={18} weight="bold" />
-              {pdfState.status === "preparing"
-                ? "Preparing PDF…"
-                : "Download PDF"}
-            </button>
-            <button
-              type="button"
-              onClick={sharePrescription}
-              disabled={pdfState.status !== "ready" || sharing}
-              className="output-action"
-            >
-              <ShareNetwork size={18} weight="bold" />
-              {sharing ? "Sharing prescription…" : "Share prescription"}
-            </button>
-          </div>
-          {pdfState.status === "failed" && (
-            <div role="alert" className="output-feedback output-feedback-error">
-              <p>
-                The PDF could not be prepared. The completed prescription is
-                still available.
-              </p>
-              <button
-                ref={retryPdfButtonRef}
-                type="button"
-                onClick={() => preparePdf(true)}
-              >
-                <ArrowClockwise size={16} weight="bold" />
-                Retry PDF preparation
-              </button>
+    <div className="page">
+      <div className="completed-prescription-layout">
+        <div className="min-w-0">
+          <div
+            ref={completedStatusRef}
+            role="status"
+            aria-label="Prescription completed"
+            tabIndex={-1}
+            className="notice notice-done p-4"
+          >
+            <div className="flex items-center gap-3">
+              <SealCheck size={26} weight="fill" className="shrink-0" />
+              <h1 className="section-title">Prescription completed</h1>
             </div>
-          )}
-          {outputMessage && (
-            <p
-              role={outputMessage.kind === "error" ? "alert" : "status"}
-              className={`output-feedback ${outputMessage.kind === "error" ? "output-feedback-error" : "output-feedback-status"}`}
-            >
-              {outputMessage.text}
+            <p className="mt-3 break-words text-base font-semibold">
+              {snapshot.consultation.patient.name}
             </p>
-          )}
-          <details className="mt-4 border-t border-[#15362f]/15 pt-2 text-sm">
-            <summary className="min-h-11 cursor-pointer content-center font-semibold">
-              Prescription details
-            </summary>
-            <dl className="space-y-3 py-3">
+            <dl className="mt-2 grid grid-cols-2 gap-3">
               <div>
-                <dt className="text-[#536760]">Completed</dt>
-                <dd className="mt-1 font-semibold tabular-nums">
-                  {completedTime}
+                <dt className="field-label">Visit type</dt>
+                <dd>{getVisitTypeLabel(snapshot.consultation.visitType)}</dd>
+              </div>
+              <div>
+                <dt className="field-label">Date</dt>
+                <dd>
+                  {formatConsultationDate(
+                    snapshot.consultation.consultationDate,
+                  )}
                 </dd>
               </div>
-              <div>
-                <dt className="text-[#536760]">Prescription ID</dt>
-                <dd className="mt-1 break-all font-semibold">{snapshot.id}</dd>
-              </div>
             </dl>
-            {linkedPriorVisit && (
-              <section
-                aria-label="Linked prior visit"
-                className="border-t border-[#15362f]/15 py-3"
-              >
-                <h3 className="font-semibold">Linked prior visit</h3>
-                <p className="mt-2">{linkedPriorVisit.patient.name}</p>
-                <p>{formatPriorVisitDate(linkedPriorVisit.consultationDate)}</p>
-                <p>{linkedPriorVisit.doctorName}</p>
-                <p className="mt-2 leading-relaxed text-[#536760]">
-                  {linkedPriorVisit.clinicalSummary}
-                </p>
-              </section>
-            )}
-          </details>
-        </section>
-        <section className="mt-4 rounded-[24px] bg-[#fbfaf5] p-5">
-          <p className="mb-3 text-sm leading-relaxed text-[#536760]">
-            Download or share this prescription before moving to the next
-            patient. Starting another consultation leaves this completed record
-            unchanged.
-          </p>
-          <button
-            ref={startAnotherRef}
-            type="button"
-            onClick={() => void startAnother()}
-            disabled={nextConsultationState === "starting"}
-            className="output-action"
-          >
-            <Plus size={18} weight="bold" />
-            {nextConsultationState === "starting"
-              ? "Starting consultation…"
-              : "Start another consultation"}
-          </button>
-          {nextConsultationState === "failed" && (
-            <p role="alert" className="output-feedback output-feedback-error">
-              The next consultation could not be started. This completed
-              prescription is still available. Try again.
+            <p className="mt-3 text-graphite">
+              Locked. It cannot be edited.
             </p>
-          )}
-        </section>
+          </div>
+          <section
+            aria-labelledby="prescription-output-heading"
+            className="panel mt-4"
+          >
+            <div className="panel-section">
+              <h2 id="prescription-output-heading" className="section-title">
+                Use this prescription
+              </h2>
+              <div className="mt-3 grid gap-2">
+                <button
+                  type="button"
+                  onClick={printPrescription}
+                  className="btn btn-primary w-full justify-start"
+                >
+                  <Printer size={18} weight="bold" />
+                  Print prescription
+                </button>
+                <button
+                  ref={downloadButtonRef}
+                  type="button"
+                  onClick={downloadPdf}
+                  disabled={pdfState.status !== "ready"}
+                  className="btn btn-secondary w-full justify-start"
+                >
+                  <DownloadSimple size={18} weight="bold" />
+                  {pdfState.status === "preparing"
+                    ? "Preparing PDF…"
+                    : "Download PDF"}
+                </button>
+                <button
+                  type="button"
+                  onClick={sharePrescription}
+                  disabled={pdfState.status !== "ready" || sharing}
+                  className="btn btn-secondary w-full justify-start"
+                >
+                  <ShareNetwork size={18} weight="bold" />
+                  {sharing ? "Sharing prescription…" : "Share prescription"}
+                </button>
+              </div>
+              {pdfState.status === "failed" && (
+                <div role="alert" className="notice notice-error mt-3">
+                  <p>
+                    The PDF could not be prepared. The completed prescription
+                    is still available.
+                  </p>
+                  <button
+                    ref={retryPdfButtonRef}
+                    type="button"
+                    onClick={() => preparePdf(true)}
+                    className="btn btn-secondary mt-2"
+                  >
+                    <ArrowClockwise size={16} weight="bold" />
+                    Retry PDF preparation
+                  </button>
+                </div>
+              )}
+              {outputMessage && (
+                <p
+                  role={outputMessage.kind === "error" ? "alert" : "status"}
+                  className={`notice mt-3 ${outputMessage.kind === "error" ? "notice-error" : "notice-done"}`}
+                >
+                  {outputMessage.text}
+                </p>
+              )}
+            </div>
+            <section className="panel-section">
+              <button
+                ref={startAnotherRef}
+                type="button"
+                onClick={() => void startAnother()}
+                disabled={nextConsultationState === "starting"}
+                className="btn btn-secondary w-full justify-start"
+              >
+                <Plus size={18} weight="bold" />
+                {nextConsultationState === "starting"
+                  ? "Starting consultation…"
+                  : "Start another consultation"}
+              </button>
+              {nextConsultationState === "failed" && (
+                <p role="alert" className="notice notice-error mt-3">
+                  The next consultation could not be started. This completed
+                  prescription is still available. Try again.
+                </p>
+              )}
+            </section>
+            <details className="panel-section text-sm">
+              <summary className="cursor-pointer font-semibold">
+                Prescription details
+              </summary>
+              <dl className="space-y-3 py-3">
+                <div>
+                  <dt className="text-graphite">Completed</dt>
+                  <dd className="mt-1 font-semibold tabular-nums">
+                    {completedTime}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-graphite">Prescription ID</dt>
+                  <dd className="mt-1 break-all font-semibold">
+                    {snapshot.id}
+                  </dd>
+                </div>
+              </dl>
+              {linkedPriorVisit && (
+                <section
+                  aria-label="Linked prior visit"
+                  className="border-t border-rule py-3"
+                >
+                  <h3 className="font-semibold">Linked prior visit</h3>
+                  <p className="mt-2">{linkedPriorVisit.patient.name}</p>
+                  <p>
+                    {formatPriorVisitDate(linkedPriorVisit.consultationDate)}
+                  </p>
+                  <p>{linkedPriorVisit.doctorName}</p>
+                  <p className="mt-2 leading-relaxed text-graphite">
+                    {linkedPriorVisit.clinicalSummary}
+                  </p>
+                </section>
+              )}
+            </details>
+          </section>
+        </div>
+        <div className="completed-document-shell min-w-0">
+          <PrescriptionDocument
+            pages={document.pages}
+            ariaLabel="Completed prescription"
+          />
+        </div>
       </div>
-      <div className="completed-document-shell min-w-0 rounded-[30px] bg-[#123930] p-5 shadow-[0_30px_80px_rgba(21,54,47,.2)]">
-        <PrescriptionDocument
-          pages={document.pages}
-          ariaLabel="Completed prescription"
-        />
-      </div>
-    </section>
+    </div>
   );
 }
-

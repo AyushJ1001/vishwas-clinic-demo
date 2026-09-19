@@ -1060,7 +1060,7 @@ test("review lists blocking problems and takes focus to the selected field", asy
   await expect(page.getByLabel("Patient name")).toHaveValue("   ");
   const inlineProblem = page.getByText("Enter the patient's name.");
   await expect(inlineProblem).toBeVisible();
-  await expect(inlineProblem).toHaveCSS("color", "rgb(155, 73, 47)");
+  await expect(inlineProblem).toHaveCSS("color", "rgb(179, 38, 30)");
 });
 
 test("closing review restores focus to the review action", async ({ page }) => {
@@ -1240,7 +1240,7 @@ test("a reviewed prescription completes once, locks, and recovers after refresh"
     page.getByRole("article", { name: "Completed prescription" }),
   ).toContainText("Demo Patient Completion");
   await expect(page.getByLabel("Patient name")).toHaveCount(0);
-  await expect(page.getByLabel("Select doctor")).toBeDisabled();
+  await expect(page.getByLabel("Writing as")).toBeDisabled();
   await expect(
     page.getByRole("button", { name: "Review prescription" }),
   ).toHaveCount(0);
@@ -1253,7 +1253,7 @@ test("a reviewed prescription completes once, locks, and recovers after refresh"
     page.getByRole("article", { name: "Completed prescription" }),
   ).toContainText("Demo Patient Completion");
   await expect(page.getByLabel("Patient name")).toHaveCount(0);
-  await expect(page.getByLabel("Select doctor")).toBeDisabled();
+  await expect(page.getByLabel("Writing as")).toBeDisabled();
 });
 
 test("starting another consultation preserves the completed prescription and recovers from failure", async ({
@@ -1561,9 +1561,8 @@ test("medicine instructions retain visible labels and readable selected values o
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openPrescription(page, "medicine-visible-labels");
-  for (const label of ["Dose", "Duration", "Method"]) {
-    await expect(page.getByText(label, { exact: true })).toHaveCount(2);
-    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+  for (const label of ["Medicine", "Dose", "Duration", "Method"]) {
+    await expect(page.getByRole("columnheader", { name: label, exact: true })).toBeVisible();
   }
   for (const medicine of ["Paracetamol 500 mg tablet", "Levocetirizine 5 mg tablet"]) {
     await page.getByLabel(`${medicine} dose`).selectOption("As needed");
@@ -1597,7 +1596,7 @@ test("consultation controls wrap without clipping at supported breakpoints", asy
     }));
     expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
 
-    const doctor = page.getByLabel("Select doctor");
+    const doctor = page.getByLabel("Writing as");
     const doctorBox = await doctor.boundingBox();
     expect(doctorBox).not.toBeNull();
     expect(doctorBox!.x).toBeGreaterThanOrEqual(0);
@@ -1632,7 +1631,7 @@ test("consultation controls wrap without clipping at supported breakpoints", asy
   await page.setViewportSize({ width: 320, height: 700 });
   const [brandBox, doctorBox] = await Promise.all([
     page.getByRole("link", { name: /Vishwas Clinic/ }).boundingBox(),
-    page.getByLabel("Select doctor").boundingBox(),
+    page.getByLabel("Writing as").boundingBox(),
   ]);
   expect(brandBox).not.toBeNull();
   expect(doctorBox).not.toBeNull();

@@ -7,7 +7,8 @@ import type {
   SavedConsultationDraft,
 } from "./consultation-model";
 
-export const demoDraftIdStorageKey = "vishwas-clinic-demo-draft-id";
+// The key keeps its original name so drafts already open in a browser survive.
+export const draftIdStorageKey = "vishwas-clinic-demo-draft-id";
 
 export interface ConsultationDraftRepository {
   load(): Promise<SavedConsultationDraft | null>;
@@ -23,19 +24,19 @@ export interface ConsultationDraftRepository {
   ): Promise<CompleteConsultationDraftResult>;
 }
 
-function getOrCreateDemoDraftId() {
-  const savedId = window.localStorage.getItem(demoDraftIdStorageKey);
+function getOrCreateDraftId() {
+  const savedId = window.localStorage.getItem(draftIdStorageKey);
   if (savedId) return savedId;
 
   const id = `draft-${window.crypto.randomUUID()}`;
-  window.localStorage.setItem(demoDraftIdStorageKey, id);
+  window.localStorage.setItem(draftIdStorageKey, id);
   return id;
 }
 
 export function createConsultationDraftRepository(): ConsultationDraftRepository {
   // Other tabs may advance the recovery pointer without changing this editor.
   let activeDraftId: string | undefined;
-  const getActiveDraftId = () => (activeDraftId ??= getOrCreateDemoDraftId());
+  const getActiveDraftId = () => (activeDraftId ??= getOrCreateDraftId());
   const request = async <T>(url: string, init?: RequestInit) => {
     const response = await fetch(url, init);
     if (!response.ok) {
@@ -61,7 +62,7 @@ export function createConsultationDraftRepository(): ConsultationDraftRepository
         throw new Error("The next consultation could not be created.");
       }
       // Keep reopening the completed prescription until its successor is saved.
-      window.localStorage.setItem(demoDraftIdStorageKey, id);
+      window.localStorage.setItem(draftIdStorageKey, id);
       activeDraftId = id;
       return result.draft;
     },

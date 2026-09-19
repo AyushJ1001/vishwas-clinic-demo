@@ -6,7 +6,7 @@ import { diagnoses } from "../clinic-data";
 
 import { A5Document, RouteWorkspace } from "./a5-workspace";
 import { CatalogPicker } from "./catalog-picker";
-import { RouteHeader, Shell } from "./shell";
+import { PageHeader, Shell } from "./shell";
 
 export function CertificatePage() {
   const [patientName, setPatientName] = useState("");
@@ -16,11 +16,7 @@ export function CertificatePage() {
   const [isFit, setIsFit] = useState(true);
   return (
     <Shell active="certificate">
-      <RouteHeader
-        eyebrow="Medical certificate"
-        title="Review the facts. Issue the certificate."
-        copy="Treatment dates, diagnosis, rest period, and fitness status remain editable before the final A5 document is generated."
-      />
+      <div className="page pb-0"><PageHeader title="Medical certificate" /></div>
       <RouteWorkspace
         form={
           <>

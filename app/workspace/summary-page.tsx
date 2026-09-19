@@ -2,16 +2,12 @@
 
 import { ChartLineUp } from "@phosphor-icons/react";
 
-import { RouteHeader, Shell } from "./shell";
+import { PageHeader, Shell } from "./shell";
 
 export function SummaryPage() {
   return (
     <Shell active="summaries">
-      <RouteHeader
-        eyebrow="August 2026"
-        title="The clinic, clearly summarized."
-        copy="Monthly counts connect visits, documents, follow-ups, and consultation receipts without exposing patient details."
-      />
+      <div className="page pb-0"><PageHeader title="Summaries" /></div>
       <section className="mx-auto grid-flow-dense grid max-w-[1500px] grid-cols-12 gap-4 px-5 pb-40 lg:px-10">
         {[
           ["184", "Patients seen", "+12%"],

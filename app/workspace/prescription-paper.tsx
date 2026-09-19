@@ -2,7 +2,12 @@
 
 import { Pulse } from "@phosphor-icons/react";
 import Image from "next/image";
-import { useEffect, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+} from "react";
 import {
   clinicDoctors,
   clinicIdentity,
@@ -27,19 +32,14 @@ import { prescriptionTextFontFace } from "../prescription-fonts";
 export function PrescriptionPreview({ consultation }: { consultation: Consultation }) {
   const pages = createDraftPrescriptionPages(consultation);
   return (
-    <div className="rounded-[30px] bg-[#123930] p-5 text-white shadow-[0_30px_80px_rgba(21,54,47,.2)]">
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-[.18em] text-white/70">
-          Draft prescription
+    <div className="paper-sheet">
+      <p className="paper-preview-caption">
+        <b>Draft prescription</b>
+        <span>
+          A5, {pages.length} {pages.length === 1 ? "page" : "pages"}
         </span>
-        <span className="text-xs font-semibold text-white/70">
-          Review before completion
-        </span>
-      </div>
-      <PrescriptionDocument
-        pages={pages}
-        ariaLabel="Draft prescription preview"
-      />
+      </p>
+      <PrescriptionDocument pages={pages} ariaLabel="Draft prescription preview" />
     </div>
   );
 }
@@ -123,14 +123,13 @@ export function PrescriptionDocument({
   return (
     <div className="prescription-pages">
       {pages.map((page) => (
-        <div className="prescription-page-frame" key={page.number}>
-          <div className="prescription-page-scale">
+        <PageFrame key={page.number}>
             <article
               aria-label={ariaLabel}
               data-page-number={page.number}
               data-page-count={page.count}
               style={prescriptionPageStyle(page)}
-              className="document-preview prescription-page shadow-2xl"
+              className="prescription-page"
             >
               <header className="rx-letterhead">
                 <h2 className="rx-title">{page.clinic.name}</h2>
@@ -260,9 +259,40 @@ export function PrescriptionDocument({
                 </p>
               </footer>
             </article>
-          </div>
-        </div>
+        </PageFrame>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Shows a true-size A5 page scaled to the width available. Chromium 108 (the
+ * Clinic PC) cannot divide one length by another in CSS, so the scale is
+ * measured here; the stylesheet's calc() remains for printing and newer
+ * browsers.
+ */
+function PageFrame({ children }: { children: React.ReactNode }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const scaleRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    const scale = scaleRef.current;
+    if (!frame || !scale) return;
+    const fit = () => {
+      const page = scale.firstElementChild as HTMLElement | null;
+      if (!page?.offsetWidth) return;
+      scale.style.transform = `scale(${frame.clientWidth / page.offsetWidth})`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div ref={frameRef} className="prescription-page-frame">
+      <div ref={scaleRef} className="prescription-page-scale">
+        {children}
+      </div>
     </div>
   );
 }
@@ -276,7 +306,7 @@ export function PrescriptionReviewDocument({
 
   return (
     <div className="w-full min-w-0">
-      <p className="mb-3 text-center text-xs font-bold text-[#435c54]">
+      <p className="hint mb-2 text-center">
         {pages.length} A5 {pages.length === 1 ? "page" : "pages"}
       </p>
       <PrescriptionDocument

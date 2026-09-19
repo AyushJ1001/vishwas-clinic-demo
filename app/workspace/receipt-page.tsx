@@ -4,18 +4,14 @@ import { Receipt } from "@phosphor-icons/react";
 import { useState } from "react";
 
 import { A5Document, RouteWorkspace } from "./a5-workspace";
-import { RouteHeader, Shell } from "./shell";
+import { PageHeader, Shell } from "./shell";
 
 export function ReceiptPage() {
   const [amount, setAmount] = useState("600");
   const [patientName, setPatientName] = useState("");
   return (
     <Shell active="receipts">
-      <RouteHeader
-        eyebrow="Consultation payment"
-        title="Receipt, without rewriting the visit."
-        copy="Patient, doctor, clinic identity, date, and receipt number are carried forward automatically."
-      />
+      <div className="page pb-0"><PageHeader title="Receipt" /></div>
       <RouteWorkspace
         form={
           <>

@@ -19,6 +19,8 @@ export function CatalogPicker({
   value,
   onChange,
   multiple = false,
+  showSelection = true,
+  hideLabel = false,
   inputId,
   error,
 }: {
@@ -34,6 +36,9 @@ export function CatalogPicker({
   value: string | string[];
   onChange: (value: string | string[]) => void;
   multiple?: boolean;
+  showSelection?: boolean;
+  // For a picker whose section heading already names it.
+  hideLabel?: boolean;
   inputId?: string;
   error?: string;
 }) {
@@ -247,7 +252,7 @@ export function CatalogPicker({
         }
       }}
     >
-      <span className="field-label" id={labelId}>
+      <span className={hideLabel ? "sr-only" : "field-label"} id={labelId}>
         {label}
       </span>
       <span className="sr-only" id={selectionId}>
@@ -284,7 +289,7 @@ export function CatalogPicker({
             : undefined
         }
       >
-        <span className={values.length ? "" : "text-[#536760]"}>
+        <span className={values.length ? "" : "picker-placeholder"}>
           {multiple
             ? values.length
               ? `${values.length} selected`
@@ -296,7 +301,7 @@ export function CatalogPicker({
       {error && validationErrorId && (
         <FieldError id={validationErrorId}>{error}</FieldError>
       )}
-      {multiple && values.length > 0 && (
+      {multiple && showSelection && values.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
           {values.map((item, index) => (
             <button
@@ -396,6 +401,7 @@ export function CatalogPicker({
                 </p>
                 <button
                   type="button"
+                  className="btn btn-secondary"
                   onClick={() => {
                     setLoadState("loading");
                     setLoadAttempt((attempt) => attempt + 1);
@@ -514,39 +520,35 @@ export function CatalogPicker({
                   setAdding(true);
                   setSaveState("idle");
                 }}
-                className="mt-2 flex min-h-11 min-w-11 w-full items-center gap-2 rounded-xl border border-dashed border-[#b85a36]/50 bg-[#fff7f0] px-3 py-3 text-left text-sm font-semibold text-[#9b492f]"
+                className="picker-add"
               >
                 <Plus size={15} weight="bold" /> Add “{query.trim()}” as a
                 clinic term
               </button>
             )}
             {adding && (
-              <div className="mt-2 rounded-2xl border border-[#b85a36]/25 bg-[#fff7f0] p-3">
-                <p className="text-xs font-bold text-[#15362f]">
-                  Where should this term live?
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-[#536760]">
-                  Custom terms are saved for this clinic and kept distinct from
-                  the standard catalog.
-                </p>
-                <select
-                  value={selectedGroup}
-                  onChange={(event) => setSelectedGroup(event.target.value)}
-                  className="input-field mt-3"
-                  aria-label={`Category for new ${label} term`}
-                  aria-describedby={
-                    saveState === "error" ? customErrorId : undefined
-                  }
-                >
-                  {mergedGroups.map((group) => (
-                    <option key={group.group}>{group.group}</option>
-                  ))}
-                </select>
+              <div className="picker-add-form">
+                <label className="field-label">
+                  Category for “{query.trim()}”
+                  <select
+                    value={selectedGroup}
+                    onChange={(event) => setSelectedGroup(event.target.value)}
+                    className="input-field"
+                    aria-label={`Category for new ${label} term`}
+                    aria-describedby={
+                      saveState === "error" ? customErrorId : undefined
+                    }
+                  >
+                    {mergedGroups.map((group) => (
+                      <option key={group.group}>{group.group}</option>
+                    ))}
+                  </select>
+                </label>
                 <input
                   value={newGroup}
                   onChange={(event) => setNewGroup(event.target.value)}
                   placeholder="Or create a new category"
-                  className="input-field mt-2"
+                  className="input-field"
                   aria-label={`New category for ${label}`}
                   aria-describedby={
                     saveState === "error" ? customErrorId : undefined
@@ -554,7 +556,7 @@ export function CatalogPicker({
                 />
                 {saveState === "error" && (
                   <p
-                    className="mt-2 text-xs text-red-700"
+                    className="field-error"
                     id={customErrorId}
                     role="alert"
                   >
@@ -567,7 +569,7 @@ export function CatalogPicker({
                     type="button"
                     onClick={saveCustomItem}
                     disabled={saveState === "saving"}
-                    className="min-h-11 min-w-11 rounded-full bg-[#15362f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                    className="btn btn-primary"
                     aria-label={`Save ${query.trim()} to ${label} catalog`}
                   >
                     {saveState === "saving"
@@ -582,7 +584,7 @@ export function CatalogPicker({
                       setAdding(false);
                       setSaveState("idle");
                     }}
-                    className="min-h-11 min-w-11 rounded-full px-3 py-2 text-xs font-bold text-[#536760]"
+                    className="btn btn-quiet"
                   >
                     Cancel
                   </button>
@@ -595,4 +597,3 @@ export function CatalogPicker({
     </div>
   );
 }
-

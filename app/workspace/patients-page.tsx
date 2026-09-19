@@ -8,9 +8,8 @@ import {
   type PatientRecord,
 } from "../consultation-model";
 import { parsePatientImportText } from "../patient-import";
-import { describePatient } from "../patient-search";
 
-import { RouteHeader, Shell } from "./shell";
+import { PageHeader, Shell } from "./shell";
 
 export type ImportState = "idle" | "importing" | "done" | "failed";
 
@@ -56,25 +55,19 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
   return (
     <article
       aria-labelledby="patient-import-heading"
-      className="col-span-12 rounded-[30px] border border-[#15362f]/10 bg-[#fbfaf5] p-6 lg:col-span-7 lg:p-9"
+      className="panel panel-section min-w-0 lg:col-span-5"
     >
-      <p className="eyebrow">Bulk import</p>
-      <h2
-        id="patient-import-heading"
-        className="mt-2 text-3xl font-medium tracking-[-.03em]"
-      >
-        Import existing patient details
+      <h2 id="patient-import-heading" className="section-title">
+        Import from the old register
       </h2>
-      <p className="mt-3 max-w-xl text-base leading-relaxed text-[#536760]">
-        Paste rows from the clinic register, or upload a CSV or JSON export.
-        Only the name is required. Patients keep the number from the old
-        register if a number column is included; everyone else gets the next
-        number. Two patients with the same name stay separate.
+      <p className="hint mt-2">
+        Accepted columns: number, name, date of birth (dd/mm/yyyy), age,
+        gender, phone. Only name is required.
       </p>
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <label
           htmlFor={fileInputId}
-          className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#15362f] shadow-sm transition hover:bg-[#f0ece3] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#d85f39]"
+          className="btn btn-secondary cursor-pointer"
         >
           <UploadSimple size={16} weight="bold" />
           Choose CSV or JSON file
@@ -96,7 +89,7 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
         {text && (
           <button
             type="button"
-            className="min-h-11 rounded-full px-4 py-2 text-sm font-bold text-[#536760] transition hover:text-[#15362f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
+            className="btn btn-quiet"
             onClick={() => {
               setText("");
               setSummary(null);
@@ -107,12 +100,12 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
           </button>
         )}
       </div>
-      <label htmlFor="patient-import-text" className="field-label mt-6 block">
+      <label htmlFor="patient-import-text" className="field-label mt-4">
         Or paste patient rows
       </label>
       <textarea
         id="patient-import-text"
-        className="input-field min-h-40 font-mono text-sm"
+        className="input-field min-h-32 font-mono text-sm"
         value={text}
         placeholder={"number,name,date of birth,age,sex,phone"}
         onChange={(event) => {
@@ -122,19 +115,19 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
         }}
       />
       {text.trim() && (
-        <div className="mt-4 rounded-2xl border border-[#15362f]/10 bg-white p-4">
+        <div className="mt-4 border border-rule bg-paper p-3">
           {hasRows ? (
-            <p className="text-sm font-bold" role="status">
+            <p className="font-semibold" role="status">
               {parsed.rows.length} patient row
               {parsed.rows.length === 1 ? "" : "s"} ready to import.
             </p>
           ) : (
-            <p className="text-sm font-semibold text-[#9b492f]" role="status">
+            <p className="text-signal font-semibold" role="status">
               No importable patient rows were found yet.
             </p>
           )}
           {parsed.problems.length > 0 && (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[#9b492f]">
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-signal">
               {parsed.problems.map((problem, index) => (
                 <li key={index}>
                   <b>{problem.source}:</b> {problem.message}
@@ -143,33 +136,33 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
             </ul>
           )}
           {hasRows && (
-            <ul className="mt-3 divide-y divide-[#15362f]/8">
+            <ul className="mt-3 divide-y divide-rule border-t border-rule">
               {parsed.rows.slice(0, 5).map((row, index) => (
                 <li
                   key={index}
-                  className="flex flex-wrap items-baseline justify-between gap-x-4 py-2 text-sm"
+                  className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4"
                 >
-                  <span className="font-bold">{row.name}</span>
-                  <span className="text-[#536760]">
-                    {[
-                      row.number ? `No. ${row.number}` : "Next number",
-                      row.dateOfBirth
+                  <span className="min-w-0 truncate font-semibold">
+                    {row.name}
+                  </span>
+                  <span className="flex flex-wrap gap-x-3 text-graphite">
+                    <span>{row.number ? `No. ${row.number}` : "Next number"}</span>
+                    <span>
+                      {row.dateOfBirth
                         ? `Born ${formatConsultationDate(row.dateOfBirth)}`
                         : row.age
                           ? `Age ${row.age}`
-                          : "Age not given",
-                      row.sex,
-                      row.phone,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                          : "Age not given"}
+                    </span>
+                    {row.sex && <span>{row.sex}</span>}
+                    {row.phone && <span>{row.phone}</span>}
                   </span>
                 </li>
               ))}
             </ul>
           )}
           {parsed.rows.length > 5 && (
-            <p className="mt-2 text-xs text-[#536760]">
+            <p className="hint mt-2">
               …and {parsed.rows.length - 5} more.
             </p>
           )}
@@ -177,7 +170,7 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
       )}
       <button
         type="button"
-        className="primary-action mt-6 min-h-11"
+        className="btn btn-primary mt-4"
         disabled={!hasRows || importState === "importing"}
         onClick={() => void importPatients()}
       >
@@ -187,10 +180,7 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
           : `Import ${parsed.rows.length || ""} patient${parsed.rows.length === 1 ? "" : "s"}`.trimEnd()}
       </button>
       {importState === "done" && summary && (
-        <p
-          className="mt-4 rounded-2xl bg-[#eef3ec] px-4 py-3 text-sm font-bold text-[#2c5e42]"
-          role="status"
-        >
+        <p className="notice notice-done mt-4" role="status">
           {summary.imported} new patient record
           {summary.imported === 1 ? "" : "s"} saved
           {summary.updated > 0
@@ -201,10 +191,7 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
         </p>
       )}
       {importState === "failed" && (
-        <p
-          className="mt-4 rounded-2xl border border-red-800/20 bg-red-50 px-4 py-3 text-sm font-bold text-red-900"
-          role="alert"
-        >
+        <p className="notice notice-error mt-4" role="alert">
           {failureMessage}
         </p>
       )}
@@ -246,24 +233,14 @@ export function PatientDirectoryCard({ reloadKey }: { reloadKey: number }) {
   return (
     <article
       aria-labelledby="patient-directory-heading"
-      className="col-span-12 rounded-[30px] border border-[#15362f]/10 bg-[#fbfaf5] p-6 lg:p-9"
+      className="panel panel-section min-w-0 lg:col-span-7"
     >
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Directory</p>
-          <h2
-            id="patient-directory-heading"
-            className="mt-2 text-2xl font-medium tracking-[-.03em]"
-          >
-            Saved patient records
-          </h2>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#536760]">
-            These records power the patient name search on the prescription
-            form. Completed prescriptions are added here automatically.
-          </p>
-        </div>
+      <div className="panel-header items-end">
+        <h2 id="patient-directory-heading" className="section-title">
+          Saved patient records
+        </h2>
         <label className="min-w-0 flex-1 sm:max-w-xs">
-          <span className="field-label">Search by name</span>
+          <span className="field-label">Search by name, number or phone</span>
           <input
             className="input-field"
             type="search"
@@ -275,35 +252,55 @@ export function PatientDirectoryCard({ reloadKey }: { reloadKey: number }) {
         </label>
       </div>
       {state === "failed" ? (
-        <p className="mt-5 text-sm font-bold text-red-900" role="alert">
+        <p className="notice notice-error" role="alert">
           Saved patient records could not be loaded.
         </p>
       ) : state === "loading" ? (
-        <p className="mt-5 text-sm font-semibold text-[#536760]" role="status">
+        <p className="status-line" role="status">
           Loading patient records…
         </p>
       ) : patients.length === 0 ? (
-        <p className="mt-5 text-sm font-semibold text-[#536760]" role="status">
+        <p className="status-line" role="status">
           {search
             ? "No saved patient matches that name."
             : "No patient records yet. Import a list or complete a prescription to start the directory."}
         </p>
       ) : (
-        <ul className="mt-5 grid gap-x-8 sm:grid-cols-2 lg:grid-cols-3">
-          {patients.map((patient) => (
-            <li
-              key={patient.id}
-              className="flex min-w-0 items-baseline justify-between gap-4 border-b border-[#15362f]/8 py-3"
-            >
-              <span className="min-w-0 truncate text-sm font-bold">
-                {patient.name}
-              </span>
-              <span className="flex-none text-xs font-semibold text-[#536760]">
-                {describePatient(patient)}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-rule text-graphite">
+                <th className="py-2 pr-3 text-right font-medium">No.</th>
+                <th className="px-3 py-2 font-medium">Name</th>
+                <th className="px-3 py-2 font-medium">Age</th>
+                <th className="px-3 py-2 font-medium">Gender</th>
+                <th className="py-2 pl-3 font-medium">Phone</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-rule">
+              {patients.map((patient) => (
+                <tr key={patient.id}>
+                  <td className="whitespace-nowrap py-2 pr-3 text-right tabular-nums text-graphite">
+                    {patient.number ?? "Pending"}
+                  </td>
+                  <td className="px-3 py-2 font-semibold">{patient.name}</td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    {patient.age || "—"}
+                    {patient.dateOfBirth && !patient.dateOfBirthEstimated && (
+                      <span className="hint ml-2 inline">
+                        born {formatConsultationDate(patient.dateOfBirth)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">{patient.sex}</td>
+                  <td className="whitespace-nowrap py-2 pl-3">
+                    {patient.phone || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </article>
   );
@@ -313,16 +310,15 @@ export function PatientsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   return (
     <Shell active="patients">
-      <RouteHeader
-        eyebrow="Patient records"
-        title="Bring the register. The clinic remembers."
-        copy="Import an existing patient list once, then pick any saved patient by typing their name on the prescription form."
-      />
-      <section className="mx-auto grid max-w-[1500px] grid-cols-12 items-start gap-5 px-5 pb-40 lg:px-10">
-        <PatientImportCard onImported={() => setReloadKey((key) => key + 1)} />
-        <PatientDirectoryCard reloadKey={reloadKey} />
-      </section>
+      <div className="page">
+        <PageHeader title="Patients" />
+        <section className="grid items-start gap-4 lg:grid-cols-12">
+          <PatientDirectoryCard reloadKey={reloadKey} />
+          <PatientImportCard
+            onImported={() => setReloadKey((key) => key + 1)}
+          />
+        </section>
+      </div>
     </Shell>
   );
 }
-

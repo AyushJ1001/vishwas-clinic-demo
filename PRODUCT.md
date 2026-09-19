@@ -4,7 +4,7 @@
 
 ## Platform
 
-web
+desktop (Windows 8.1 Clinic PC, offline) and web (phone, through the Cloud copy)
 
 ## Users
 
@@ -12,9 +12,7 @@ The primary users are Dr. Makarand Vishwas Apte and Dr. Gauri Makarand Apte. The
 
 ## Product Purpose
 
-Vishwas Clinic is a working frontend demonstration of the clinic's consultation and document workflows. It lets the doctors fill a prescription form, see the resulting document, prepare consultation receipts and medical certificates, and review clinic summaries.
-
-The current goal is a complete, production-ready frontend whose data layer can later be replaced with or connected to the real application backend. Until then, the project should keep a small demo backend for sample patient information and other demonstrations that need persistence.
+Vishwas Clinic is the clinic's working consultation and document system. The doctors fill a prescription and see the A5 document as it will print, issue receipts and medical certificates, keep patient records with clinic patient numbers, and review monthly counts. The Clinic PC holds the master records and works without internet (ADR 0001, 0002); a phone can issue prescriptions and certificates through the Cloud copy (ADR 0003).
 
 ## Positioning
 
@@ -25,16 +23,14 @@ The product keeps the clinic's familiar prescription workflow while adding built
 - The main setting is an active consultation on a clinic desktop.
 - The secondary setting is occasional phone use away from the clinic, including preparing and sending an urgent prescription.
 - The current workflows cover prescriptions, consultation receipts, medical certificates, and monthly summaries.
-- Prescriptions use searchable catalogs for complaints, findings, diagnoses, medicines, advice, and investigations. The demo also allows clinic-specific catalog entries.
+- Prescriptions use searchable catalogs for complaints, findings, diagnoses, medicines, advice, and investigations. Doctors can add clinic catalog entries when a term is missing.
 
 ## Capabilities and Constraints
 
-- The frontend should be complete enough to transfer into the real app or connect to its database without a visual rebuild.
-- The current backend is demo infrastructure, not the production patient record system.
-- All patient information is fictional demo data.
+- The Clinic PC is an old Windows 8.1 computer running the app as an Electron 22 (Chromium 108) desktop app, with records in a local SQLite database. Everything except sending and cloud backup works offline.
+- Patient records are real clinical records. They are backed up daily, on close, and to encrypted USB drives (ADR 0004).
 - The interface is English-only for now.
-- Desktop is the primary device class, but the complete workflow must remain usable on mobile.
-- Production privacy, security, data retention, authentication, and regulatory requirements are open decisions for later phases.
+- Desktop is the primary device class, but the prescription workflow must remain usable on a phone.
 
 ## Brand Commitments
 
@@ -42,22 +38,19 @@ The Vishwas Clinic name and all doctor-related information in the project are re
 
 ## Evidence on Hand
 
-- Real clinic and doctor details appear in `app/ClinicApp.tsx`.
-- The current interaction model and document workflows are implemented in `app/ClinicApp.tsx`.
-- Seeded clinical catalogs are stored in `app/clinic-data.ts`.
-- Clinic-specific catalog persistence is demonstrated through the D1-backed API in `app/api/catalog/route.ts` and `db/catalog.ts`.
-- Patient names, visit details, and other patient information in the interface are demo data and must not be presented as real records.
-- Dashboard totals and trends have not been confirmed as real clinic evidence and must not be used as factual claims.
+- Real clinic and doctor details are in `app/clinic-facts.ts`.
+- The requirements for each document are in the doctors' requirements document (A5 layout, patient number, numbered receipts, unnumbered certificates, monthly summary).
+- Seeded clinical catalogs are in `app/clinic-data.ts`; clinic catalog entries are stored alongside the records.
+- Summary figures must be counted from the records, never estimated or invented.
 
 ## Product Principles
 
 - Keep the doctors inside one clear workflow during a consultation.
 - Reduce repeated entry by carrying confirmed visit information into related documents.
 - Preserve the clinic's real identity and doctor details exactly.
-- Keep demo data and infrastructure easy to replace when the real backend is introduced.
 - Design desktop-first interactions that remain practical for urgent phone use.
 - Put predictability and speed ahead of visual flourish. The clinic is busy and patients are waiting, so avoid decorative motion and make every action look finished the moment it happens, while keeping the interface tidy.
 
 ## Accessibility & Inclusion
 
-No formal accessibility standard has been set for the demo phase. Mobile-friendly behavior and a good desktop experience are required. More specific accessibility needs remain open for later phases.
+Screens are checked against WCAG 2.1 AA with axe in the tests. Everything is usable by keyboard, and targets are at least 44 px on the phone.

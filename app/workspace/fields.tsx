@@ -1,11 +1,8 @@
 "use client";
 
-
-
-
 export function FieldError({ id, children }: { id: string; children: string }) {
   return (
-    <span id={id} className="mt-2 block text-sm font-semibold text-[#9b492f]">
+    <span id={id} className="field-error">
       {children}
     </span>
   );
@@ -30,9 +27,7 @@ export function UnitInput({
 }) {
   return (
     <label>
-      <span className="field-label mb-1.5">
-        {label}
-      </span>
+      <span className="field-label">{label}</span>
       <span className="unit-input-wrap">
         <input
           id={inputId}
@@ -71,9 +66,7 @@ export function BloodPressureInput({
 }) {
   return (
     <label>
-      <span className="field-label mb-1.5">
-        BP
-      </span>
+      <span className="field-label">BP</span>
       <span className="bp-input-wrap">
         <input
           id="systolic-blood-pressure"
@@ -102,8 +95,10 @@ export function BloodPressureInput({
             diastolicError ? "diastolic-blood-pressure-error" : undefined
           }
         />
+        <span className="unit-suffix" aria-hidden="true">
+          mmHg
+        </span>
       </span>
-      <span className="mt-1 block text-xs text-[#536760]">mmHg</span>
       {systolicError && (
         <FieldError id="systolic-blood-pressure-error">
           {systolicError}
@@ -141,14 +136,14 @@ export function MedicineInstructionSelect({
     <div className="min-w-0">
       <label
         htmlFor={id}
-        className="mb-2 block text-sm font-semibold text-[#536760]"
+        className="field-label medicine-cell-label"
       >
         {fieldLabel}
       </label>
       <select
         id={id}
         aria-label={label}
-        className="input-field min-h-11 py-2 text-sm"
+        className="input-field"
         value={value}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? `${id}-error` : undefined}
@@ -165,4 +160,3 @@ export function MedicineInstructionSelect({
     </div>
   );
 }
-
