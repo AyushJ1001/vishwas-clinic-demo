@@ -1,0 +1,54 @@
+name: Clinic PC installers
+
+# Builds the Windows installers for the Clinic PC (ADR 0001) and runs the
+# desktop tests against the packaged Electron 22 runtime.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "app/**"
+      - "db/**"
+      - "desktop/**"
+      - "tests/desktop/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/desktop-windows.yml"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: |
+          npm ci --ignore-scripts
+          npm run setup
+
+      - name: Build the desktop app
+        run: npm run desktop:build
+
+      - name: Run desktop tests
+        run: npm run test:desktop
+
+      - name: Package installers
+        working-directory: desktop
+        run: npm run package:windows
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clinic-pc-installers
+          path: desktop/release/*.exe
+          if-no-files-found: error
