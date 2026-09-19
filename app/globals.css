@@ -641,12 +641,17 @@ button {
   max-width: 100%;
   gap: 1rem;
 }
+/*
+ * The prescription is laid out on a true A5 sheet (148mm x 210mm, the same
+ * size as the PDF and the printed page) and scaled down to fit narrower
+ * containers. At 100% browser zoom and full width it measures exactly A5.
+ */
 .prescription-page-frame {
   position: relative;
   container-type: inline-size;
   min-width: 0;
   width: 100%;
-  max-width: 470px;
+  max-width: 148mm;
   aspect-ratio: 148 / 210;
   margin-inline: auto;
   overflow: hidden;
@@ -654,20 +659,121 @@ button {
 .prescription-page-scale {
   position: absolute;
   inset: 0 auto auto 0;
-  width: 470px;
-  height: calc(470px * 210 / 148);
-  transform: scale(calc(100cqw / 470px));
+  width: 148mm;
+  height: 210mm;
+  transform: scale(calc(100cqw / 148mm));
   transform-origin: top left;
 }
 .prescription-page {
   display: flex;
   flex-direction: column;
-  width: 470px;
-  height: calc(470px * 210 / 148);
+  width: 148mm;
+  height: 210mm;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  background: #fffef9;
+  padding: var(--rx-margin);
+  color: #202c29;
+  font-family:
+    "Prescription Noto Sans", "Prescription Noto Sans Devanagari",
+    "Prescription Noto Sans SC", sans-serif;
+  font-size: var(--rx-font-size);
+  font-weight: 400;
+  line-height: var(--rx-line-height);
+}
+.prescription-page b,
+.prescription-page .font-bold {
+  font-weight: 700;
+}
+.prescription-page p {
+  margin: 0;
+}
+.rx-title {
+  margin: 0 0 var(--rx-gap);
+  text-align: center;
+  font-size: var(--rx-title-size);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+}
+/* Every ruled block keeps the same gap between its text and the rule. */
+.rx-block {
+  border-bottom: var(--rx-rule) solid #202c29;
+  padding-bottom: var(--rx-gap);
+  margin-bottom: var(--rx-gap);
+}
+.rx-doctor {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rx-gap);
+}
+.rx-registration {
+  font-size: var(--rx-registration-size);
+}
+.rx-clinic {
+  text-align: center;
+  text-wrap: balance;
+}
+.rx-patient-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--rx-gap);
+}
+.rx-section + .rx-section {
+  margin-top: var(--rx-gap);
+}
+.rx-muted {
+  color: #65716d;
+}
+.prescription-columns {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: 32% 68%;
+  overflow: hidden;
+}
+.rx-left-column,
+.rx-medicine-column {
+  min-height: 0;
+  overflow: hidden;
+}
+.rx-left-column {
+  border-right: var(--rx-rule) solid #202c29;
+  padding-right: var(--rx-gap);
+}
+.rx-left-column ul {
+  margin: 0;
+  padding-left: 1em;
+  list-style: none;
+}
+.rx-left-column li {
+  position: relative;
+}
+.rx-left-column li::before {
+  position: absolute;
+  left: -1em;
+  content: "•";
+}
+.rx-medicine-column {
+  padding-left: calc(var(--rx-gap) * 2);
+}
+.rx-medicine-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  height: calc(var(--rx-line-height) * 2);
+}
+.prescription-page .rx-logo {
+  width: calc(var(--rx-line-height) * 2 - var(--rx-gap));
+  height: calc(var(--rx-line-height) * 2 - var(--rx-gap));
+}
+.rx-footer {
+  border-top: var(--rx-rule) solid #202c29;
+  padding-top: var(--rx-gap);
+  text-align: center;
 }
 .prescription-page-number {
-  margin-top: 0.2rem;
   color: #65716d;
 }
 .output-action {
@@ -778,7 +884,6 @@ button {
     max-width: none !important;
     min-height: 210mm;
     overflow: hidden !important;
-    padding: 10mm !important;
     break-after: page;
     border-radius: 0 !important;
     box-shadow: none !important;

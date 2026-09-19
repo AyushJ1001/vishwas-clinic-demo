@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -66,8 +73,10 @@ import {
   createPrescriptionDocumentPages,
   formatPrescriptionVitals,
   prescriptionFooter,
+  prescriptionTypography,
   type PrescriptionDocumentPage,
 } from "./prescription-document";
+import { prescriptionTextFontFace } from "./prescription-fonts";
 import {
   downloadPrescriptionPdf,
   preparePrescriptionPdf,
@@ -1550,10 +1559,10 @@ function PrescriptionPage() {
                 )}
               </label>
               <label>
-                <span className="field-label">Sex</span>
+                <span className="field-label">Gender</span>
                 <select
                   id="patient-sex"
-                  aria-label="Sex"
+                  aria-label="Gender"
                   className="input-field"
                   value={consultation.patient.sex}
                   aria-invalid={Boolean(errorFor("patient-sex"))}
@@ -1937,6 +1946,18 @@ function createDraftPrescriptionPages(consultation: Consultation) {
   });
 }
 
+function prescriptionPageStyle({ text }: PrescriptionDocumentPage) {
+  return {
+    "--rx-margin": `${prescriptionTypography.pageMargin}pt`,
+    "--rx-font-size": `${text.fontSize}pt`,
+    "--rx-line-height": `${text.lineHeight}pt`,
+    "--rx-title-size": `${prescriptionTypography.titleSize}pt`,
+    "--rx-registration-size": `${text.registrationSize}pt`,
+    "--rx-rule": `${prescriptionTypography.ruleThickness}pt`,
+    "--rx-gap": `${text.ruleGap}pt`,
+  } as CSSProperties;
+}
+
 function PrescriptionDocument({
   pages,
   ariaLabel,
@@ -1957,6 +1978,9 @@ function PrescriptionDocument({
       style.textContent = fontFace;
       document.head.appendChild(style);
     };
+    void addFontFace("prescription-text-font-face", async () => ({
+      fontFace: prescriptionTextFontFace,
+    }));
     const pageText = JSON.stringify(pages);
     if (/[\u0900-\u097f]/u.test(pageText)) {
       void addFontFace("prescription-devanagari-font-face", () =>
@@ -1987,136 +2011,139 @@ function PrescriptionDocument({
               aria-label={ariaLabel}
               data-page-number={page.number}
               data-page-count={page.count}
-              className="document-preview prescription-page overflow-hidden bg-[#fffef9] p-8 text-[#202c29] shadow-2xl"
+              style={prescriptionPageStyle(page)}
+              className="document-preview prescription-page shadow-2xl"
             >
-            <header className="text-center">
-              <h2 className="text-2xl font-black tracking-[.04em]">
-                {page.clinic.name}
-              </h2>
-              <div className="mt-2 grid grid-cols-[1fr_auto] items-start border-b-2 border-[#202c29] pb-2 text-left">
-                <div>
-                  <b className="text-[11px]">{page.doctor.name}</b>
-                  <p className="text-[8px]">
-                    {page.doctor.qualifications} · {page.doctor.registration}
-                  </p>
-                  {page.doctor.mobile && (
-                    <b className="text-[9px]">
-                      Mobile: {page.doctor.mobile}
-                    </b>
-                  )}
-                  {page.doctor.specialty && (
-                    <p className="text-[7px]">{page.doctor.specialty}</p>
-                  )}
+              <header className="rx-letterhead">
+                <h2 className="rx-title">{page.clinic.name}</h2>
+                <div className="rx-doctor rx-block">
+                  <div>
+                    <b>{page.doctor.name}</b>
+                    <p>
+                      {page.doctor.qualifications} ·{" "}
+                      <span className="rx-registration">
+                        {page.doctor.registration}
+                      </span>
+                    </p>
+                    {page.doctor.mobile && (
+                      <p>
+                        <b>Mobile: {page.doctor.mobile}</b>
+                      </p>
+                    )}
+                    {page.doctor.specialty && <p>{page.doctor.specialty}</p>}
+                  </div>
+                  <Pulse size={24} weight="duotone" aria-hidden="true" />
                 </div>
-                <Pulse size={27} weight="duotone" />
+                <div className="rx-clinic rx-block">
+                  <p>{page.clinic.address}</p>
+                  <p>{page.clinic.hours}</p>
+                  <p>{page.clinic.services}</p>
+                </div>
+              </header>
+              <div className="rx-patient rx-block">
+                <p>
+                  Name: <b>{page.patient.name || "—"}</b>
+                </p>
+                <p className="rx-patient-row">
+                  <span>
+                    Age/Gender: {page.patient.age || "—"}/
+                    {page.patient.sex || "—"}
+                  </span>
+                  <span>Date: {page.consultationDate}</span>
+                </p>
+                <p>{formatPrescriptionVitals(page.vitals).join(" · ")}</p>
               </div>
-              <div className="space-y-1 border-b-2 py-2 text-[7px]">
-                <p>{page.clinic.address}</p>
-                <p>{page.clinic.hours}</p>
-                <p>{page.clinic.services}</p>
-              </div>
-            </header>
-            <div className="mt-3 grid grid-cols-[1.4fr_.6fr_.6fr] text-[8px]">
-              <span>
-                Name: <b>{page.patient.name || "—"}</b>
-              </span>
-              <span>
-                Age/Sex: {page.patient.age || "—"}/{page.patient.sex || "—"}
-              </span>
-              <span>Date: {page.consultationDate}</span>
-            </div>
-            <div className="mt-3 grid grid-cols-5 text-[8px]">
-              {formatPrescriptionVitals(page.vitals).map((vital) => (
-                <span key={vital}>{vital}</span>
-              ))}
-            </div>
-            <div className="prescription-clinical mt-2 border-b pb-2 text-[11px] leading-[1.2]">
-              {page.clinical.map((chunk) => (
-                <section
-                  key={`${chunk.key}-${chunk.continued}`}
-                  className="mb-1"
-                >
-                  <b>
-                    {chunk.label}
-                    {chunk.continued ? " (continued)" : ""}:
-                  </b>
-                  {chunk.lines.map((line, index) => (
-                    <span key={`${line.text}-${index}`} className="block">
-                      {line.text}{" "}
-                    </span>
-                  ))}
-                </section>
-              ))}
-            </div>
-            {(page.leftColumn.length > 0 || page.medicines.length > 0) && (
-              <div className="prescription-columns grid min-h-0 flex-1 grid-cols-[32%_68%] overflow-hidden">
-                <aside className="min-h-0 overflow-hidden border-r px-1 py-3 text-[11px] leading-[1.2]">
-                  {page.leftColumn.map((section) => (
+              {page.clinical.length > 0 && (
+                <div className="prescription-clinical rx-block">
+                  {page.clinical.map((chunk) => (
                     <section
-                      key={section.key}
-                      className="prescription-list-section"
+                      key={`${chunk.key}-${chunk.continued}`}
+                      className="rx-section"
                     >
-                      <b>{section.title}</b>
-                      <ul className="mt-1 list-disc pl-3">
-                        {section.chunks.map((chunk) => (
-                          <li key={chunk.key}>
-                            {chunk.lines.map((line, index) => (
-                              <span
-                                key={`${line.text}-${index}`}
-                                className="block"
-                              >
-                                {line.text}{" "}
-                              </span>
-                            ))}
-                          </li>
-                        ))}
-                      </ul>
+                      {chunk.continued && (
+                        <b className="block">{chunk.label} (continued):</b>
+                      )}
+                      {chunk.lines.map((line, index) => (
+                        <span key={`${line.text}-${index}`} className="block">
+                          {index === 0 && !chunk.continued && (
+                            <b>{chunk.label}: </b>
+                          )}
+                          {line.text}{" "}
+                        </span>
+                      ))}
                     </section>
                   ))}
-                </aside>
-                <section className="min-h-0 overflow-hidden p-3 text-[11px] leading-[1.2]">
-                  <div className="flex items-start justify-between">
-                    <Image
-                      src="/icons/prescription-fill.svg"
-                      alt="Prescription"
-                      width={34}
-                      height={34}
-                      className="rx-logo"
-                    />
-                    <span className="text-[6px]">
-                      Read the instructions carefully
-                    </span>
-                  </div>
-                  <div className="prescription-medicines mt-2">
-                    {page.medicines.map((medicine) => (
-                      <div key={medicine.key}>
-                        {medicine.continued && (
-                          <b>
-                            {medicine.medicineNumber}. Medicine continued
-                          </b>
-                        )}
-                        {medicine.lines.map((line, index) => (
-                          <span
-                            key={`${line.text}-${index}`}
-                            className={`block ${line.tone === "strong" ? "font-bold" : line.tone === "muted" ? "text-xs text-[#65716d]" : ""}`}
-                          >
-                            {line.text}{" "}
-                          </span>
-                        ))}
-                      </div>
+                </div>
+              )}
+              {(page.leftColumn.length > 0 || page.medicines.length > 0) && (
+                <div className="prescription-columns">
+                  <aside className="rx-left-column">
+                    {page.leftColumn.map((section) => (
+                      <section
+                        key={section.key}
+                        className="prescription-list-section rx-section"
+                      >
+                        <b>{section.title}</b>
+                        <ul>
+                          {section.chunks.map((chunk) => (
+                            <li key={chunk.key}>
+                              {chunk.lines.map((line, index) => (
+                                <span
+                                  key={`${line.text}-${index}`}
+                                  className="block"
+                                >
+                                  {line.text}{" "}
+                                </span>
+                              ))}
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
                     ))}
-                  </div>
-                </section>
-              </div>
-            )}
-            <footer className="border-t pt-2 text-center text-[6px]">
-              {page.footer.map((line) => (
-                <p key={line}>{line}</p>
-              ))}
-              <p className="prescription-page-number">
-                Page {page.number} of {page.count}
-              </p>
-            </footer>
+                  </aside>
+                  <section className="rx-medicine-column">
+                    {page.medicines.length > 0 && (
+                      <div className="rx-medicine-heading">
+                        <Image
+                          src="/icons/prescription-fill.svg"
+                          alt="Prescription"
+                          width={34}
+                          height={34}
+                          className="rx-logo"
+                        />
+                        <span>Read the instructions carefully</span>
+                      </div>
+                    )}
+                    <div className="prescription-medicines">
+                      {page.medicines.map((medicine) => (
+                        <div key={medicine.key} className="rx-section">
+                          {medicine.continued && (
+                            <b className="block">
+                              {medicine.medicineNumber}. Medicine continued
+                            </b>
+                          )}
+                          {medicine.lines.map((line, index) => (
+                            <span
+                              key={`${line.text}-${index}`}
+                              className={`block ${line.tone === "strong" ? "font-bold" : line.tone === "muted" ? "rx-muted" : ""}`}
+                            >
+                              {line.text}{" "}
+                            </span>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              )}
+              <footer className="rx-footer">
+                {page.footer.map((line) => (
+                  <p key={line}>{line}</p>
+                ))}
+                <p className="prescription-page-number">
+                  Page {page.number} of {page.count}
+                </p>
+              </footer>
             </article>
           </div>
         </div>
@@ -2416,9 +2443,13 @@ function CompletedPrescriptionView({
       await onStartAnother();
     } catch {
       setNextConsultationState("failed");
-      window.requestAnimationFrame(() => startAnotherRef.current?.focus());
     }
   };
+  // Focus once the failed state has re-enabled the button; focusing a
+  // still-disabled button is silently ignored.
+  useEffect(() => {
+    if (nextConsultationState === "failed") startAnotherRef.current?.focus();
+  }, [nextConsultationState]);
   const document = useMemo(
     () => createCompletedPrescriptionDocument(snapshot),
     [snapshot],

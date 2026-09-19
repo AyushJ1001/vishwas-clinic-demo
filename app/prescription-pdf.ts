@@ -12,7 +12,11 @@ import type {
   CompletedPrescriptionDocument,
   PrescriptionDocumentPage,
 } from "./prescription-document";
-import { formatPrescriptionVitals } from "./prescription-document";
+import {
+  formatPrescriptionVitals,
+  prescriptionTypography,
+  type PrescriptionTextScale,
+} from "./prescription-document";
 
 const ink = rgb(0.125, 0.173, 0.161);
 const mutedInk = rgb(0.36, 0.43, 0.41);
@@ -129,6 +133,30 @@ function wrapText(
   return lines;
 }
 
+// Mirrors CSS `text-wrap: balance`: keep the same line count but even out the
+// line lengths so a centered block does not end with a single stray word.
+function balancedWrapText(
+  text: string,
+  preferred: PDFFont,
+  fonts: PdfFonts,
+  size: number,
+  maxWidth: number,
+) {
+  const lineCount = wrapText(text, preferred, fonts, size, maxWidth).length;
+  if (lineCount < 2) return wrapText(text, preferred, fonts, size, maxWidth);
+  let narrow = 0;
+  let wide = maxWidth;
+  for (let step = 0; step < 12; step += 1) {
+    const width = (narrow + wide) / 2;
+    if (wrapText(text, preferred, fonts, size, width).length > lineCount) {
+      narrow = width;
+    } else {
+      wide = width;
+    }
+  }
+  return wrapText(text, preferred, fonts, size, wide);
+}
+
 function drawText(
   page: PDFPage,
   text: string,
@@ -146,287 +174,277 @@ function drawText(
   });
 }
 
-function drawWrappedText({
-  page,
-  text,
-  x,
-  y,
-  width,
-  font,
-  fonts,
-  size,
-  lineHeight = size * 1.35,
-  color = ink,
-}: {
-  page: PDFPage;
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  font: PDFFont;
-  fonts: PdfFonts;
-  size: number;
-  lineHeight?: number;
-  color?: ReturnType<typeof rgb>;
-}) {
-  const lines = wrapText(text, font, fonts, size, width);
-  lines.forEach((line, index) => {
-    drawText(page, line, x, y - index * lineHeight, size, font, fonts, color);
-  });
-  return y - lines.length * lineHeight;
+const {
+  pageWidth,
+  pageHeight,
+  pageMargin: margin,
+  titleSize,
+  ruleThickness,
+  leftColumnShare,
+} = prescriptionTypography;
+
+// Noto Sans ascent and descent, in em, used to place a baseline inside a line
+// box the same way the browser does for the on-screen preview.
+const notoAscent = 1.069;
+const notoDescent = 0.293;
+
+function baselineOffset(size: number, boxHeight: number) {
+  return (
+    (boxHeight - size * (notoAscent + notoDescent)) / 2 + size * notoAscent
+  );
 }
 
 function drawPlannedLines(
   page: PDFPage,
   lines: PrescriptionDocumentPage["clinical"][number]["lines"],
   x: number,
-  y: number,
+  top: number,
   fonts: PdfFonts,
+  { fontSize, lineHeight }: PrescriptionTextScale,
 ) {
-  const lineHeight = 9.5;
   lines.forEach((line, index) => {
-    const preferred = line.tone === "strong" ? fonts.bold : fonts.regular;
-    const size = line.tone === "muted" ? 6.5 : 7.2;
     drawText(
       page,
       line.text,
       x,
-      y - index * lineHeight,
-      size,
-      preferred,
+      top - index * lineHeight - baselineOffset(fontSize, lineHeight),
+      fontSize,
+      line.tone === "strong" ? fonts.bold : fonts.regular,
       fonts,
       line.tone === "muted" ? mutedInk : ink,
     );
   });
-  return y - lines.length * lineHeight;
+  return top - lines.length * lineHeight;
 }
 
 function drawPage(
   pdfPage: PDFPage,
   documentPage: PrescriptionDocumentPage,
-  font: PDFFont,
-  bold: PDFFont,
   fonts: PdfFonts,
 ) {
-  const [pageWidth] = PageSizes.A5;
-  let y = 570;
-  const titleSize = 15;
+  const { text: scale } = documentPage;
+  const { fontSize, lineHeight, ruleGap: gap, registrationSize } = scale;
+  const bulletIndent = fontSize;
+  const left = margin;
+  const right = pageWidth - margin;
+  const contentWidth = right - left;
+  const baseline = baselineOffset(fontSize, lineHeight);
+  const { regular, bold } = fonts;
+  let top = pageHeight - margin;
+
+  const line = (
+    text: string,
+    preferred: PDFFont,
+    align: "left" | "center" | "right" = "left",
+    x: number = left,
+    color = ink,
+  ) => {
+    const width = textWidth(text, preferred, fonts, fontSize);
+    const start =
+      align === "center"
+        ? (pageWidth - width) / 2
+        : align === "right"
+          ? right - width
+          : x;
+    drawText(
+      pdfPage,
+      text,
+      start,
+      top - baseline,
+      fontSize,
+      preferred,
+      fonts,
+      color,
+    );
+  };
+  const wrapped = (
+    text: string,
+    preferred: PDFFont,
+    align: "left" | "center" = "left",
+  ) => {
+    const wrap = align === "center" ? balancedWrapText : wrapText;
+    wrap(text, preferred, fonts, fontSize, contentWidth).forEach((row) => {
+      line(row, preferred, align);
+      top -= lineHeight;
+    });
+  };
+  const rule = () => {
+    top -= gap;
+    pdfPage.drawLine({
+      start: { x: left, y: top - ruleThickness / 2 },
+      end: { x: right, y: top - ruleThickness / 2 },
+      thickness: ruleThickness,
+      color: ink,
+    });
+    top -= ruleThickness + gap;
+  };
+
+  const titleBox = titleSize * 1.2;
   const titleWidth = bold.widthOfTextAtSize(
     documentPage.clinic.name,
     titleSize,
   );
   pdfPage.drawText(documentPage.clinic.name, {
     x: (pageWidth - titleWidth) / 2,
-    y,
+    y: top - baselineOffset(titleSize, titleBox),
     size: titleSize,
     font: bold,
     color: ink,
   });
-  y -= 22;
-  pdfPage.drawText(documentPage.doctor.name, {
-    x: 24,
-    y,
-    size: 9,
-    font: bold,
-    color: ink,
-  });
-  y -= 11;
-  pdfPage.drawText(
-    `${documentPage.doctor.qualifications} · ${documentPage.doctor.registration}`,
-    { x: 24, y, size: 7, font, color: ink },
-  );
-  if (documentPage.doctor.mobile) {
-    pdfPage.drawText(`Mobile: ${documentPage.doctor.mobile}`, {
-      x: 300,
-      y: y + 11,
-      size: 7,
-      font: bold,
-      color: ink,
-    });
-  }
-  if (documentPage.doctor.specialty) {
-    y = drawWrappedText({
-      page: pdfPage,
-      text: documentPage.doctor.specialty,
-      x: 24,
-      y: y - 10,
-      width: 371,
-      font,
-      fonts,
-      size: 6.5,
-    });
-  } else {
-    y -= 11;
-  }
-  y = drawWrappedText({
-    page: pdfPage,
-    text: documentPage.clinic.address,
-    x: 24,
-    y,
-    width: 371,
-    font,
-    fonts,
-    size: 6.5,
-  });
-  y = drawWrappedText({
-    page: pdfPage,
-    text: documentPage.clinic.hours,
-    x: 24,
-    y,
-    width: 371,
-    font,
-    fonts,
-    size: 6.5,
-  });
-  y = drawWrappedText({
-    page: pdfPage,
-    text: documentPage.clinic.services,
-    x: 24,
-    y,
-    width: 371,
-    font,
-    fonts,
-    size: 6.5,
-  });
-  y -= 2;
-  pdfPage.drawLine({
-    start: { x: 24, y },
-    end: { x: 395, y },
-    thickness: 1.2,
-    color: ink,
-  });
+  top -= titleBox + gap;
 
-  y -= 15;
-  y = drawWrappedText({
-    page: pdfPage,
-    text: `Name: ${documentPage.patient.name || "—"}`,
-    x: 24,
-    y,
-    width: 371,
-    font,
-    fonts,
-    size: 7.2,
-  });
-  y -= 2;
-  const demographics = `Age/Sex: ${documentPage.patient.age || "—"}/${documentPage.patient.sex || "—"}`;
-  drawText(pdfPage, demographics, 24, y, 7.2, font, fonts, ink);
-  const date = `Date: ${documentPage.consultationDate}`;
+  line(documentPage.doctor.name, bold);
+  top -= lineHeight;
+  const qualifications = `${documentPage.doctor.qualifications} · `;
+  line(qualifications, regular);
   drawText(
     pdfPage,
-    date,
-    395 - textWidth(date, font, fonts, 7.2),
-    y,
-    7.2,
-    font,
+    documentPage.doctor.registration,
+    left + textWidth(qualifications, regular, fonts, fontSize),
+    top - baseline,
+    registrationSize,
+    regular,
     fonts,
     ink,
   );
-  y -= 16;
-  y = drawWrappedText({
-    page: pdfPage,
-    text: formatPrescriptionVitals(documentPage.vitals).join(" · "),
-    x: 24,
-    y,
-    width: 371,
-    font,
-    fonts,
-    size: 7,
-  });
-  y -= 5;
-  documentPage.clinical.forEach((chunk) => {
-    const label = `${chunk.label}${chunk.continued ? " (continued)" : ""}:`;
-    drawText(pdfPage, label, 24, y, 7.2, bold, fonts, ink);
-    y = drawPlannedLines(pdfPage, chunk.lines, 24, y - 9.5, fonts) - 9.5;
-  });
-  pdfPage.drawLine({
-    start: { x: 24, y },
-    end: { x: 395, y },
-    thickness: 0.7,
-    color: ink,
-  });
+  top -= lineHeight;
+  if (documentPage.doctor.mobile) {
+    line(`Mobile: ${documentPage.doctor.mobile}`, bold);
+    top -= lineHeight;
+  }
+  if (documentPage.doctor.specialty) {
+    wrapped(documentPage.doctor.specialty, regular);
+  }
+  rule();
 
-  const columnsTop = y - 14;
-  let leftY = columnsTop;
-  documentPage.leftColumn.forEach((section) => {
-    drawText(pdfPage, section.title, 24, leftY, 8, bold, fonts, ink);
-    leftY -= 12;
-    section.chunks.forEach((chunk) => {
-      chunk.lines.forEach((line, lineIndex) => {
-        drawText(
-          pdfPage,
-          `${lineIndex === 0 ? "• " : "  "}${line.text}`,
-          24,
-          leftY,
-          7,
-          font,
-          fonts,
-          ink,
+  wrapped(documentPage.clinic.address, regular, "center");
+  wrapped(documentPage.clinic.hours, regular, "center");
+  wrapped(documentPage.clinic.services, regular, "center");
+  rule();
+
+  const nameLabel = "Name: ";
+  const nameIndent = textWidth(nameLabel, regular, fonts, fontSize);
+  line(nameLabel, regular);
+  wrapText(
+    documentPage.patient.name || "—",
+    bold,
+    fonts,
+    fontSize,
+    contentWidth - nameIndent,
+  ).forEach((row) => {
+    line(row, bold, "left", left + nameIndent);
+    top -= lineHeight;
+  });
+  line(
+    `Age/Gender: ${documentPage.patient.age || "—"}/${documentPage.patient.sex || "—"}`,
+    regular,
+  );
+  line(`Date: ${documentPage.consultationDate}`, regular, "right");
+  top -= lineHeight;
+  wrapped(formatPrescriptionVitals(documentPage.vitals).join(" · "), regular);
+  rule();
+
+  if (documentPage.clinical.length) {
+    documentPage.clinical.forEach((chunk, index) => {
+      if (index > 0) top -= gap;
+      let lines = chunk.lines;
+      if (chunk.continued) {
+        line(`${chunk.label} (continued):`, bold);
+        top -= lineHeight;
+      } else {
+        const label = `${chunk.label}: `;
+        line(label, bold);
+        line(
+          lines[0].text,
+          regular,
+          "left",
+          left + textWidth(label, bold, fonts, fontSize),
         );
-        leftY -= 9.5;
-      });
-      leftY -= 9.5;
+        top -= lineHeight;
+        lines = lines.slice(1);
+      }
+      top = drawPlannedLines(pdfPage, lines, left, top, fonts, scale);
+    });
+    rule();
+  }
+
+  const footerRows = [...documentPage.footer];
+  const footerTop =
+    margin + (footerRows.length + 1) * lineHeight + gap + ruleThickness;
+  const columnsTop = top;
+  const divider = left + contentWidth * leftColumnShare;
+
+  documentPage.leftColumn.forEach((section, index) => {
+    if (index > 0) top -= gap;
+    line(section.title, bold);
+    top -= lineHeight;
+    section.chunks.forEach((chunk) => {
+      line("•", regular);
+      top = drawPlannedLines(
+        pdfPage,
+        chunk.lines,
+        left + bulletIndent,
+        top,
+        fonts,
+        scale,
+      );
     });
   });
 
   pdfPage.drawLine({
-    start: { x: 153, y: columnsTop + 8 },
-    end: { x: 153, y: 58 },
-    thickness: 0.5,
-    color: mutedInk,
+    start: { x: divider, y: columnsTop },
+    end: { x: divider, y: footerTop },
+    thickness: ruleThickness,
+    color: ink,
   });
+
+  const medicineLeft = divider + gap * 2;
+  top = columnsTop;
   if (documentPage.medicines.length) {
-    drawText(pdfPage, "Rx  Medicines", 166, columnsTop, 9, bold, fonts, ink);
+    line("Rx  Medicines", bold, "left", medicineLeft);
+    line("Read the instructions carefully", regular, "right");
+    top -= lineHeight * 2;
   }
-  let medicineY = columnsTop - 16;
-  documentPage.medicines.forEach((medicine) => {
+  documentPage.medicines.forEach((medicine, index) => {
+    if (index > 0) top -= gap;
     if (medicine.continued) {
-      drawText(
-        pdfPage,
+      line(
         `${medicine.medicineNumber}. Medicine continued`,
-        166,
-        medicineY,
-        7.2,
         bold,
-        fonts,
-        ink,
+        "left",
+        medicineLeft,
       );
-      medicineY -= 9.5;
+      top -= lineHeight;
     }
-    medicineY = drawPlannedLines(
+    top = drawPlannedLines(
       pdfPage,
       medicine.lines,
-      166,
-      medicineY,
+      medicineLeft,
+      top,
       fonts,
+      scale,
     );
-    medicineY -= 9.5;
   });
 
+  top = footerTop;
   pdfPage.drawLine({
-    start: { x: 24, y: 51 },
-    end: { x: 395, y: 51 },
-    thickness: 0.7,
+    start: { x: left, y: top - ruleThickness / 2 },
+    end: { x: right, y: top - ruleThickness / 2 },
+    thickness: ruleThickness,
     color: ink,
   });
-  documentPage.footer.forEach((line, index) => {
-    const size = 6;
-    const width = font.widthOfTextAtSize(line, size);
-    pdfPage.drawText(line, {
-      x: (pageWidth - width) / 2,
-      y: 40 - index * 8,
-      size,
-      font,
-      color: ink,
-    });
+  top -= ruleThickness + gap;
+  footerRows.forEach((row) => {
+    line(row, regular, "center");
+    top -= lineHeight;
   });
-  const pageLabel = `Page ${documentPage.number} of ${documentPage.count}`;
-  pdfPage.drawText(pageLabel, {
-    x: 395 - font.widthOfTextAtSize(pageLabel, 5.5),
-    y: 18,
-    size: 5.5,
-    font,
-    color: mutedInk,
-  });
+  line(
+    `Page ${documentPage.number} of ${documentPage.count}`,
+    regular,
+    "center",
+    left,
+    mutedInk,
+  );
 }
 
 async function fetchFont(url: string) {
@@ -482,7 +500,7 @@ export async function generatePrescriptionPdf(
   };
   document.pages.forEach((documentPage) => {
     const page = pdf.addPage(PageSizes.A5);
-    drawPage(page, documentPage, fonts.regular, fonts.bold, fonts);
+    drawPage(page, documentPage, fonts);
   });
   return pdf.save({ useObjectStreams: false });
 }
