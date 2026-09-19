@@ -56,6 +56,7 @@ The Vishwas Clinic name and all doctor-related information in the project are re
 - Preserve the clinic's real identity and doctor details exactly.
 - Keep demo data and infrastructure easy to replace when the real backend is introduced.
 - Design desktop-first interactions that remain practical for urgent phone use.
+- Put predictability and speed ahead of visual flourish. The clinic is busy and patients are waiting, so avoid decorative motion and make every action look finished the moment it happens, while keeping the interface tidy.
 
 ## Accessibility & Inclusion
 
