@@ -17,6 +17,9 @@ const rendererRoot = path.join(__dirname, "renderer");
 const dailyBackupCheckMs = 60 * 60 * 1000;
 
 app.setName("Vishwas Clinic");
+// Dates read day first (19/09/2026) whatever language Windows is set to.
+// (Chromium ships an en-GB locale, not en-IN; both put the day first.)
+app.commandLine.appendSwitch("lang", "en-GB");
 
 protocol.registerSchemesAsPrivileged([
   {

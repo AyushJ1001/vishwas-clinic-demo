@@ -27,6 +27,8 @@ test("runs on Chromium 108 and never reaches the network", async () => {
   });
 
   expect(await app.evaluate(() => process.versions.chrome)).toMatch(/^108\./);
+  // Date fields follow the app's locale: day first, as the clinic writes them.
+  expect(await window.evaluate(() => navigator.language)).toBe("en-GB");
   await expect(window.getByRole("status")).toContainText("Saved", {
     timeout: 15_000,
   });
@@ -75,7 +77,7 @@ test("a fresh Clinic PC starts empty and numbers its first patient 1", async () 
   await window.getByRole("radio", { name: "New prescription" }).check();
   await window.getByLabel("Patient name").fill("Test Patient माधुरी देशमुख");
   await window.keyboard.press("Escape");
-  await window.getByLabel("Age").fill("41");
+  await window.getByLabel("Age", { exact: true }).fill("41");
   for (const [field, item] of [
     ["Major complaints", "Dry cough"],
     ["Examination findings", "Throat congestion"],
