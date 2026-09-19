@@ -15,6 +15,7 @@ import type {
 import {
   formatPrescriptionVitals,
   prescriptionTypography,
+  type PrescriptionTextScale,
 } from "./prescription-document";
 
 const ink = rgb(0.125, 0.173, 0.161);
@@ -174,15 +175,12 @@ function drawText(
 }
 
 const {
+  pageWidth,
+  pageHeight,
   pageMargin: margin,
-  fontSize,
-  lineHeight,
   titleSize,
-  registrationSize,
   ruleThickness,
-  ruleGap: gap,
   leftColumnShare,
-  bulletIndent,
 } = prescriptionTypography;
 
 // Noto Sans ascent and descent, in em, used to place a baseline inside a line
@@ -202,6 +200,7 @@ function drawPlannedLines(
   x: number,
   top: number,
   fonts: PdfFonts,
+  { fontSize, lineHeight }: PrescriptionTextScale,
 ) {
   lines.forEach((line, index) => {
     drawText(
@@ -223,7 +222,9 @@ function drawPage(
   documentPage: PrescriptionDocumentPage,
   fonts: PdfFonts,
 ) {
-  const { pageWidth, pageHeight } = prescriptionTypography;
+  const { text: scale } = documentPage;
+  const { fontSize, lineHeight, ruleGap: gap, registrationSize } = scale;
+  const bulletIndent = fontSize;
   const left = margin;
   const right = pageWidth - margin;
   const contentWidth = right - left;
@@ -362,7 +363,7 @@ function drawPage(
         top -= lineHeight;
         lines = lines.slice(1);
       }
-      top = drawPlannedLines(pdfPage, lines, left, top, fonts);
+      top = drawPlannedLines(pdfPage, lines, left, top, fonts, scale);
     });
     rule();
   }
@@ -385,6 +386,7 @@ function drawPage(
         left + bulletIndent,
         top,
         fonts,
+        scale,
       );
     });
   });
@@ -414,7 +416,14 @@ function drawPage(
       );
       top -= lineHeight;
     }
-    top = drawPlannedLines(pdfPage, medicine.lines, medicineLeft, top, fonts);
+    top = drawPlannedLines(
+      pdfPage,
+      medicine.lines,
+      medicineLeft,
+      top,
+      fonts,
+      scale,
+    );
   });
 
   top = footerTop;

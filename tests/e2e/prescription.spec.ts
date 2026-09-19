@@ -152,7 +152,7 @@ test("an exactly full A5 prescription remains one page in review and completion"
 }) => {
   // After the letterhead and three one-line clinical sections, eighteen
   // one-line advice items plus the empty investigations row fill the left
-  // column exactly; a nineteenth item would start a second page.
+  // column exactly at full 9pt text; a nineteenth would make it step down.
   const exactFitAdvice = [
     "one",
     "two",
@@ -197,6 +197,9 @@ test("an exactly full A5 prescription remains one page in review and completion"
       );
     });
   expect(lastAdviceClipping).toBeLessThanOrEqual(0);
+  await expect(
+    review.getByRole("article", { name: "Prescription under review" }),
+  ).toHaveCSS("font-size", "12px");
 
   await review.getByRole("button", { name: "Complete prescription" }).click();
   await expect(
@@ -281,15 +284,89 @@ test("supported-script glyphs stay inside the DOM columns and PDF media box", as
   expect(extractedLatin).toBe(adversarialLatin);
 });
 
+test("eight medicines with full clinical notes still fit on one A5 page", async ({
+  page,
+  request,
+}) => {
+  const medicines = [
+    ["Paracetamol 650 mg tablet", "1–0–1", "5 days", "After food"],
+    ["Azithromycin 500 mg tablet", "1–0–0", "3 days", "After food"],
+    ["Pantoprazole 40 mg tablet", "1–0–0", "7 days", "Before food"],
+    ["Levocetirizine 5 mg tablet", "0–0–1", "5 days", "At bedtime"],
+    ["Montelukast 10 mg tablet", "0–0–1", "10 days", "At bedtime"],
+    ["Metformin 500 mg tablet", "1–0–1", "Until review", "After food"],
+    ["Budesonide–formoterol inhaler", "1–0–1", "14 days", "As directed"],
+    ["ORS low-osmolarity sachet", "As needed", "3 days", "With water"],
+  ].map(([name, dose, duration, method]) => ({
+    name,
+    dose,
+    duration,
+    method,
+  }));
+  await openSavedConsultation(page, request, "eight-medicines", {
+    ...validPaginationConsultation(),
+    doctorName: "Dr. Gauri Makarand Apte",
+    complaints: [
+      "Low-grade fever for three days",
+      "Dry cough worse at night",
+      "Sore throat",
+      "Body ache",
+    ],
+    examinationFindings: ["Throat congestion", "Mild bilateral wheeze"],
+    advice: [
+      "Warm saline gargles",
+      "Maintain hydration",
+      "Steam inhalation twice daily",
+    ],
+    investigations: ["CBC", "Chest X-ray PA view"],
+    medicines,
+  });
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  await expect(review.getByText("1 A5 page", { exact: true })).toBeVisible();
+  const reviewed = review.getByRole("article", {
+    name: "Prescription under review",
+  });
+  await expect(reviewed).toContainText("8. ORS low-osmolarity sachet");
+  const clipping = await reviewed.evaluate((article) =>
+    [
+      ...article.querySelectorAll(
+        ".prescription-clinical, .rx-left-column, .rx-medicine-column",
+      ),
+    ].map((region) => region.scrollHeight - region.clientHeight),
+  );
+  expect(Math.max(...clipping)).toBeLessThanOrEqual(0);
+  const fontSize = await reviewed.evaluate((article) =>
+    Number.parseFloat(getComputedStyle(article).fontSize),
+  );
+  // Text steps down together from 9pt, but never below 7.5pt (10px).
+  expect(fontSize).toBeLessThan(12);
+  expect(fontSize).toBeGreaterThanOrEqual(10);
+
+  await review.getByRole("button", { name: "Complete prescription" }).click();
+  await expect(
+    page.getByRole("article", { name: "Completed prescription" }),
+  ).toHaveCount(1);
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PDF" }).click();
+  const path = await (await downloadEvent).path();
+  const pdf = await getDocument({
+    data: new Uint8Array(await readFile(path!)),
+  }).promise;
+  expect(pdf.numPages).toBe(1);
+});
+
 test("overflow keeps identical two-page breaks and content across mobile review, completion, print, and PDF", async ({
   page,
   request,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  // Enough advice that even the smallest text step cannot fit one page, so
+  // the prescription stays at full size and breaks onto exactly two pages.
   const advice = Array.from(
-    { length: 8 },
-    (_, index) =>
-      `Overflow advice ${index + 1}: drink measured fluids and record symptoms twice daily`,
+    { length: 18 },
+    (_, index) => `Overflow advice ${index + 1}: drink measured fluids`,
   );
   const consultation = {
     ...validPaginationConsultation(),

@@ -18,16 +18,28 @@ export const prescriptionTypography = {
   pageWidth: 419.53,
   pageHeight: 595.28,
   pageMargin: 24,
-  fontSize: 9,
-  lineHeight: 12,
   titleSize: 16,
-  registrationSize: 7,
   ruleThickness: 0.75,
-  ruleGap: 5,
   leftColumnShare: 0.32,
-  bulletIndent: 9,
   headerIconWidth: 18,
 } as const;
+
+export type PrescriptionTextScale = {
+  fontSize: number;
+  lineHeight: number;
+  ruleGap: number;
+  registrationSize: number;
+};
+
+// One text size is used for the whole prescription. It starts at 9pt and
+// steps down together with line and rule spacing only when that keeps the
+// prescription on a single page (up to about eight medicines).
+export const prescriptionTextScales: readonly PrescriptionTextScale[] = [
+  { fontSize: 9, lineHeight: 12, ruleGap: 5, registrationSize: 7 },
+  { fontSize: 8.5, lineHeight: 11, ruleGap: 4.5, registrationSize: 6.75 },
+  { fontSize: 8, lineHeight: 10, ruleGap: 4, registrationSize: 6.5 },
+  { fontSize: 7.5, lineHeight: 9.5, ruleGap: 3.5, registrationSize: 6 },
+];
 
 export const emptyPrescriptionValue = "—";
 export const emptyPrescriptionList = "None entered";
@@ -91,6 +103,7 @@ export type PrescriptionDocumentPage = {
   leftColumn: readonly PrescriptionListSection[];
   medicines: readonly PrescriptionMedicineChunk[];
   footer: typeof prescriptionFooter;
+  text: PrescriptionTextScale;
 };
 
 export type PrescriptionDocumentSource = {
@@ -125,40 +138,43 @@ const {
   pageWidth,
   pageHeight,
   pageMargin,
-  fontSize,
-  lineHeight,
   titleSize,
   ruleThickness,
-  ruleGap,
   leftColumnShare,
-  bulletIndent,
   headerIconWidth,
 } = prescriptionTypography;
 
 const contentWidth = pageWidth - pageMargin * 2;
-// Wrapping uses a deliberately generous glyph estimate; this extra margin
-// keeps planned lines from ever re-wrapping in the browser or overflowing in
-// the PDF.
+// Glyph widths are rounded up and bold is measured separately; this extra
+// margin keeps planned lines from ever re-wrapping in the browser or
+// overflowing in the PDF.
 const wrapSafety = 0.95;
 
-function columnMeasure(width: number) {
-  return (width * wrapSafety) / fontSize;
+type PageLayout = ReturnType<typeof createPageLayout>;
+
+function createPageLayout(text: PrescriptionTextScale) {
+  const { fontSize, lineHeight, ruleGap } = text;
+  const columnMeasure = (width: number) => (width * wrapSafety) / fontSize;
+  return {
+    text,
+    lineHeight,
+    ruleGap,
+    measures: {
+      fullWidth: columnMeasure(contentWidth),
+      doctor: columnMeasure(contentWidth - headerIconWidth - ruleGap),
+      // The bullet indent is one em.
+      leftColumn: columnMeasure(
+        contentWidth * leftColumnShare - ruleGap - fontSize,
+      ),
+      medicineColumn: columnMeasure(
+        contentWidth * (1 - leftColumnShare) - ruleGap * 2,
+      ),
+    },
+    // Vertical costs, in points, matching how the preview and PDF draw them.
+    ruledBlockCost: ruleGap * 2 + ruleThickness,
+    minimumColumnsHeight: lineHeight * 6,
+  };
 }
-
-const measures = {
-  fullWidth: columnMeasure(contentWidth),
-  doctor: columnMeasure(contentWidth - headerIconWidth - ruleGap),
-  leftColumn: columnMeasure(
-    contentWidth * leftColumnShare - ruleGap - bulletIndent,
-  ),
-  medicineColumn: columnMeasure(
-    contentWidth * (1 - leftColumnShare) - ruleGap * 2,
-  ),
-} as const;
-
-// Vertical costs, in points, matching how the preview and PDF draw each part.
-const ruledBlockCost = ruleGap * 2 + ruleThickness;
-const minimumColumnsHeight = lineHeight * 6;
 
 type PendingChunk = {
   key: string;
@@ -301,7 +317,11 @@ function wrappedLineCount(
 
 // The letterhead, patient details, and footer repeat on every page; whatever
 // height remains is the space available for clinical notes and the columns.
-function pageBodyCapacity(source: PrescriptionDocumentSource) {
+function pageBodyCapacity(
+  source: PrescriptionDocumentSource,
+  layout: PageLayout,
+) {
+  const { lineHeight, ruleGap, measures, ruledBlockCost } = layout;
   const doctorLines =
     2 +
     (source.doctor.mobile ? 1 : 0) +
@@ -341,6 +361,7 @@ function takePendingChunk<TPending extends PendingChunk>(
   available: number,
   maximum: number,
   overhead: number,
+  lineHeight: number,
 ) {
   const remainingLines = pending.lines.length - pending.cursor;
   const wholeCost = remainingLines * lineHeight + overhead;
@@ -366,6 +387,7 @@ function paginateClinical(
   queue: PendingChunk[],
   available: number,
   maximum: number,
+  { lineHeight, ruleGap, ruledBlockCost }: PageLayout,
 ) {
   const chunks: PrescriptionClinicalChunk[] = [];
   let used = 0;
@@ -380,6 +402,7 @@ function paginateClinical(
       available - used,
       maximum,
       overhead,
+      lineHeight,
     );
     if (!result) break;
     chunks.push({
@@ -398,6 +421,7 @@ function paginateLeftColumn(
   queue: PendingListChunk[],
   available: number,
   maximum: number,
+  { lineHeight, ruleGap }: PageLayout,
 ) {
   const sections: MutableListSection[] = [];
   let used = 0;
@@ -414,6 +438,7 @@ function paginateLeftColumn(
       available - used,
       maximum,
       sectionOverhead,
+      lineHeight,
     );
     if (!result) break;
     if (!activeSection || activeSection.key !== pending.section) {
@@ -439,6 +464,7 @@ function paginateMedicines(
   queue: PendingMedicineChunk[],
   available: number,
   maximum: number,
+  { lineHeight, ruleGap }: PageLayout,
 ) {
   const chunks: PrescriptionMedicineChunk[] = [];
   let used = 0;
@@ -453,6 +479,7 @@ function paginateMedicines(
       available - used,
       maximum,
       overhead,
+      lineHeight,
     );
     if (!result) break;
     chunks.push({
@@ -473,32 +500,37 @@ function clinicalQueueEntry(
   key: PrescriptionClinicalChunk["key"],
   label: string,
   text: string,
+  measure: number,
 ): PendingChunk {
   const lines = wrapMeasuredText(
     text,
-    measures.fullWidth,
+    measure,
     "regular",
     measuredWidth(`${label}: `, "bold"),
   ).map((line) => ({ text: line, tone: "normal" as const }));
   return { key, label, lines, cursor: 0 };
 }
 
-function buildQueues(source: PrescriptionDocumentSource) {
+function buildQueues(source: PrescriptionDocumentSource, layout: PageLayout) {
+  const { measures } = layout;
   const clinical: PendingChunk[] = [
     clinicalQueueEntry(
       "complaints",
       "Major complaints",
       source.complaints.join(", "),
+      measures.fullWidth,
     ),
     clinicalQueueEntry(
       "examination",
       "Examination findings",
       source.examinationFindings.join(", "),
+      measures.fullWidth,
     ),
     clinicalQueueEntry(
       "diagnosis",
       "Provisional diagnosis",
       source.provisionalDiagnosis,
+      measures.fullWidth,
     ),
   ];
   const left: PendingListChunk[] = [];
@@ -542,29 +574,41 @@ function buildQueues(source: PrescriptionDocumentSource) {
   return { clinical, left, medicines };
 }
 
-export function createPrescriptionDocumentPages(
-  source: PrescriptionDocumentSource,
-): readonly PrescriptionDocumentPage[] {
-  const queues = buildQueues(source);
-  const capacity = Math.max(minimumColumnsHeight * 2, pageBodyCapacity(source));
+function paginate(source: PrescriptionDocumentSource, layout: PageLayout) {
+  const queues = buildQueues(source, layout);
+  const capacity = Math.max(
+    layout.minimumColumnsHeight * 2,
+    pageBodyCapacity(source, layout),
+  );
   const pageContents: Array<
     Pick<PrescriptionDocumentPage, "clinical" | "leftColumn" | "medicines">
   > = [];
 
   do {
-    const clinical = paginateClinical(queues.clinical, capacity, capacity);
+    const clinical = paginateClinical(
+      queues.clinical,
+      capacity,
+      capacity,
+      layout,
+    );
     const remainingAfterClinical = hasPending(queues.clinical)
       ? 0
       : capacity - clinical.used;
     const columnsAvailable =
-      remainingAfterClinical >= minimumColumnsHeight
+      remainingAfterClinical >= layout.minimumColumnsHeight
         ? remainingAfterClinical
         : 0;
-    const left = paginateLeftColumn(queues.left, columnsAvailable, capacity);
+    const left = paginateLeftColumn(
+      queues.left,
+      columnsAvailable,
+      capacity,
+      layout,
+    );
     const medicines = paginateMedicines(
       queues.medicines,
       columnsAvailable,
       capacity,
+      layout,
     );
     const madeProgress =
       clinical.used > 0 || left.used > 0 || medicines.used > 0;
@@ -581,6 +625,28 @@ export function createPrescriptionDocumentPages(
     hasPending(queues.left) ||
     hasPending(queues.medicines)
   );
+  return pageContents;
+}
+
+export function createPrescriptionDocumentPages(
+  source: PrescriptionDocumentSource,
+): readonly PrescriptionDocumentPage[] {
+  // Use the largest text that fits everything on one page. Content too long
+  // for one page even at the smallest step stays at full size and paginates.
+  const [fullSize] = prescriptionTextScales;
+  let text = fullSize;
+  let pageContents = paginate(source, createPageLayout(fullSize));
+  for (const scale of prescriptionTextScales.slice(1)) {
+    if (pageContents.length === 1) break;
+    const candidate = paginate(source, createPageLayout(scale));
+    if (candidate.length === 1) {
+      text = scale;
+      pageContents = candidate;
+    }
+  }
+  if (pageContents.length > 1 && text !== fullSize) {
+    pageContents = paginate(source, createPageLayout(fullSize));
+  }
 
   const count = pageContents.length;
   return pageContents.map((content, index) => ({
@@ -593,6 +659,7 @@ export function createPrescriptionDocumentPages(
     vitals: source.vitals,
     ...content,
     footer: source.footer,
+    text,
   }));
 }
 
@@ -630,6 +697,7 @@ function freezePage(page: PrescriptionDocumentPage) {
   Object.freeze(page.leftColumn);
   Object.freeze(page.medicines);
   Object.freeze(page.footer);
+  Object.freeze(page.text);
   return Object.freeze(page);
 }
 

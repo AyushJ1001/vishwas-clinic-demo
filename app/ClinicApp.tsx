@@ -1885,15 +1885,17 @@ function createDraftPrescriptionPages(consultation: Consultation) {
   });
 }
 
-const prescriptionPageStyle = {
-  "--rx-margin": `${prescriptionTypography.pageMargin}pt`,
-  "--rx-font-size": `${prescriptionTypography.fontSize}pt`,
-  "--rx-line-height": `${prescriptionTypography.lineHeight}pt`,
-  "--rx-title-size": `${prescriptionTypography.titleSize}pt`,
-  "--rx-registration-size": `${prescriptionTypography.registrationSize}pt`,
-  "--rx-rule": `${prescriptionTypography.ruleThickness}pt`,
-  "--rx-gap": `${prescriptionTypography.ruleGap}pt`,
-} as CSSProperties;
+function prescriptionPageStyle({ text }: PrescriptionDocumentPage) {
+  return {
+    "--rx-margin": `${prescriptionTypography.pageMargin}pt`,
+    "--rx-font-size": `${text.fontSize}pt`,
+    "--rx-line-height": `${text.lineHeight}pt`,
+    "--rx-title-size": `${prescriptionTypography.titleSize}pt`,
+    "--rx-registration-size": `${text.registrationSize}pt`,
+    "--rx-rule": `${prescriptionTypography.ruleThickness}pt`,
+    "--rx-gap": `${text.ruleGap}pt`,
+  } as CSSProperties;
+}
 
 function PrescriptionDocument({
   pages,
@@ -1948,7 +1950,7 @@ function PrescriptionDocument({
               aria-label={ariaLabel}
               data-page-number={page.number}
               data-page-count={page.count}
-              style={prescriptionPageStyle}
+              style={prescriptionPageStyle(page)}
               className="document-preview prescription-page shadow-2xl"
             >
               <header className="rx-letterhead">
@@ -2380,9 +2382,13 @@ function CompletedPrescriptionView({
       await onStartAnother();
     } catch {
       setNextConsultationState("failed");
-      window.requestAnimationFrame(() => startAnotherRef.current?.focus());
     }
   };
+  // Focus once the failed state has re-enabled the button; focusing a
+  // still-disabled button is silently ignored.
+  useEffect(() => {
+    if (nextConsultationState === "failed") startAnotherRef.current?.focus();
+  }, [nextConsultationState]);
   const document = useMemo(
     () => createCompletedPrescriptionDocument(snapshot),
     [snapshot],
