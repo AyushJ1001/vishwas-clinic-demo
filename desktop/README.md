@@ -26,3 +26,5 @@ npm run test:desktop      # Playwright tests against the built app
 ```
 
 Windows installers (64-bit and 32-bit) are built by the "Clinic PC installers" GitHub Actions workflow. To build them on Windows yourself, run `npm run package:windows` from `desktop/` after `desktop:build`. On Linux, building the installers needs Wine.
+
+To test an installed copy instead of the dev build, set `CLINIC_PC_EXECUTABLE` to its `Vishwas Clinic.exe` (per-user installs go to `%LOCALAPPDATA%\Programs\vishwas-clinic-desktop`) and run `npm run test:desktop`.
