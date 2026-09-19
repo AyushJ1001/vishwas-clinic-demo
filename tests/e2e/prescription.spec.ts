@@ -2519,7 +2519,7 @@ test("leaving while changes are unsaved warns before discarding work", async ({
     await dialog.dismiss();
   });
   await page
-    .getByRole("link", { name: "Receipts", exact: true })
+    .getByRole("link", { name: "Certificates", exact: true })
     .first()
     .click();
   await warning;

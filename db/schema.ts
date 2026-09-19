@@ -73,3 +73,37 @@ export const patientRecords = sqliteTable(
     uniqueIndex("idx_patient_records_source_draft").on(table.sourceDraftId),
   ],
 );
+
+// Issued documents are immutable snapshots. Receipt numbers are assigned by
+// the Clinic PC when the row is inserted; the UUID supplied by the client
+// makes a retried issue request idempotent.
+export const receipts = sqliteTable(
+  "receipts",
+  {
+    id: text("id").primaryKey(),
+    receiptNumber: integer("receipt_number").notNull(),
+    patientId: text("patient_id").notNull(),
+    doctorName: text("doctor_name").notNull(),
+    issuedOn: text("issued_on").notNull(),
+    amountPaise: integer("amount_paise").notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_receipts_number").on(table.receiptNumber),
+    index("idx_receipts_issued_on").on(table.issuedOn),
+  ],
+);
+
+export const medicalCertificates = sqliteTable(
+  "medical_certificates",
+  {
+    id: text("id").primaryKey(),
+    patientId: text("patient_id").notNull(),
+    doctorName: text("doctor_name").notNull(),
+    issuedOn: text("issued_on").notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("idx_medical_certificates_issued_on").on(table.issuedOn)],
+);

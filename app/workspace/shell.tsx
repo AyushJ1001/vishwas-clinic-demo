@@ -22,7 +22,7 @@ export const allRoutes: {
 }[] = [
   { href: "/", label: "Prescription", key: "prescription" },
   { href: "/patients", label: "Patients", key: "patients" },
-  { href: "/receipts", label: "Receipts", key: "receipts" },
+  { href: "/receipts", label: "Receipts", key: "receipts", clinicPcOnly: true },
   { href: "/medical-certificate", label: "Certificates", key: "certificate" },
   { href: "/summaries", label: "Summaries", key: "summaries" },
   { href: "/backups", label: "Backups", key: "backups", clinicPcOnly: true },

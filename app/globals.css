@@ -1193,6 +1193,116 @@ select.input-field {
 .prescription-page-number {
   color: #65716d;
 }
+
+/* ---------- Receipts and medical certificates ---------- */
+
+.issued-document-page {
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+.issued-document-title {
+  margin: 8mm 0 7mm;
+  border-block: var(--rx-rule) solid var(--color-ink);
+  padding-block: 3mm;
+  text-align: center;
+  font-size: 14pt;
+  font-weight: 700;
+}
+.issued-document-meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4mm;
+  margin: 0;
+}
+.issued-document-meta-four {
+  grid-template-columns: repeat(4, 1fr);
+}
+.issued-document-meta div {
+  min-width: 0;
+}
+.issued-document-meta dt {
+  color: var(--color-graphite);
+  font-size: 8pt;
+}
+.issued-document-meta dd {
+  margin: 1mm 0 0;
+  font-weight: 700;
+}
+.issued-document-statement {
+  margin-top: 14mm !important;
+  font-size: 11pt;
+  line-height: 1.9;
+}
+.issued-treatment-duration {
+  margin-top: 5mm !important;
+}
+.issued-document-followup {
+  margin-top: 6mm !important;
+}
+.issued-amount {
+  display: grid;
+  gap: 2mm;
+  margin-top: 10mm;
+  border: var(--rx-rule) solid var(--color-ink);
+  padding: 4mm;
+  text-align: center;
+}
+.issued-amount b {
+  font-size: 16pt;
+}
+.issued-signature {
+  display: grid;
+  gap: 8mm;
+  margin-top: auto;
+  margin-left: auto;
+  min-width: 55mm;
+  border-top: var(--rx-rule) solid var(--color-ink);
+  padding-top: 2mm;
+  text-align: center;
+}
+.issued-signature span {
+  color: var(--color-graphite);
+  font-size: 8pt;
+}
+.document-register {
+  width: 100%;
+  border-collapse: collapse;
+}
+.document-register th,
+.document-register td {
+  border-top: 1px solid var(--color-rule);
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  vertical-align: middle;
+}
+.document-register th {
+  color: var(--color-graphite);
+  font-size: 13px;
+  font-weight: 500;
+}
+.document-register tbody tr:first-child td {
+  border-top-color: var(--color-rule);
+}
+.document-register .amount-cell {
+  text-align: right;
+}
+.summary-table td,
+.summary-table th {
+  text-align: right;
+}
+.summary-table td:first-child,
+.summary-table th:first-child {
+  text-align: left;
+}
+@media (max-width: 767px) {
+  .document-register-wrap {
+    overflow-x: auto;
+  }
+  .document-register {
+    min-width: 720px;
+  }
+}
 @media print {
   @page {
     size: A5 portrait;

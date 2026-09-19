@@ -2,8 +2,12 @@ import * as catalogRoute from "../../app/api/catalog/route";
 import * as consultationDraftRoute from "../../app/api/consultation-drafts/[id]/route";
 import * as completeConsultationDraftRoute from "../../app/api/consultation-drafts/[id]/complete/route";
 import * as importPatientsRoute from "../../app/api/patients/import/route";
+import * as patientRoute from "../../app/api/patients/[id]/route";
 import * as patientsRoute from "../../app/api/patients/route";
 import * as priorVisitsRoute from "../../app/api/prior-visits/route";
+import * as receiptsRoute from "../../app/api/receipts/route";
+import * as medicalCertificatesRoute from "../../app/api/medical-certificates/route";
+import * as summariesRoute from "../../app/api/summaries/route";
 
 // Each route declares its own params shape, so handlers are called with
 // params matched from the path below.
@@ -32,9 +36,17 @@ const localRoutes: {
     params: ["id"],
     module: consultationDraftRoute,
   },
+  { pattern: /^\/api\/medical-certificates$/, module: medicalCertificatesRoute },
   { pattern: /^\/api\/patients\/import$/, module: importPatientsRoute },
+  {
+    pattern: /^\/api\/patients\/([^/]+)$/,
+    params: ["id"],
+    module: patientRoute,
+  },
   { pattern: /^\/api\/patients$/, module: patientsRoute },
   { pattern: /^\/api\/prior-visits$/, module: priorVisitsRoute },
+  { pattern: /^\/api\/receipts$/, module: receiptsRoute },
+  { pattern: /^\/api\/summaries$/, module: summariesRoute },
 ];
 
 function jsonError(error: string, status: number) {
