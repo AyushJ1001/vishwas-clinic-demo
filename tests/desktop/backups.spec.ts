@@ -4,24 +4,42 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { launchClinicPc, openPage } from "./clinic-pc";
 
+// Set CLINIC_TEST_USB_DRIVE to a real removable drive's root (for example
+// "D:\\") to let the app find it itself; its "Vishwas Clinic Backups" folder
+// is emptied before and after each test. Otherwise a folder stands in for it.
+const realUsbDrive = process.env.CLINIC_TEST_USB_DRIVE;
+const driveName = realUsbDrive ? `(${realUsbDrive.slice(0, 2)})` : "CLINIC-USB";
 let root: string;
 let usbDrive: string;
 
+function clearRealUsbBackups() {
+  if (realUsbDrive) {
+    rmSync(path.join(realUsbDrive, "Vishwas Clinic Backups"), { recursive: true, force: true });
+  }
+}
+
 test.beforeEach(() => {
   root = mkdtempSync(path.join(tmpdir(), "clinic-backups-"));
-  usbDrive = path.join(root, "CLINIC-USB");
-  mkdirSync(usbDrive);
+  usbDrive = realUsbDrive ?? path.join(root, "CLINIC-USB");
+  if (!realUsbDrive) mkdirSync(usbDrive);
+  clearRealUsbBackups();
 });
 
 test.afterEach(() => {
   rmSync(root, { recursive: true, force: true });
+  clearRealUsbBackups();
 });
 
 function clinicPc(dataName: string) {
-  return launchClinicPc(path.join(root, dataName), {
-    CLINIC_REMOVABLE_DRIVES: usbDrive,
-  });
+  return launchClinicPc(
+    path.join(root, dataName),
+    realUsbDrive ? {} : { CLINIC_REMOVABLE_DRIVES: usbDrive },
+  );
 }
+
+const escapedDriveName = driveName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const backUpButton = new RegExp(`^Back up to .*${escapedDriveName}`);
+const usbList = new RegExp(`^Backups on .*${escapedDriveName}`);
 
 async function importPatient(window: Page, name: string) {
   await window.goto("clinic://app/patients");
@@ -70,11 +88,11 @@ test("a locked USB backup restores the records it was taken with", async () => {
 
   await window.goto("clinic://app/backups");
   await expect(
-    window.getByRole("button", { name: "Back up to CLINIC-USB" }),
+    window.getByRole("button", { name: backUpButton }),
   ).toBeDisabled();
   await setPassphrase(window, "clinic paper passphrase");
-  await window.getByRole("button", { name: "Back up to CLINIC-USB" }).click();
-  await expect(window.getByText(/Backup saved and checked on CLINIC-USB/)).toBeVisible();
+  await window.getByRole("button", { name: backUpButton }).click();
+  await expect(window.getByText(/Backup saved and checked on/)).toBeVisible();
 
   const [archive] = readdirSync(path.join(usbDrive, "Vishwas Clinic Backups"));
   const bytes = readFileSync(path.join(usbDrive, "Vishwas Clinic Backups", archive));
@@ -84,7 +102,7 @@ test("a locked USB backup restores the records it was taken with", async () => {
   await importPatient(window, later);
   await window.goto("clinic://app/backups");
   await window
-    .getByRole("list", { name: "Backups on CLINIC-USB" })
+    .getByRole("list", { name: usbList })
     .getByRole("button", { name: "Restore this backup" })
     .click();
   await expect(window.getByText("Backup restored.")).toBeVisible();
@@ -104,7 +122,7 @@ test("a new computer needs the written-down passphrase to restore", async () => 
   await importPatient(window, name);
   await window.goto("clinic://app/backups");
   await setPassphrase(window, "clinic paper passphrase");
-  await window.getByRole("button", { name: "Back up to CLINIC-USB" }).click();
+  await window.getByRole("button", { name: backUpButton }).click();
   await expect(window.getByText(/Backup saved and checked/)).toBeVisible();
   await app.close();
 
@@ -113,7 +131,7 @@ test("a new computer needs the written-down passphrase to restore", async () => 
   window.on("dialog", (dialog) => void dialog.accept());
   await window.goto("clinic://app/backups");
   await window
-    .getByRole("list", { name: "Backups on CLINIC-USB" })
+    .getByRole("list", { name: usbList })
     .getByRole("button", { name: "Restore this backup" })
     .click();
   await expect(window.getByText(/Type the passphrase this backup was locked with/)).toBeVisible();
