@@ -22,6 +22,7 @@ function isPriorVisitShape(value: unknown): value is PriorVisitSnapshot {
   const visit = value as Partial<PriorVisitSnapshot>;
   return Boolean(
     typeof visit.id === "string" &&
+      typeof visit.patientId === "string" &&
       visit.patient &&
       typeof visit.patient.name === "string" &&
       typeof visit.patient.age === "string" &&
@@ -48,6 +49,11 @@ export function isConsultationShape(value: unknown): value is Consultation {
       typeof draft.patient.name === "string" &&
       typeof draft.patient.age === "string" &&
       patientSexes.has(draft.patient.sex ?? "") &&
+      typeof draft.patient.patientId === "string" &&
+      (draft.patient.patientNumber === null ||
+        Number.isSafeInteger(draft.patient.patientNumber)) &&
+      typeof draft.patient.dateOfBirth === "string" &&
+      typeof draft.patient.phone === "string" &&
       typeof draft.consultationDate === "string" &&
       draft.vitals &&
       [
@@ -82,6 +88,7 @@ export function consultationFingerprint(consultation: Consultation) {
     linkedPriorVisit: priorVisit
       ? {
           id: priorVisit.id,
+          patientId: priorVisit.patientId,
           patient: {
             name: priorVisit.patient.name,
             age: priorVisit.patient.age,
@@ -93,10 +100,14 @@ export function consultationFingerprint(consultation: Consultation) {
         }
       : null,
     doctorName: consultation.doctorName,
+    // Which saved patient this is (and their number) is settled when the
+    // prescription is completed, so it is not part of what was reviewed.
     patient: {
       name: consultation.patient.name,
       age: consultation.patient.age,
+      dateOfBirth: consultation.patient.dateOfBirth,
       sex: consultation.patient.sex,
+      phone: consultation.patient.phone,
     },
     consultationDate: consultation.consultationDate,
     vitals: {
@@ -176,8 +187,8 @@ export function validateConsultation(
     add(
       "prior-visit",
       "prior-visit",
-      "prior demo visit",
-      "Choose the completed demo visit linked to this follow-up.",
+      "earlier prescription",
+      "Choose the earlier prescription this follow-up continues.",
     );
   } else if (
     consultation.visitType === "new" &&
@@ -200,6 +211,31 @@ export function validateConsultation(
       "patient-age",
       "age",
       "Age must be a nonnegative whole number.",
+    );
+  }
+  if (
+    consultation.patient.dateOfBirth &&
+    (!isRealDate(consultation.patient.dateOfBirth) ||
+      (isRealDate(consultation.consultationDate) &&
+        consultation.patient.dateOfBirth > consultation.consultationDate))
+  ) {
+    add(
+      "patient-date-of-birth",
+      "patient-date-of-birth",
+      "date of birth",
+      "Enter a real date of birth that is not after the consultation date.",
+    );
+  }
+  if (
+    consultation.visitType === "followup" &&
+    consultation.linkedPriorVisit &&
+    consultation.linkedPriorVisit.patientId !== consultation.patient.patientId
+  ) {
+    add(
+      "prior-visit-patient",
+      "prior-visit",
+      "earlier prescription",
+      "The earlier prescription belongs to a different patient.",
     );
   }
   if (!patientSexes.has(consultation.patient.sex)) {

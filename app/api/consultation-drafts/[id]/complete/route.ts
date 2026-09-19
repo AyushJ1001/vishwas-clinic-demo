@@ -4,8 +4,8 @@ import {
   ConsultationRevisionConflictError,
   getConsultationDraft,
 } from "../../../../../db/consultation-drafts";
-import { listCompletedDemoVisits } from "../../../../../db/prior-visits";
-import { upsertPatient } from "../../../../../db/patients";
+import { findPriorVisit } from "../../../../../db/prior-visits";
+import { savePatientForConsultation } from "../../../../../db/patients";
 import {
   consultationFingerprint,
   isConsultationShape,
@@ -19,20 +19,25 @@ function isDraftId(value: string) {
   return /^[a-zA-Z0-9-]{8,120}$/.test(value);
 }
 
-async function registerPatient(consultation: Consultation) {
-  try {
-    await upsertPatient({
-      name: consultation.patient.name,
-      age: /^\d+$/.test(consultation.patient.age.trim())
-        ? consultation.patient.age.trim()
-        : "",
-      sex: consultation.patient.sex,
-      phone: "",
-    });
-  } catch {
-    // The patient directory is a convenience: completing the prescription
-    // must succeed even when the directory cannot be updated.
-  }
+// The prescription carries the Patient number, so the patient is saved (and
+// a new one numbered) before the prescription is locked.
+async function withSavedPatient(
+  consultation: Consultation,
+  draftId: string,
+): Promise<Consultation> {
+  const patient = await savePatientForConsultation(
+    consultation.patient,
+    consultation.consultationDate,
+    draftId,
+  );
+  return {
+    ...consultation,
+    patient: {
+      ...consultation.patient,
+      patientId: patient.id,
+      patientNumber: patient.number,
+    },
+  };
 }
 
 export async function POST(request: Request, context: RouteContext) {
@@ -69,7 +74,6 @@ export async function POST(request: Request, context: RouteContext) {
       if (!snapshot) {
         return NextResponse.json({ error: "Draft not found" }, { status: 404 });
       }
-      await registerPatient(snapshot.consultation);
       return NextResponse.json({ snapshot });
     }
 
@@ -86,12 +90,14 @@ export async function POST(request: Request, context: RouteContext) {
 
     let consultation = draft.consultation;
     if (consultation.visitType === "followup") {
-      const canonicalVisit = (await listCompletedDemoVisits()).find(
-        (visit) => visit.id === consultation.linkedPriorVisit?.id,
-      );
       consultation = {
         ...consultation,
-        linkedPriorVisit: canonicalVisit ?? null,
+        linkedPriorVisit: consultation.linkedPriorVisit
+          ? await findPriorVisit(
+              consultation.patient.patientId,
+              consultation.linkedPriorVisit.id,
+            )
+          : null,
       };
     }
 
@@ -107,12 +113,11 @@ export async function POST(request: Request, context: RouteContext) {
       id,
       expectedRevision: body.revision as number,
       expectedConsultation: body.expectedConsultation,
-      consultation,
+      consultation: await withSavedPatient(consultation, id),
     });
     if (!snapshot) {
       return NextResponse.json({ error: "Draft not found" }, { status: 404 });
     }
-    await registerPatient(consultation);
     return NextResponse.json({ snapshot });
   } catch (error) {
     if (error instanceof ConsultationRevisionConflictError) {

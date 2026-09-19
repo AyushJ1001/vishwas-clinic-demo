@@ -49,3 +49,27 @@ export const patients = sqliteTable(
   },
   (table) => [index("idx_patients_name_normalized").on(table.nameNormalized)],
 );
+
+// Replaces `patients` (see db/patients.ts, which copies its rows over): a
+// globally unique id, plus the sequential Patient number the clinic uses.
+export const patientRecords = sqliteTable(
+  "patient_records",
+  {
+    id: text("id").primaryKey(),
+    patientNumber: integer("patient_number"),
+    name: text("name").notNull(),
+    nameNormalized: text("name_normalized").notNull(),
+    dateOfBirth: text("date_of_birth").notNull().default(""),
+    dateOfBirthEstimated: integer("date_of_birth_estimated").notNull().default(0),
+    sex: text("sex").notNull().default("Other"),
+    phone: text("phone").notNull().default(""),
+    sourceDraftId: text("source_draft_id"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_patient_records_number").on(table.patientNumber),
+    index("idx_patient_records_name").on(table.nameNormalized),
+    uniqueIndex("idx_patient_records_source_draft").on(table.sourceDraftId),
+  ],
+);

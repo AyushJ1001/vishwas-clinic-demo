@@ -6,7 +6,7 @@ import {
   getConsultationDraft,
   saveConsultationDraft,
 } from "../../../../db/consultation-drafts";
-import { listCompletedDemoVisits } from "../../../../db/prior-visits";
+import { findPriorVisit } from "../../../../db/prior-visits";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -20,8 +20,9 @@ async function canonicalizeConsultation(
   if (!consultation.linkedPriorVisit) return consultation;
   if (consultation.visitType !== "followup") return null;
 
-  const canonicalVisit = (await listCompletedDemoVisits()).find(
-    (visit) => visit.id === consultation.linkedPriorVisit?.id,
+  const canonicalVisit = await findPriorVisit(
+    consultation.patient.patientId,
+    consultation.linkedPriorVisit.id,
   );
   if (!canonicalVisit) return null;
   return { ...consultation, linkedPriorVisit: canonicalVisit };
@@ -60,7 +61,7 @@ export async function PUT(request: Request, context: RouteContext) {
   const consultation = await canonicalizeConsultation(body.consultation);
   if (!consultation) {
     return NextResponse.json(
-      { error: "Linked prior visit must be a completed demo visit" },
+      { error: "The linked earlier prescription must be one of this patient's completed prescriptions" },
       { status: 400 },
     );
   }

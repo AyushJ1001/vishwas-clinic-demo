@@ -2,11 +2,13 @@ import { env } from "cloudflare:workers";
 import type {
   CompletedPrescriptionSnapshot,
   Consultation,
+  PriorVisitSnapshot,
   SaveConsultationDraftResult,
   SavedConsultationDraft,
 } from "../app/consultation-model";
 import { createCompletedPrescriptionSnapshot } from "../app/clinic-facts";
 import { consultationFingerprint } from "../app/consultation-validation";
+import { withCurrentPatientFields } from "../app/consultation-model";
 
 type ConsultationDraftRow = {
   id: string;
@@ -44,14 +46,27 @@ async function ensureConsultationDraftsTable() {
   }
 }
 
+function withCurrentSnapshotFields(
+  snapshot: CompletedPrescriptionSnapshot,
+): CompletedPrescriptionSnapshot {
+  return {
+    ...snapshot,
+    consultation: withCurrentPatientFields(snapshot.consultation),
+  };
+}
+
 function toDraft(row: ConsultationDraftRow): SavedConsultationDraft {
   return {
     id: row.id,
     revision: row.revision,
-    consultation: JSON.parse(row.consultation_json) as Consultation,
+    consultation: withCurrentPatientFields(
+      JSON.parse(row.consultation_json) as Consultation,
+    ),
     lifecycle: row.lifecycle_status ?? "editing",
     completedSnapshot: row.completed_snapshot_json
-      ? (JSON.parse(row.completed_snapshot_json) as CompletedPrescriptionSnapshot)
+      ? withCurrentSnapshotFields(
+          JSON.parse(row.completed_snapshot_json) as CompletedPrescriptionSnapshot,
+        )
       : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -158,6 +173,11 @@ export async function completeConsultationDraft({
     throw new ConsultationRevisionConflictError();
   }
 
+  const stored = await env.DB.prepare(
+    "SELECT consultation_json FROM consultation_drafts WHERE id = ?",
+  )
+    .bind(id)
+    .first<{ consultation_json: string }>();
   const completedAt = new Date().toISOString();
   const snapshot = createCompletedPrescriptionSnapshot(
     id,
@@ -177,7 +197,8 @@ export async function completeConsultationDraft({
       completedAt,
       id,
       expectedRevision,
-      JSON.stringify(existing.consultation),
+      // Compared as stored: `existing` has had newer fields filled in.
+      stored?.consultation_json ?? "",
     )
     .run();
   if (result.meta.changes > 0) return snapshot;
@@ -195,4 +216,47 @@ export async function completeConsultationDraft({
     return current.completedSnapshot;
   }
   throw new ConsultationRevisionConflictError();
+}
+
+/** The patient's completed prescriptions, newest first, for follow-ups. */
+export async function listCompletedPrescriptionsForPatient(
+  patientId: string,
+): Promise<PriorVisitSnapshot[]> {
+  if (!patientId) return [];
+  await ensureConsultationDraftsTable();
+  const rows = await env.DB.prepare(
+    `SELECT completed_snapshot_json FROM consultation_drafts
+     WHERE lifecycle_status = 'completed'
+       AND json_extract(completed_snapshot_json, '$.consultation.patient.patientId') = ?
+     ORDER BY json_extract(completed_snapshot_json, '$.consultation.consultationDate') DESC,
+       updated_at DESC
+     LIMIT 50`,
+  )
+    .bind(patientId)
+    .all<{ completed_snapshot_json: string }>();
+  return rows.results.map((row) =>
+    toPriorVisit(JSON.parse(row.completed_snapshot_json) as CompletedPrescriptionSnapshot),
+  );
+}
+
+function toPriorVisit(snapshot: CompletedPrescriptionSnapshot): PriorVisitSnapshot {
+  const { consultation } = snapshot;
+  const summary = [
+    consultation.provisionalDiagnosis,
+    consultation.complaints.join(", "),
+  ]
+    .filter((part) => part.trim())
+    .join("; ");
+  return {
+    id: snapshot.id,
+    patientId: consultation.patient.patientId,
+    patient: {
+      name: consultation.patient.name,
+      age: consultation.patient.age,
+      sex: consultation.patient.sex,
+    },
+    consultationDate: consultation.consultationDate,
+    doctorName: snapshot.doctor.name,
+    clinicalSummary: summary || "No diagnosis recorded",
+  };
 }

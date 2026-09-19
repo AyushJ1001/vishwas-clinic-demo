@@ -6,8 +6,9 @@ import type { PatientRecord } from "./consultation-model";
 
 type PatientSearchState = "idle" | "loading" | "ready" | "failed";
 
-function describePatient(patient: PatientRecord) {
+export function describePatient(patient: PatientRecord) {
   const parts = [
+    patient.number !== null ? `No. ${patient.number}` : "Number pending",
     patient.age ? `Age ${patient.age}` : "",
     patient.sex,
     patient.phone,
@@ -44,7 +45,7 @@ export function PatientNameSearch({
   const listboxShown = panelOpen && results.length > 0;
   const emptyMessage =
     state === "ready" && results.length === 0
-      ? `No saved patient matches “${query}”. A record will be created when this prescription is completed.`
+      ? `No saved patient matches “${query}”. They will be registered with the next patient number when this prescription is completed.`
       : "";
 
   useEffect(() => {
@@ -134,7 +135,7 @@ export function PatientNameSearch({
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         disabled={disabled}
-        placeholder="Type to search saved patients"
+        placeholder="Name, patient number or phone"
         value={value}
         onChange={(event) => {
           onNameChange(event.target.value);

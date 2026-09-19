@@ -44,6 +44,15 @@ export const prescriptionTextScales: readonly PrescriptionTextScale[] = [
 export const emptyPrescriptionValue = "—";
 export const emptyPrescriptionList = "None entered";
 
+// The Patient number shares the age line; a patient seen for the first time
+// has none until the prescription is completed.
+export function formatPrescriptionPatientLine(patient: Consultation["patient"]) {
+  const ageAndGender = `Age/Gender: ${patient.age || emptyPrescriptionValue}/${patient.sex || emptyPrescriptionValue}`;
+  return patient.patientNumber !== null && patient.patientNumber !== undefined
+    ? `Patient no. ${patient.patientNumber} · ${ageAndGender}`
+    : ageAndGender;
+}
+
 export function formatPrescriptionVitals(vitals: Consultation["vitals"]) {
   return [
     `Weight ${vitals.weight || emptyPrescriptionValue} kg`,
