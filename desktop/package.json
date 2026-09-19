@@ -1,0 +1,18 @@
+{
+  "name": "vishwas-clinic-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vishwas Clinic desktop app for the Clinic PC",
+  "main": "build/main.cjs",
+  "scripts": {
+    "postinstall": "prebuild-install --runtime electron --target 22.3.27 --directory node_modules/better-sqlite3 || (cd node_modules/better-sqlite3 && prebuild-install --runtime electron --target 22.3.27)"
+  },
+  "dependencies": {
+    "better-sqlite3": "9.6.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "electron": "22.3.27",
+    "prebuild-install": "^7.1.3"
+  }
+}
