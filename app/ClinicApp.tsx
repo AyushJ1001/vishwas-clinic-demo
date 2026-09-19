@@ -83,6 +83,8 @@ import {
   retryPrescriptionPdf,
 } from "./prescription-output";
 import { PatientNameSearch } from "./patient-search";
+import { BackupsPanel } from "./backups-panel";
+import { getClinicPc } from "./clinic-pc";
 
 gsap.registerPlugin(ScrollTrigger);
 export type RouteName =
@@ -90,9 +92,15 @@ export type RouteName =
   | "patients"
   | "receipts"
   | "certificate"
-  | "summaries";
+  | "summaries"
+  | "backups";
 
-const routes: { href: string; label: string; key: RouteName }[] = [
+const allRoutes: {
+  href: string;
+  label: string;
+  key: RouteName;
+  clinicPcOnly?: boolean;
+}[] = [
   { href: "/", label: "Prescription", key: "prescription" },
   { href: "/patients", label: "Patients", key: "patients" },
   { href: "/receipts", label: "Receipts", key: "receipts" },
@@ -102,6 +110,7 @@ const routes: { href: string; label: string; key: RouteName }[] = [
     key: "certificate",
   },
   { href: "/summaries", label: "Summaries", key: "summaries" },
+  { href: "/backups", label: "Backups", key: "backups", clinicPcOnly: true },
 ];
 
 function getVisitTypeLabel(visitType: Consultation["visitType"]) {
@@ -873,6 +882,8 @@ function Shell({
   children: React.ReactNode;
 }) {
   const doctors = Object.keys(clinicDoctors) as ClinicDoctorName[];
+  const isClinicPc = getClinicPc() !== null;
+  const routes = allRoutes.filter((route) => isClinicPc || !route.clinicPcOnly);
   const navigateTo = (href: string) => {
     if (
       shouldWarnBeforeLeaving &&
@@ -3366,7 +3377,21 @@ function PatientsPage() {
   );
 }
 
+function BackupsPage() {
+  return (
+    <Shell active="backups">
+      <RouteHeader
+        eyebrow="Backups"
+        title="Every record, kept twice."
+        copy="This computer keeps its own copies automatically. Plug in a USB drive to keep a locked copy somewhere else."
+      />
+      <BackupsPanel />
+    </Shell>
+  );
+}
+
 export default function ClinicApp({ route }: { route: RouteName }) {
+  if (route === "backups") return <BackupsPage />;
   if (route === "receipts") return <ReceiptPage />;
   if (route === "patients") return <PatientsPage />;
   if (route === "certificate") return <CertificatePage />;

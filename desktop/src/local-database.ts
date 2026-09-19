@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { renameSync, rmSync } from "node:fs";
 import type {
   LocalQuery,
   LocalQueryMode,
@@ -22,13 +23,36 @@ function toSqliteValue(value: unknown): SqliteValue {
  * `db/*` modules run unchanged on both sides.
  */
 export class LocalDatabase {
-  private readonly db: Database.Database;
+  private db: Database.Database;
 
-  constructor(filePath: string) {
-    this.db = new Database(filePath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("synchronous = FULL");
-    this.db.pragma("foreign_keys = ON");
+  constructor(readonly filePath: string) {
+    this.db = LocalDatabase.open(filePath);
+  }
+
+  private static open(filePath: string) {
+    const db = new Database(filePath);
+    db.pragma("journal_mode = WAL");
+    db.pragma("synchronous = FULL");
+    db.pragma("foreign_keys = ON");
+    return db;
+  }
+
+  /** Writes a consistent copy of the live database to `destination`. */
+  async backupTo(destination: string) {
+    await this.db.backup(destination);
+  }
+
+  /**
+   * Swaps the live database for `replacement`, a checked SQLite file.
+   * The replacement file is moved, not copied.
+   */
+  replaceWith(replacement: string) {
+    this.db.close();
+    for (const suffix of ["-wal", "-shm"]) {
+      rmSync(this.filePath + suffix, { force: true });
+    }
+    renameSync(replacement, this.filePath);
+    this.db = LocalDatabase.open(this.filePath);
   }
 
   query({ sql, params, mode }: LocalQuery): LocalQueryResult {

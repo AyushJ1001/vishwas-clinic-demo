@@ -25,3 +25,13 @@ export const localDatabaseChannels = {
   query: "clinic-db:query",
   batch: "clinic-db:batch",
 } as const;
+
+export const backupChannels = {
+  overview: "clinic-backups:overview",
+  backUpNow: "clinic-backups:back-up-now",
+  setPassphrase: "clinic-backups:set-passphrase",
+  listUsbDrives: "clinic-backups:list-usb-drives",
+  backUpToUsb: "clinic-backups:back-up-to-usb",
+  restoreLocal: "clinic-backups:restore-local",
+  restoreUsb: "clinic-backups:restore-usb",
+} as const;

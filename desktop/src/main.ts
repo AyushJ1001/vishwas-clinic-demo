@@ -2,9 +2,11 @@ import { app, BrowserWindow, ipcMain, protocol, session } from "electron";
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 import {
+  backupChannels,
   localDatabaseChannels,
   type LocalQuery,
 } from "../shared/local-database-protocol";
+import { Backups } from "./backups";
 import { LocalDatabase } from "./local-database";
 
 // The app is served from its own scheme so it never depends on a network,
@@ -12,6 +14,7 @@ import { LocalDatabase } from "./local-database";
 const appScheme = "clinic";
 const appOrigin = `${appScheme}://app`;
 const rendererRoot = path.join(__dirname, "renderer");
+const dailyBackupCheckMs = 60 * 60 * 1000;
 
 app.setName("Vishwas Clinic");
 
@@ -82,6 +85,50 @@ function connectLocalDatabase(database: LocalDatabase) {
   );
 }
 
+function connectBackups(backups: Backups) {
+  ipcMain.handle(backupChannels.overview, () => backups.overview());
+  ipcMain.handle(backupChannels.backUpNow, () => backups.backUpLocally("manual"));
+  ipcMain.handle(backupChannels.setPassphrase, (_event, passphrase: string) =>
+    backups.setPassphrase(passphrase),
+  );
+  ipcMain.handle(backupChannels.listUsbDrives, () => backups.listUsbDrives());
+  ipcMain.handle(backupChannels.backUpToUsb, (_event, driveId: string) =>
+    backups.backUpToUsb(driveId),
+  );
+  ipcMain.handle(backupChannels.restoreLocal, (_event, backupId: string) =>
+    backups.restoreLocal(backupId),
+  );
+  ipcMain.handle(
+    backupChannels.restoreUsb,
+    (_event, driveId: string, backupId: string, passphrase?: string) =>
+      backups.restoreUsb(driveId, backupId, passphrase),
+  );
+}
+
+function keepDailyBackups(backups: Backups) {
+  const backUpIfDue = () =>
+    backups.backUpDailyIfDue().catch((error: unknown) =>
+      console.error("Daily backup failed", error),
+    );
+  void backUpIfDue();
+  // The app may stay open across midnight.
+  setInterval(backUpIfDue, dailyBackupCheckMs);
+}
+
+// Takes the on-close backup before the app exits.
+function backUpOnClose(backups: Backups) {
+  let backedUp = false;
+  app.on("before-quit", (event) => {
+    if (backedUp) return;
+    event.preventDefault();
+    backedUp = true;
+    backups
+      .backUpLocally("on-close")
+      .catch((error: unknown) => console.error("On-close backup failed", error))
+      .finally(() => app.quit());
+  });
+}
+
 function openMainWindow() {
   const window = new BrowserWindow({
     width: 1366,
@@ -112,6 +159,7 @@ if (!app.requestSingleInstanceLock()) {
   const database = new LocalDatabase(
     path.join(dataDirectory(), "clinic.sqlite"),
   );
+  const backups = new Backups(database, dataDirectory());
   let mainWindow: BrowserWindow | null = null;
 
   app.on("second-instance", () => {
@@ -124,6 +172,9 @@ if (!app.requestSingleInstanceLock()) {
     serveRenderer();
     blockRemoteContent();
     connectLocalDatabase(database);
+    connectBackups(backups);
+    keepDailyBackups(backups);
+    backUpOnClose(backups);
     mainWindow = openMainWindow();
     mainWindow.on("closed", () => {
       mainWindow = null;

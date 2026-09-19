@@ -1,20 +1,8 @@
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-} from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const desktopDirectory = fileURLToPath(new URL("../../desktop", import.meta.url));
-const electronBinary = path.join(
-  desktopDirectory,
-  "node_modules/electron/dist",
-  process.platform === "win32" ? "electron.exe" : "electron",
-);
+import { launchClinicPc as launch, openPage } from "./clinic-pc";
 
 let dataDirectory: string;
 
@@ -27,17 +15,7 @@ test.afterEach(() => {
 });
 
 function launchClinicPc() {
-  return electron.launch({
-    executablePath: electronBinary,
-    args: [desktopDirectory],
-    env: { ...process.env, CLINIC_DATA_DIR: dataDirectory },
-  });
-}
-
-async function openPage(app: ElectronApplication, pathname: string) {
-  const window = await app.firstWindow();
-  await window.goto(`clinic://app${pathname}`);
-  return window;
+  return launch(dataDirectory);
 }
 
 test("runs on Chromium 108 and never reaches the network", async () => {
