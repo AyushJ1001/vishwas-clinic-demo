@@ -11,6 +11,7 @@ export const catalogEntries = sqliteTable(
   "catalog_entries",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    recordId: text("record_id"),
     catalog: text("catalog").notNull(),
     groupName: text("group_name").notNull(),
     itemName: text("item_name").notNull(),
@@ -21,6 +22,24 @@ export const catalogEntries = sqliteTable(
       table.catalog,
       table.groupName,
       table.itemName,
+    ),
+    uniqueIndex("idx_catalog_entries_record_id").on(table.recordId),
+  ],
+);
+
+export const clinicSyncRecords = sqliteTable(
+  "clinic_sync_records",
+  {
+    entityKind: text("entity_kind").notNull(),
+    recordId: text("record_id").notNull(),
+    recordJson: text("record_json").notNull(),
+    recordedAt: text("recorded_at").notNull(),
+    appliedAt: text("applied_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_clinic_sync_records_identity").on(
+      table.entityKind,
+      table.recordId,
     ),
   ],
 );
