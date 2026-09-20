@@ -48,9 +48,13 @@ export function createDraftPrescriptionPages(consultation: Consultation) {
     vitals: consultation.vitals,
     complaints: consultation.complaints,
     examinationFindings: consultation.examinationFindings,
+    pastMedicalHistory: consultation.pastMedicalHistory,
     provisionalDiagnosis: consultation.provisionalDiagnosis,
     advice: consultation.advice,
     investigations: consultation.investigations,
+    nextVisit: consultation.nextVisit
+      ? formatConsultationDate(consultation.nextVisit)
+      : "",
     medicines: consultation.medicines.map((medicine) => ({
       ...medicine,
       composition: resolveMedicineComposition(medicine.name),
@@ -167,21 +171,39 @@ export function PrescriptionDocument({
                         key={section.key}
                         className="prescription-list-section rx-section"
                       >
-                        <b>{section.title}</b>
-                        <ul>
-                          {section.chunks.map((chunk) => (
-                            <li key={chunk.key}>
-                              {chunk.lines.map((line, index) => (
+                        {section.presentation === "inline" ? (
+                          <>
+                            <b>{section.title}: </b>
+                            {section.chunks.flatMap((chunk) => chunk.lines).map(
+                              (line, index) => (
                                 <span
                                   key={`${line.text}-${index}`}
-                                  className="block"
+                                  className={index === 0 ? undefined : "block"}
                                 >
                                   {line.text}{" "}
                                 </span>
+                              ),
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <b>{section.title}</b>
+                            <ul>
+                              {section.chunks.map((chunk) => (
+                                <li key={chunk.key}>
+                                  {chunk.lines.map((line, index) => (
+                                    <span
+                                      key={`${line.text}-${index}`}
+                                      className="block"
+                                    >
+                                      {line.text}{" "}
+                                    </span>
+                                  ))}
+                                </li>
                               ))}
-                            </li>
-                          ))}
-                        </ul>
+                            </ul>
+                          </>
+                        )}
                       </section>
                     ))}
                   </aside>

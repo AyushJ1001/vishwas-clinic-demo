@@ -66,9 +66,11 @@ export function isConsultationShape(value: unknown): value is Consultation {
       ].every((item) => typeof item === "string") &&
       isStringArray(draft.complaints) &&
       isStringArray(draft.examinationFindings) &&
+      typeof draft.pastMedicalHistory === "string" &&
       typeof draft.provisionalDiagnosis === "string" &&
       isStringArray(draft.advice) &&
       isStringArray(draft.investigations) &&
+      typeof draft.nextVisit === "string" &&
       Array.isArray(draft.medicines) &&
       draft.medicines.every(
         (medicine) =>
@@ -120,9 +122,11 @@ export function consultationFingerprint(consultation: Consultation) {
     },
     complaints: consultation.complaints,
     examinationFindings: consultation.examinationFindings,
+    pastMedicalHistory: consultation.pastMedicalHistory,
     provisionalDiagnosis: consultation.provisionalDiagnosis,
     advice: consultation.advice,
     investigations: consultation.investigations,
+    nextVisit: consultation.nextVisit,
     medicines: consultation.medicines.map((medicine) => ({
       name: medicine.name,
       dose: medicine.dose,
@@ -252,6 +256,19 @@ export function validateConsultation(
       "consultation-date",
       "consultation date",
       "Enter a real date in YYYY-MM-DD format.",
+    );
+  }
+  if (
+    consultation.nextVisit &&
+    (!isRealDate(consultation.nextVisit) ||
+      (isRealDate(consultation.consultationDate) &&
+        consultation.nextVisit < consultation.consultationDate))
+  ) {
+    add(
+      "next-visit",
+      "next-visit",
+      "next visit",
+      "Enter a next visit date on or after the consultation date.",
     );
   }
 

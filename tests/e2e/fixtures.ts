@@ -37,9 +37,11 @@ export function sampleConsultation(): Consultation {
     },
     complaints: ["Low-grade fever", "Dry cough"],
     examinationFindings: ["Throat congestion"],
+    pastMedicalHistory: "",
     provisionalDiagnosis: "Viral upper respiratory tract infection",
     advice: ["Warm saline gargles", "Maintain hydration"],
     investigations: [],
+    nextVisit: "",
     medicines: [
       { name: "Paracetamol 500 mg tablet", dose: "", duration: "", method: "" },
       { name: "Levocetirizine 5 mg tablet", dose: "", duration: "", method: "" },

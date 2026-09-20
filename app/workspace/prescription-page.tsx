@@ -756,6 +756,21 @@ export function PrescriptionPage() {
                     }
                     multiple
                   />
+                  <label className="sm:col-span-2">
+                    <span className="field-label">Past medical history</span>
+                    <textarea
+                      id="past-medical-history"
+                      className="input-field"
+                      rows={2}
+                      value={consultation.pastMedicalHistory}
+                      onChange={(event) =>
+                        setConsultation((current) => ({
+                          ...current,
+                          pastMedicalHistory: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
                   <div className="sm:col-span-2">
                     <CatalogPicker
                       label="Provisional diagnosis"
@@ -772,20 +787,22 @@ export function PrescriptionPage() {
                       }
                     />
                   </div>
-                  <CatalogPicker
-                    label="Advice"
-                    inputId="advice"
-                    catalogName="advice"
-                    groups={advice}
-                    value={consultation.advice}
-                    onChange={(selectedAdvice) =>
-                      setConsultation((current) => ({
-                        ...current,
-                        advice: selectedAdvice as string[],
-                      }))
-                    }
-                    multiple
-                  />
+                  <div className="sm:col-span-2">
+                    <CatalogPicker
+                      label="Advice"
+                      inputId="advice"
+                      catalogName="advice"
+                      groups={advice}
+                      value={consultation.advice}
+                      onChange={(selectedAdvice) =>
+                        setConsultation((current) => ({
+                          ...current,
+                          advice: selectedAdvice as string[],
+                        }))
+                      }
+                      multiple
+                    />
+                  </div>
                   <CatalogPicker
                     label="Investigations"
                     inputId="investigations"
@@ -800,6 +817,31 @@ export function PrescriptionPage() {
                     }
                     multiple
                   />
+                  <label>
+                    <span className="field-label">Next visit</span>
+                    <input
+                      id="next-visit"
+                      className="input-field"
+                      type="date"
+                      min={consultation.consultationDate || undefined}
+                      value={consultation.nextVisit}
+                      aria-invalid={Boolean(errorFor("next-visit"))}
+                      aria-describedby={
+                        errorFor("next-visit") ? "next-visit-error" : undefined
+                      }
+                      onChange={(event) =>
+                        setConsultation((current) => ({
+                          ...current,
+                          nextVisit: event.target.value,
+                        }))
+                      }
+                    />
+                    {errorFor("next-visit") && (
+                      <FieldError id="next-visit-error">
+                        {errorFor("next-visit")!}
+                      </FieldError>
+                    )}
+                  </label>
                 </div>
               </div>
               <div className="panel-section">

@@ -387,19 +387,35 @@ function drawPage(
 
   documentPage.leftColumn.forEach((section, index) => {
     if (index > 0) top -= gap;
-    line(section.title, bold);
-    top -= lineHeight;
-    section.chunks.forEach((chunk) => {
-      line("•", regular);
-      top = drawPlannedLines(
-        pdfPage,
-        chunk.lines,
-        left + bulletIndent,
-        top,
-        fonts,
-        scale,
-      );
-    });
+    if (section.presentation === "inline") {
+      const label = `${section.title}: `;
+      const lines = section.chunks.flatMap((chunk) => chunk.lines);
+      line(label, bold);
+      if (lines[0]) {
+        line(
+          lines[0].text,
+          regular,
+          "left",
+          left + textWidth(label, bold, fonts, fontSize),
+        );
+        top -= lineHeight;
+        top = drawPlannedLines(pdfPage, lines.slice(1), left, top, fonts, scale);
+      }
+    } else {
+      line(section.title, bold);
+      top -= lineHeight;
+      section.chunks.forEach((chunk) => {
+        line("•", regular);
+        top = drawPlannedLines(
+          pdfPage,
+          chunk.lines,
+          left + bulletIndent,
+          top,
+          fonts,
+          scale,
+        );
+      });
+    }
   });
 
   pdfPage.drawLine({
