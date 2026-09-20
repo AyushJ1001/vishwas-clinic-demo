@@ -14,6 +14,7 @@ const reasonLabels = {
   "on-close": "When the app closed",
   manual: "Taken by hand",
   "before-restore": "Before a restore",
+  "before-update": "Before update",
 } as const;
 
 type Message = {

@@ -63,3 +63,8 @@ export const printingChannels = {
   print: "clinic-print:print",
   printWithOptions: "clinic-print:print-with-options",
 } as const;
+
+export const updateChannels = {
+  state: "clinic-update:state",
+  check: "clinic-update:check",
+} as const;

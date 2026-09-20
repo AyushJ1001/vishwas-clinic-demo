@@ -7,10 +7,12 @@ import {
   printingChannels,
   type LocalQuery,
   type PrintSettings,
+  updateChannels,
 } from "../shared/local-database-protocol";
 import { Backups } from "./backups";
 import { LocalDatabase } from "./local-database";
 import { Printing } from "./printing";
+import { Updates } from "./updates";
 
 // The app is served from its own scheme so it never depends on a network,
 // and so pages get a stable origin for storage and `fetch("/api/...")`.
@@ -128,6 +130,11 @@ function connectPrinting(printing: Printing) {
   );
 }
 
+function connectUpdates(updates: Updates) {
+  ipcMain.handle(updateChannels.state, () => updates.state());
+  ipcMain.handle(updateChannels.check, () => updates.check());
+}
+
 function keepDailyBackups(backups: Backups) {
   const backUpIfDue = () =>
     backups.backUpDailyIfDue().catch((error: unknown) =>
@@ -139,14 +146,15 @@ function keepDailyBackups(backups: Backups) {
 }
 
 // Takes the on-close backup before the app exits.
-function backUpOnClose(backups: Backups) {
+function backUpOnClose(backups: Backups, updates: Updates) {
   let backedUp = false;
   app.on("before-quit", (event) => {
     if (backedUp) return;
     event.preventDefault();
     backedUp = true;
-    backups
-      .backUpLocally("on-close")
+    updates
+      .prepareForAppQuit()
+      .then(() => backups.backUpLocally("on-close"))
       .catch((error: unknown) => console.error("On-close backup failed", error))
       .finally(() => app.quit());
   });
@@ -185,7 +193,19 @@ if (!app.requestSingleInstanceLock()) {
   );
   const backups = new Backups(database, clinicDataDirectory);
   const printing = new Printing(clinicDataDirectory);
+  const updates = new Updates(backups, clinicDataDirectory);
   let mainWindow: BrowserWindow | null = null;
+
+  if (process.env.CLINIC_UPDATE_FEED) {
+    // The installer cannot run inside Electron tests, so this exposes only its
+    // backup gate to the main-process test harness.
+    (
+      globalThis as typeof globalThis & {
+        __clinicTestBackUpBeforeUpdate?: () => Promise<boolean>;
+      }
+    ).__clinicTestBackUpBeforeUpdate = () =>
+      updates.testBackUpBeforeInstall();
+  }
 
   app.on("second-instance", () => {
     if (!mainWindow) return;
@@ -199,8 +219,10 @@ if (!app.requestSingleInstanceLock()) {
     connectLocalDatabase(database);
     connectBackups(backups);
     connectPrinting(printing);
+    connectUpdates(updates);
     keepDailyBackups(backups);
-    backUpOnClose(backups);
+    backUpOnClose(backups, updates);
+    updates.start();
     mainWindow = openMainWindow();
     mainWindow.on("closed", () => {
       mainWindow = null;
