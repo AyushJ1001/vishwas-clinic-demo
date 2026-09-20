@@ -195,6 +195,8 @@ test("an exactly full A5 prescription remains one page in review and completion"
   await expect(
     review.getByRole("article", { name: "Prescription under review" }),
   ).toContainText("Fit eighteen");
+  await expect(review.getByText("Past medical history:")).toHaveCount(0);
+  await expect(review.getByText("Next visit:")).toHaveCount(0);
   const lastAdviceClipping = await review
     .locator(".rx-left-column")
     .evaluate((column) => {
@@ -216,6 +218,144 @@ test("an exactly full A5 prescription remains one page in review and completion"
   await expect(
     page.getByRole("article", { name: "Completed prescription" }),
   ).toContainText("Page 1 of 1");
+});
+
+/** Joins wrapped lines back together so a long value can be matched whole. */
+function withoutLineBreaks(text: string) {
+  return text.replace(/\s+/gu, " ");
+}
+
+test("past medical history and next visit keep their document order through completion and PDF", async ({
+  page,
+  request,
+}) => {
+  const pastMedicalHistory =
+    "Type 2 diabetes controlled with diet; appendicectomy in 2018";
+  await openSavedConsultation(page, request, "history-next-visit", {
+    ...validPaginationConsultation(),
+    pastMedicalHistory,
+    nextVisit: "2026-09-26",
+    advice: ["Maintain hydration"],
+    investigations: ["Complete blood count"],
+  });
+
+  await expect(page.getByLabel("Past medical history")).toHaveValue(
+    pastMedicalHistory,
+  );
+  await expect(page.getByLabel("Next visit")).toHaveValue("2026-09-26");
+
+  const draftPages = page.getByRole("article", {
+    name: "Draft prescription preview",
+  });
+  const draftText = await draftPages.allInnerTexts();
+  const draftDocumentText = draftText.join(" ");
+  expect(draftDocumentText.indexOf("Examination findings:")).toBeLessThan(
+    draftDocumentText.indexOf("Past medical history:"),
+  );
+  expect(draftDocumentText.indexOf("Past medical history:")).toBeLessThan(
+    draftDocumentText.indexOf("Provisional diagnosis:"),
+  );
+  expect(draftDocumentText.indexOf("Investigations")).toBeLessThan(
+    draftDocumentText.indexOf("Next visit:"),
+  );
+  // The sheet wraps the history across lines, so compare without the breaks.
+  expect(withoutLineBreaks(draftDocumentText)).toContain(pastMedicalHistory);
+  expect(draftDocumentText).toContain("26/09/2026");
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  const reviewPages = review.getByRole("article", {
+    name: "Prescription under review",
+  });
+  expect(await reviewPages.allInnerTexts()).toEqual(draftText);
+
+  await review.getByRole("button", { name: "Complete prescription" }).click();
+  const completedPages = page.getByRole("article", {
+    name: "Completed prescription",
+  });
+  await expect(completedPages).toHaveCount(draftText.length);
+  expect(await textWithoutPatientNumber(completedPages)).toEqual(
+    withoutPatientNumber(draftText),
+  );
+
+  await page.emulateMedia({ media: "print" });
+  expect(await textWithoutPatientNumber(completedPages)).toEqual(
+    withoutPatientNumber(draftText),
+  );
+  await page.emulateMedia({ media: "screen" });
+
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PDF" }).click();
+  const path = await (await downloadEvent).path();
+  expect(path).not.toBeNull();
+  const pdf = await getDocument({
+    data: new Uint8Array(await readFile(path!)),
+  }).promise;
+  const pdfText: string[] = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const content = await (await pdf.getPage(pageNumber)).getTextContent();
+    pdfText.push(
+      content.items.map((item) => ("str" in item ? item.str : "")).join(" "),
+    );
+  }
+  const completePdfText = pdfText.join(" ");
+  expect(completePdfText.indexOf("Examination findings:")).toBeLessThan(
+    completePdfText.indexOf("Past medical history:"),
+  );
+  expect(completePdfText.indexOf("Past medical history:")).toBeLessThan(
+    completePdfText.indexOf("Provisional diagnosis:"),
+  );
+  expect(completePdfText.indexOf("Investigations")).toBeLessThan(
+    completePdfText.indexOf("Next visit:"),
+  );
+  expect(withoutLineBreaks(completePdfText)).toContain(pastMedicalHistory);
+  expect(completePdfText).toContain("26/09/2026");
+});
+
+test("long past medical history continues on another page without clipping", async ({
+  page,
+  request,
+}) => {
+  const pastMedicalHistory =
+    `HISTORY-START ${"long-standing hypertension with regular follow-up ".repeat(55)}HISTORY-END`;
+  await openSavedConsultation(page, request, "long-history", {
+    ...validPaginationConsultation(),
+    pastMedicalHistory,
+  });
+
+  const draftPages = page.getByRole("article", {
+    name: "Draft prescription preview",
+  });
+  expect(await draftPages.count()).toBeGreaterThan(1);
+  await expect(draftPages.nth(1)).toContainText(
+    "Past medical history (continued):",
+  );
+  const allCharacters = (await draftPages.allInnerTexts())
+    .join(" ")
+    .replace(/\s/gu, "");
+  expect(allCharacters).toContain("HISTORY-START");
+  expect(allCharacters).toContain("HISTORY-END");
+  const clipping = await draftPages.evaluateAll((elements) =>
+    elements.map((element) => {
+      const pageBounds = element.getBoundingClientRect();
+      const footerTop = element.querySelector("footer")!.getBoundingClientRect().top;
+      const clinicalContent = element.querySelectorAll(
+        ".prescription-clinical b, .prescription-clinical span",
+      );
+      return (
+        element.scrollHeight > element.clientHeight + 1 ||
+        Array.from(clinicalContent).some((node) => {
+          const bounds = node.getBoundingClientRect();
+          return (
+            bounds.bottom > footerTop + 1 ||
+            bounds.left < pageBounds.left - 1 ||
+            bounds.right > pageBounds.right + 1
+          );
+        })
+      );
+    }),
+  );
+  expect(clipping).toEqual(clipping.map(() => false));
 });
 
 test("supported-script glyphs stay inside the DOM columns and PDF media box", async ({
@@ -1995,6 +2135,7 @@ test("completion API rejects clinically invalid saved drafts", async ({
       },
     ],
     ["date", { consultationDate: "2026-02-30" }],
+    ["next-visit", { nextVisit: "2026-02-30" }],
   ] as const;
 
   for (const [label, change] of invalidCases) {
@@ -2096,6 +2237,31 @@ test("consultation values appear unchanged in the draft prescription", async ({
   await expect(preview).toContainText("0–0–1 · With water · 7 days");
   await expect(
     page.getByText("Draft prescription", { exact: true }),
+  ).toBeVisible();
+});
+
+test("review sends an earlier next visit back to its date field", async ({
+  page,
+  request,
+}) => {
+  await openSavedConsultation(page, request, "next-visit-validation", {
+    ...validPaginationConsultation(),
+    nextVisit: "2026-09-11",
+  });
+
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  const review = page.getByRole("dialog", { name: "Review prescription" });
+  await expect(review).toContainText(
+    "Enter a next visit date on or after the consultation date.",
+  );
+  await review.getByRole("button", { name: "Fix next visit" }).click();
+  await expect(review).toBeHidden();
+  await expect(page.getByLabel("Next visit")).toBeFocused();
+  await expect(page.getByLabel("Next visit")).toHaveValue("2026-09-11");
+  await expect(
+    page.getByText(
+      "Enter a next visit date on or after the consultation date.",
+    ),
   ).toBeVisible();
 });
 
