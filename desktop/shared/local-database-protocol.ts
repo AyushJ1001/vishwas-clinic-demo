@@ -68,3 +68,7 @@ export const updateChannels = {
   state: "clinic-update:state",
   check: "clinic-update:check",
 } as const;
+
+export const syncChannels = {
+  status: "clinic-sync:status",
+} as const;

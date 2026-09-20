@@ -79,9 +79,22 @@ export type ClinicPcUpdates = {
   check(): Promise<ClinicUpdateState>;
 };
 
+export type ClinicSyncStatus = {
+  configured: boolean;
+  setupIssue: "cloud-address" | "device-key" | null;
+  pendingCount: number;
+  lastSucceededAt: string | null;
+  lastFailedAt: string | null;
+};
+
+export type ClinicPcSync = {
+  status(): Promise<ClinicSyncStatus>;
+};
+
 export type ClinicPc = {
   backups: ClinicPcBackups;
   printing: ClinicPcPrinting;
+  sync: ClinicPcSync;
   updates: ClinicPcUpdates;
 };
 

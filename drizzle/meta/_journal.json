@@ -43,6 +43,13 @@
       "when": 1789829829972,
       "tag": "0005_issued_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789919252637,
+      "tag": "0006_clinic_sync",
+      "breakpoints": true
     }
   ]
 }

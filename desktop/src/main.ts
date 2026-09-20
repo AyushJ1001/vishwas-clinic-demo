@@ -5,6 +5,7 @@ import {
   backupChannels,
   localDatabaseChannels,
   printingChannels,
+  syncChannels,
   type LocalQuery,
   type PrintSettings,
   updateChannels,
@@ -12,6 +13,7 @@ import {
 import { Backups } from "./backups";
 import { LocalDatabase } from "./local-database";
 import { Printing } from "./printing";
+import { ClinicSync } from "./sync";
 import { Updates } from "./updates";
 
 // The app is served from its own scheme so it never depends on a network,
@@ -135,6 +137,10 @@ function connectUpdates(updates: Updates) {
   ipcMain.handle(updateChannels.check, () => updates.check());
 }
 
+function connectSync(sync: ClinicSync) {
+  ipcMain.handle(syncChannels.status, () => sync.status());
+}
+
 function keepDailyBackups(backups: Backups) {
   const backUpIfDue = () =>
     backups.backUpDailyIfDue().catch((error: unknown) =>
@@ -193,6 +199,7 @@ if (!app.requestSingleInstanceLock()) {
   );
   const backups = new Backups(database, clinicDataDirectory);
   const printing = new Printing(clinicDataDirectory);
+  const sync = new ClinicSync(database);
   const updates = new Updates(backups, clinicDataDirectory);
   let mainWindow: BrowserWindow | null = null;
 
@@ -219,8 +226,10 @@ if (!app.requestSingleInstanceLock()) {
     connectLocalDatabase(database);
     connectBackups(backups);
     connectPrinting(printing);
+    connectSync(sync);
     connectUpdates(updates);
     keepDailyBackups(backups);
+    sync.start();
     backUpOnClose(backups, updates);
     updates.start();
     mainWindow = openMainWindow();
@@ -230,5 +239,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on("window-all-closed", () => app.quit());
-  app.on("will-quit", () => database.close());
+  app.on("will-quit", () => {
+    sync.stop();
+    database.close();
+  });
 }
