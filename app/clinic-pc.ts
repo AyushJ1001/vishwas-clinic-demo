@@ -1,6 +1,15 @@
 // What the Clinic PC desktop app adds to the shared UI. None of this exists on
 // the web: `getClinicPc()` returns null there.
 
+import type {
+  ClinicPrinter,
+  PrintPaper,
+  PrintResult,
+  PrintSettings,
+} from "../desktop/shared/local-database-protocol";
+
+export type { ClinicPrinter, PrintPaper, PrintResult, PrintSettings };
+
 export type LocalBackup = {
   id: string;
   createdAt: string;
@@ -45,8 +54,17 @@ export type ClinicPcBackups = {
   ): Promise<RestoreResult>;
 };
 
+export type ClinicPcPrinting = {
+  listPrinters(): Promise<ClinicPrinter[]>;
+  settings(): Promise<PrintSettings>;
+  saveSettings(settings: PrintSettings): Promise<void>;
+  print(): Promise<PrintResult>;
+  printWithOptions(): Promise<PrintResult>;
+};
+
 export type ClinicPc = {
   backups: ClinicPcBackups;
+  printing: ClinicPcPrinting;
 };
 
 export const minimumPassphraseLength = 8;

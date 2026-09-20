@@ -1025,6 +1025,9 @@ select.input-field {
   background: var(--color-desk);
   padding: 1rem;
 }
+.print-test-document {
+  display: none;
+}
 @media (max-width: 1023px) {
   .review-dialog {
     width: 100vw;
@@ -1308,6 +1311,14 @@ select.input-field {
     size: A5 portrait;
     margin: 0;
   }
+  @page clinic-a5 {
+    size: A5 portrait;
+    margin: 0;
+  }
+  @page clinic-a4 {
+    size: A4 portrait;
+    margin: 0;
+  }
   html,
   body,
   main {
@@ -1315,6 +1326,12 @@ select.input-field {
     height: 210mm;
     overflow: visible !important;
     background: #fff;
+  }
+  html[data-print-paper="a5-on-a4-top"],
+  html[data-print-paper="a5-on-a4-top"] body,
+  html[data-print-paper="a5-on-a4-top"] main {
+    width: 210mm;
+    height: 297mm;
   }
   body * {
     visibility: hidden !important;
@@ -1332,6 +1349,16 @@ select.input-field {
     border-radius: 0 !important;
     background: #fff !important;
     box-shadow: none !important;
+  }
+  .print-test-document {
+    display: flex;
+    align-items: flex-start;
+    padding: 16mm !important;
+    color: var(--color-ink);
+  }
+  .print-test-document h2,
+  .print-test-document p {
+    margin: 0 0 4mm;
   }
   .prescription-pages {
     display: block;
@@ -1352,8 +1379,22 @@ select.input-field {
     break-after: page;
     border-radius: 0 !important;
     box-shadow: none !important;
+    page: clinic-a5;
+  }
+  html[data-print-paper="a5-on-a4-top"] .prescription-page,
+  html[data-print-paper="a5-on-a4-top"] .print-test-document {
+    page: clinic-a4;
+  }
+  html:not([data-print-paper="a5-on-a4-top"]) .print-test-document {
+    page: clinic-a5;
   }
   .prescription-page-frame:last-child .prescription-page {
     break-after: auto;
   }
+}
+
+.rx-clinic-mark {
+  width: calc(var(--rx-line-height) * 2);
+  height: calc(var(--rx-line-height) * 2);
+  flex: 0 0 auto;
 }

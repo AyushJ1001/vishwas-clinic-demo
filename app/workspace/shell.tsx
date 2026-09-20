@@ -1,6 +1,5 @@
 "use client";
 
-import { Pulse } from "@phosphor-icons/react";
 import Link from "next/link";
 import { clinicDoctors } from "../clinic-facts";
 import { getClinicPc } from "../clinic-pc";
@@ -12,7 +11,8 @@ export type RouteName =
   | "receipts"
   | "certificate"
   | "summaries"
-  | "backups";
+  | "backups"
+  | "settings";
 
 export const allRoutes: {
   href: string;
@@ -26,6 +26,7 @@ export const allRoutes: {
   { href: "/medical-certificate", label: "Certificates", key: "certificate" },
   { href: "/summaries", label: "Summaries", key: "summaries" },
   { href: "/backups", label: "Backups", key: "backups", clinicPcOnly: true },
+  { href: "/settings", label: "Settings", key: "settings", clinicPcOnly: true },
 ];
 
 export function Shell({
@@ -72,7 +73,6 @@ export function Shell({
               navigateTo("/");
             }}
           >
-            <Pulse size={18} weight="bold" aria-hidden="true" />
             Vishwas Clinic
           </Link>
           <nav aria-label="Main" className="app-tabs">

@@ -12,6 +12,7 @@ const pageRoutes: Record<string, RouteName> = {
   "/medical-certificate": "certificate",
   "/summaries": "summaries",
   "/backups": "backups",
+  "/settings": "settings",
 };
 
 serveApiLocally();
