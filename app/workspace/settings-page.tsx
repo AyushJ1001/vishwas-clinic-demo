@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   getClinicPc,
   type ClinicPrinter,
+  type ClinicUpdateState,
   type PrintSettings,
 } from "../clinic-pc";
 import {
@@ -15,11 +16,33 @@ import {
 
 import { PageHeader, Shell } from "./shell";
 
+function updateLine(update: ClinicUpdateState) {
+  const version = `Version ${update.appVersion}`;
+  if (update.state === "checking") {
+    return `${version} · checking for an update`;
+  }
+  if (update.state === "downloading") {
+    return update.readyVersion
+      ? `${version} · downloading version ${update.readyVersion}`
+      : `${version} · downloading an update`;
+  }
+  if (update.state === "ready") {
+    return update.readyVersion
+      ? `${version} · version ${update.readyVersion} installs when you close the app`
+      : `${version} · the update installs when you close the app`;
+  }
+  if (update.state === "offline") {
+    return `${version} · no internet, so it has not checked`;
+  }
+  return `${version} · up to date`;
+}
+
 export function SettingsPage() {
   const clinicPc = getClinicPc();
   const [printers, setPrinters] = useState<ClinicPrinter[]>([]);
   const [settings, setSettings] = useState<PrintSettings | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [updateState, setUpdateState] = useState<ClinicUpdateState | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
     "idle",
   );
@@ -48,6 +71,40 @@ export function SettingsPage() {
       current = false;
     };
   }, [clinicPc]);
+
+  useEffect(() => {
+    if (!clinicPc) return;
+    let current = true;
+    void clinicPc.updates.state().then(
+      (found) => {
+        if (current) setUpdateState(found);
+      },
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [clinicPc]);
+
+  useEffect(() => {
+    if (
+      !clinicPc ||
+      (updateState?.state !== "checking" &&
+        updateState?.state !== "downloading")
+    ) {
+      return;
+    }
+    let current = true;
+    const check = window.setTimeout(() => {
+      void clinicPc.updates.state().then((found) => {
+        if (current) setUpdateState(found);
+      });
+    }, 500);
+    return () => {
+      current = false;
+      window.clearTimeout(check);
+    };
+  }, [clinicPc, updateState]);
 
   const save = (next: PrintSettings) => {
     if (!clinicPc) return;
@@ -182,6 +239,41 @@ export function SettingsPage() {
             )}
           </div>
         </section>
+
+        {clinicPc && updateState && (
+          <section className="panel" aria-labelledby="updates-heading">
+            <div className="panel-section">
+              <div className="panel-header items-start">
+                <div>
+                  <h2 id="updates-heading" className="section-title">
+                    Updates
+                  </h2>
+                  <p className="status-line mt-2" role="status">
+                    {updateLine(updateState)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={
+                    updateState.state === "checking" ||
+                    updateState.state === "downloading"
+                  }
+                  onClick={() => {
+                    setUpdateState((current) =>
+                      current ? { ...current, state: "checking" } : current,
+                    );
+                    void clinicPc.updates
+                      .check()
+                      .then(setUpdateState, () => undefined);
+                  }}
+                >
+                  Check for updates
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         <article
           aria-label="Printing test page"

@@ -33,7 +33,7 @@ const localBackupsKept = 30;
 const usbFolderName = "Vishwas Clinic Backups";
 const usbExtension = ".vcbackup";
 const localBackupPattern =
-  /^clinic-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)-(daily|on-close|manual|before-restore)\.sqlite$/;
+  /^clinic-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)-(daily|on-close|manual|before-restore|before-update)\.sqlite$/;
 
 function fileStamp(date: Date) {
   return date.toISOString().replace(/[:.]/g, "-");
