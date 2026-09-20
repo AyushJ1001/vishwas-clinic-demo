@@ -32,6 +32,13 @@ test("keeps the paper choice after the app is reloaded", async () => {
 test("reports no printer and clears the selected print layout", async () => {
   const app = await launchClinicPc(dataDirectory);
   const window = await openPage(app, "/settings");
+  // Most machines that run these tests do have a printer, so the clinic's
+  // empty-printer case is made here rather than waited for.
+  await app.evaluate(({ BrowserWindow }) => {
+    for (const open of BrowserWindow.getAllWindows()) {
+      open.webContents.getPrintersAsync = async () => [];
+    }
+  });
   await window.getByRole("radio", { name: "A5 on A4 (top half)" }).check();
   await expect(window.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
 
