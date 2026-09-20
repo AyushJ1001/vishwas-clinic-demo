@@ -5,6 +5,7 @@ import {
   PageSizes,
   rgb,
   type PDFFont,
+  type PDFImage,
   type PDFPage,
 } from "pdf-lib";
 import { notoSansBoldUrl, notoSansRegularUrl } from "./prescription-fonts";
@@ -222,6 +223,7 @@ function drawPage(
   pdfPage: PDFPage,
   documentPage: PrescriptionDocumentPage,
   fonts: PdfFonts,
+  mark?: PDFImage,
 ) {
   const { text: scale } = documentPage;
   const { fontSize, lineHeight, ruleGap: gap, registrationSize } = scale;
@@ -280,6 +282,7 @@ function drawPage(
     top -= ruleThickness + gap;
   };
 
+  const doctorBlockTop = top;
   const titleBox = titleSize * 1.2;
   const titleWidth = bold.widthOfTextAtSize(
     documentPage.clinic.name,
@@ -294,6 +297,16 @@ function drawPage(
   });
   top -= titleBox + gap;
 
+  if (mark) {
+    // The clinic's mark sits beside the doctor's details, as on screen.
+    const markSize = lineHeight * 2;
+    pdfPage.drawImage(mark, {
+      x: right - markSize,
+      y: doctorBlockTop - titleSize * 1.2 - gap - markSize,
+      width: markSize,
+      height: markSize,
+    });
+  }
   line(documentPage.doctor.name, bold);
   top -= lineHeight;
   const qualifications = `${documentPage.doctor.qualifications} · `;
@@ -455,6 +468,17 @@ async function fetchFont(url: string) {
   return response.arrayBuffer();
 }
 
+/** The letterhead mark; the PDF is still produced if it cannot be read. */
+async function embedClinicMark(pdf: PDFDocument) {
+  try {
+    const response = await fetch("/icons/clinic-logo.png");
+    if (!response.ok) return undefined;
+    return await pdf.embedPng(await response.arrayBuffer());
+  } catch {
+    return undefined;
+  }
+}
+
 function requiredFallbacks(document: CompletedPrescriptionDocument) {
   const text = JSON.stringify(document.pages);
   return {
@@ -496,9 +520,10 @@ export async function generatePrescriptionPdf(
       : undefined,
     cjk: cjkBytes ? await pdf.embedFont(cjkBytes, { subset: true }) : undefined,
   };
+  const mark = await embedClinicMark(pdf);
   document.pages.forEach((documentPage) => {
     const page = pdf.addPage(PageSizes.A5);
-    drawPage(page, documentPage, fonts);
+    drawPage(page, documentPage, fonts, mark);
   });
   return pdf.save({ useObjectStreams: false });
 }

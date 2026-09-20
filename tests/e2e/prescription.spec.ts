@@ -464,9 +464,13 @@ test("overflow keeps identical two-page breaks and content across mobile review,
 
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download PDF" }).click();
-  const path = await (await downloadEvent).path();
+  const download = await downloadEvent;
+  const path = await download.path();
   expect(path).not.toBeNull();
+  if (process.env.SAVE_PDF) await download.saveAs(process.env.SAVE_PDF);
   const bytes = await readFile(path!);
+  // The clinic's mark is embedded on the letterhead of every page.
+  expect(bytes.includes(Buffer.from("/Subtype /Image"))).toBe(true);
   const pdf = await getDocument({ data: new Uint8Array(bytes) }).promise;
   expect(pdf.numPages).toBe(2);
   const pdfText: string[] = [];
@@ -610,6 +614,11 @@ test("print is available only for a completed A5 prescription and prints only th
   });
   await openPrescription(page, "completed-print");
   await expect(
+    page.getByRole("navigation", { name: "Main" }).getByRole("link", {
+      name: "Settings",
+    }),
+  ).toHaveCount(0);
+  await expect(
     page.getByRole("button", { name: "Print prescription" }),
   ).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Download PDF" })).toHaveCount(
@@ -632,6 +641,9 @@ test("print is available only for a completed A5 prescription and prints only th
     "data-print-called",
     "true",
   );
+  await expect(
+    page.getByRole("button", { name: "Print with options…" }),
+  ).toHaveCount(0);
 
   await page.emulateMedia({ media: "print" });
   await expect(page.getByRole("navigation")).toBeHidden();
