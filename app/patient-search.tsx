@@ -8,7 +8,7 @@ type PatientSearchState = "idle" | "loading" | "ready" | "failed";
 
 export function describePatient(patient: PatientRecord) {
   const parts = [
-    patient.number !== null ? `No. ${patient.number}` : "Number pending",
+    patient.number !== null ? `No. ${patient.number}` : "Pending patient number",
     patient.age ? `Age ${patient.age}` : "",
     patient.sex,
     patient.phone,

@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { uniqueSuffix } from "./fixtures";
+import {
+  emptyConsultationPatient,
+  type Consultation,
+} from "../../app/consultation-model";
+import { sampleConsultation, todayInIndia, uniqueSuffix } from "./fixtures";
 
 const deviceKey = "clinic-sync-e2e-device-key";
 const deviceKeyHeader = { "X-Clinic-Device-Key": deviceKey };
@@ -122,4 +126,120 @@ test("the Cloud copy never replaces a newer Clinic record with an older change",
   expect(((await found.json()) as { patients: { id: string; name: string }[] }).patients).toEqual([
     expect.objectContaining({ id, name: newerName }),
   ]);
+});
+
+test("the Cloud copy hands over Phone-issued records until the Clinic PC confirms them", async ({
+  request,
+}) => {
+  const suffix = uniqueSuffix();
+  const draftId = `phone-handover-${suffix}`;
+  const consultation: Consultation = {
+    ...sampleConsultation(),
+    visitType: "new",
+    consultationDate: todayInIndia(),
+    patient: {
+      ...emptyConsultationPatient(),
+      name: `Phone Handover ${suffix}`,
+      age: "37",
+      sex: "Female",
+      phone: "98888 77665",
+    },
+    medicines: [
+      {
+        name: "Paracetamol 500 mg tablet",
+        dose: "1–0–1",
+        duration: "5 days",
+        method: "After food",
+      },
+    ],
+  };
+  const saved = await request.put(`/api/consultation-drafts/${draftId}`, {
+    data: { consultation, revision: 1 },
+  });
+  expect(saved.ok(), await saved.text()).toBe(true);
+  const issued = await request.post(
+    `/api/consultation-drafts/${draftId}/complete`,
+    {
+      headers: { "X-Clinic-Phone-Issued": "1" },
+      data: { revision: 1, expectedConsultation: consultation },
+    },
+  );
+  expect(issued.ok(), await issued.text()).toBe(true);
+  const snapshot = (await issued.json()) as {
+    snapshot: { id: string; consultation: { patient: { patientId: string } } };
+  };
+  const ids = new Set([
+    snapshot.snapshot.id,
+    snapshot.snapshot.consultation.patient.patientId,
+  ]);
+
+  const collect = () =>
+    request.post("/api/sync", {
+      headers: deviceKeyHeader,
+      data: { changes: [], collected: [] },
+    });
+  const first = await collect();
+  expect(first.ok(), await first.text()).toBe(true);
+  const firstBody = (await first.json()) as {
+    phoneIssued: Array<{
+      entityKind: string;
+      recordId: string;
+      issuedAt: string;
+      record: Record<string, unknown>;
+    }>;
+  };
+  const handedOver = firstBody.phoneIssued.filter((record) => ids.has(record.recordId));
+  expect(handedOver.map((record) => record.entityKind).sort()).toEqual([
+    "patient",
+    "prescription",
+  ]);
+  expect(
+    (handedOver.find((record) => record.entityKind === "patient")?.record as {
+      patientNumber?: unknown;
+    }).patientNumber,
+  ).toBeNull();
+
+  const retry = await collect();
+  expect(retry.ok(), await retry.text()).toBe(true);
+  const retryBody = (await retry.json()) as typeof firstBody;
+  expect(retryBody.phoneIssued.filter((record) => ids.has(record.recordId))).toEqual(
+    handedOver,
+  );
+
+  const wrongKey = await request.post("/api/sync", {
+    headers: { "X-Clinic-Device-Key": "wrong-device-key" },
+    data: {
+      changes: [],
+      collected: handedOver.map(({ entityKind, recordId, issuedAt }) => ({
+        entityKind,
+        recordId,
+        issuedAt,
+      })),
+    },
+  });
+  expect(wrongKey.status()).toBe(401);
+
+  const confirmation = handedOver.map(({ entityKind, recordId, issuedAt }) => ({
+    entityKind,
+    recordId,
+    issuedAt,
+  }));
+  const confirmed = await request.post("/api/sync", {
+    headers: deviceKeyHeader,
+    data: { changes: [], collected: confirmation },
+  });
+  expect(confirmed.ok(), await confirmed.text()).toBe(true);
+  const confirmedBody = (await confirmed.json()) as typeof firstBody & {
+    collected: typeof confirmation;
+  };
+  expect(confirmedBody.collected).toEqual(confirmation);
+  expect(confirmedBody.phoneIssued.filter((record) => ids.has(record.recordId))).toEqual(
+    [],
+  );
+
+  const afterConfirmation = await collect();
+  const afterBody = (await afterConfirmation.json()) as typeof firstBody;
+  expect(afterBody.phoneIssued.filter((record) => ids.has(record.recordId))).toEqual(
+    [],
+  );
 });

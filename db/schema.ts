@@ -83,6 +83,8 @@ export const patientRecords = sqliteTable(
     sex: text("sex").notNull().default("Other"),
     phone: text("phone").notNull().default(""),
     sourceDraftId: text("source_draft_id"),
+    phoneIssued: integer("phone_issued").notNull().default(0),
+    possibleDuplicate: integer("possible_duplicate").notNull().default(0),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -125,4 +127,25 @@ export const medicalCertificates = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [index("idx_medical_certificates_issued_on").on(table.issuedOn)],
+);
+
+export const phoneIssuedRecords = sqliteTable(
+  "phone_issued_records",
+  {
+    entityKind: text("entity_kind").notNull(),
+    recordId: text("record_id").notNull(),
+    recordJson: text("record_json").notNull(),
+    issuedAt: text("issued_at").notNull(),
+    collectedAt: text("collected_at"),
+  },
+  (table) => [
+    uniqueIndex("idx_phone_issued_records_identity").on(
+      table.entityKind,
+      table.recordId,
+    ),
+    index("idx_phone_issued_records_waiting").on(
+      table.collectedAt,
+      table.issuedAt,
+    ),
+  ],
 );

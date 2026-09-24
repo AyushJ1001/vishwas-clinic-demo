@@ -14,6 +14,12 @@ import {
   isValidPatientInput,
   normalizePatientName,
 } from "../app/patient-import";
+import {
+  patientRecordIndexesSql,
+  patientRecordsTableSql,
+  patientRecordUpgradeColumns,
+} from "./clinic-record-schema";
+import { queuePhoneIssuedRecord } from "./sync";
 
 // ADR 0003: a Patient has a globally unique id and, separately, the
 // sequential Patient number the clinic uses. Two patients with the same name
@@ -27,10 +33,12 @@ type PatientRow = {
   date_of_birth_estimated: number;
   sex: string;
   phone: string;
+  phone_issued: number;
+  possible_duplicate: number;
 };
 
 const columns = `id, patient_number, name, date_of_birth,
-  date_of_birth_estimated, sex, phone`;
+  date_of_birth_estimated, sex, phone, phone_issued, possible_duplicate`;
 const searchLimit = 8;
 
 function today() {
@@ -40,29 +48,16 @@ function today() {
 async function ensurePatientsTable() {
   const db = env.DB;
   await db.batch([
-    db.prepare(`CREATE TABLE IF NOT EXISTS patient_records (
-      id TEXT PRIMARY KEY NOT NULL,
-      patient_number INTEGER,
-      name TEXT NOT NULL,
-      name_normalized TEXT NOT NULL,
-      date_of_birth TEXT NOT NULL DEFAULT '',
-      date_of_birth_estimated INTEGER NOT NULL DEFAULT 0,
-      sex TEXT NOT NULL DEFAULT 'Other',
-      phone TEXT NOT NULL DEFAULT '',
-      source_draft_id TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )`),
-    db.prepare(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_patient_records_number ON patient_records (patient_number)",
-    ),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_patient_records_name ON patient_records (name_normalized)",
-    ),
-    db.prepare(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_patient_records_source_draft ON patient_records (source_draft_id)",
-    ),
+    db.prepare(patientRecordsTableSql),
+    ...patientRecordIndexesSql.map((sql) => db.prepare(sql)),
   ]);
+  const columns = await db.prepare("PRAGMA table_info(patient_records)").all<{
+    name: string;
+  }>();
+  const names = new Set(columns.results.map((column) => column.name));
+  for (const column of patientRecordUpgradeColumns) {
+    if (!names.has(column.name)) await db.prepare(column.sql).run();
+  }
   await migrateLegacyPatients();
 }
 
@@ -129,6 +124,8 @@ function toPatientRecord(row: PatientRow): PatientRecord {
     age: ageOn(row.date_of_birth, today()),
     sex: toSex(row.sex),
     phone: row.phone,
+    phoneIssued: row.phone_issued === 1,
+    possibleDuplicate: row.possible_duplicate === 1,
   };
 }
 
@@ -185,6 +182,7 @@ type NewPatient = {
   sex: string;
   phone: string;
   sourceDraftId?: string;
+  phoneIssued?: boolean;
 };
 
 // The next Patient number is worked out inside the insert itself, so two
@@ -195,12 +193,15 @@ async function insertPatient(patient: NewPatient) {
   await env.DB.prepare(
     `INSERT INTO patient_records (id, patient_number, name, name_normalized,
        date_of_birth, date_of_birth_estimated, sex, phone, source_draft_id,
-       created_at, updated_at)
-     SELECT ?, COALESCE(?, MAX(patient_number) + 1, 1), ?, ?, ?, ?, ?, ?, ?, ?, ?
+       phone_issued, possible_duplicate, created_at, updated_at)
+     SELECT ?, CASE WHEN ? = 1 THEN NULL
+       ELSE COALESCE(?, MAX(patient_number) + 1, 1) END,
+       ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?
      FROM patient_records`,
   )
     .bind(
       id,
+      patient.phoneIssued ? 1 : 0,
       patient.number ?? null,
       patient.name.trim(),
       normalizePatientName(patient.name),
@@ -209,23 +210,48 @@ async function insertPatient(patient: NewPatient) {
       toSex(patient.sex),
       patient.phone.trim(),
       patient.sourceDraftId ?? null,
+      patient.phoneIssued ? 1 : 0,
       timestamp,
       timestamp,
     )
     .run();
-  return (await getPatient(id))!;
+  const saved = (await getPatient(id))!;
+  if (patient.phoneIssued) {
+    await queuePhoneIssuedRecord({
+      entityKind: "patient",
+      recordId: id,
+      issuedAt: timestamp,
+      record: {
+        id,
+        patientNumber: null,
+        name: saved.name,
+        nameNormalized: normalizePatientName(saved.name),
+        dateOfBirth: saved.dateOfBirth,
+        dateOfBirthEstimated: saved.dateOfBirthEstimated,
+        sex: saved.sex,
+        phone: saved.phone,
+        sourceDraftId: patient.sourceDraftId ?? null,
+        phoneIssued: true,
+        possibleDuplicate: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    });
+  }
+  return saved;
 }
 
 /**
  * Saves the patient a prescription is being completed for: new patients are
- * registered with the next Patient number; a chosen patient's details are
- * brought up to date. Completing the same draft again finds the patient it
- * registered the first time instead of registering them twice.
+ * registered once; the Clinic PC gives them the next Patient number, while
+ * the Cloud copy leaves it pending. A chosen Clinic record is brought up to
+ * date only on the Clinic PC.
  */
 export async function savePatientForConsultation(
   patient: ConsultationPatient,
   consultationDate: string,
   draftId: string,
+  options: { phoneIssued?: boolean } = {},
 ): Promise<PatientRecord> {
   await ensurePatientsTable();
   const typedBirthDate = patient.dateOfBirth;
@@ -234,6 +260,9 @@ export async function savePatientForConsultation(
     : estimatedDateOfBirth(patient.age.trim(), consultationDate);
   const saved = patient.patientId ? await getPatient(patient.patientId) : null;
   if (saved) {
+    // A phone may select a Clinic record, but the Cloud copy never turns its
+    // typed details into an edit of the Clinic PC's record.
+    if (options.phoneIssued) return saved;
     // An estimated birth date is only replaced when the age has changed.
     const keepsEstimate =
       !typedBirthDate &&
@@ -284,6 +313,7 @@ export async function savePatientForConsultation(
       sex: patient.sex,
       phone: patient.phone,
       sourceDraftId: draftId,
+      phoneIssued: options.phoneIssued,
     });
   } catch (error) {
     // A simultaneous completion of the same draft registered them first.

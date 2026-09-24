@@ -55,7 +55,7 @@ export function ReceiptSheet({
             </div>
             <div>
               <dt>Patient no.</dt>
-              <dd>{receipt.patient.number ?? "Pending"}</dd>
+              <dd>{receipt.patient.number ?? "Pending patient number"}</dd>
             </div>
           </dl>
           <p className="issued-document-statement">
@@ -110,7 +110,7 @@ export function MedicalCertificateSheet({
           <dl className="issued-document-meta issued-document-meta-four">
             <div>
               <dt>Patient no.</dt>
-              <dd>{certificate.patient.number ?? "Pending"}</dd>
+              <dd>{certificate.patient.number ?? "Pending patient number"}</dd>
             </div>
             <div>
               <dt>Age</dt>

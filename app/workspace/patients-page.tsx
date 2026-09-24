@@ -281,9 +281,21 @@ export function PatientDirectoryCard({ reloadKey }: { reloadKey: number }) {
               {patients.map((patient) => (
                 <tr key={patient.id}>
                   <td className="whitespace-nowrap py-2 pr-3 text-right tabular-nums text-graphite">
-                    {patient.number ?? "Pending"}
+                    {patient.number ?? "Pending patient number"}
                   </td>
-                  <td className="px-3 py-2 font-semibold">{patient.name}</td>
+                  <td className="px-3 py-2">
+                    <span className="font-semibold">{patient.name}</span>
+                    {patient.phoneIssued && (
+                      <span className="mt-1 block text-xs text-graphite">
+                        Phone-issued
+                      </span>
+                    )}
+                    {patient.possibleDuplicate && (
+                      <span className="mt-1 block text-xs font-semibold text-attention">
+                        Possible duplicate
+                      </span>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     {patient.age || "—"}
                     {patient.dateOfBirth && !patient.dateOfBirthEstimated && (

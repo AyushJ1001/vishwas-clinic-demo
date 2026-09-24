@@ -9,6 +9,7 @@ import {
   listRecentReceipts,
   nextReceiptNumber,
 } from "../../../db/issued-documents";
+import { isPhoneIssuedRequest } from "../../phone-issued-request";
 
 function validId(value: unknown): value is string {
   return typeof value === "string" && /^[a-zA-Z0-9-]{8,120}$/.test(value);
@@ -49,6 +50,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (isPhoneIssuedRequest(request)) {
+    return NextResponse.json(
+      { error: "Receipts can only be issued on the Clinic PC" },
+      { status: 403 },
+    );
+  }
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const amountPaise = body?.amountPaise;
   const doctorName = body?.doctorName;
