@@ -9,6 +9,8 @@ import type {
 import { createCompletedPrescriptionSnapshot } from "../app/clinic-facts";
 import { consultationFingerprint } from "../app/consultation-validation";
 import { withCurrentPatientFields } from "../app/consultation-model";
+import { consultationDraftsTableSql } from "./clinic-record-schema";
+import { queuePhoneIssuedRecord } from "./sync";
 
 type ConsultationDraftRow = {
   id: string;
@@ -21,15 +23,7 @@ type ConsultationDraftRow = {
 };
 
 async function ensureConsultationDraftsTable() {
-  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS consultation_drafts (
-    id TEXT PRIMARY KEY NOT NULL,
-    revision INTEGER NOT NULL,
-    consultation_json TEXT NOT NULL,
-    lifecycle_status TEXT NOT NULL DEFAULT 'editing',
-    completed_snapshot_json TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )`).run();
+  await env.DB.prepare(consultationDraftsTableSql).run();
   const columns = await env.DB.prepare(
     "PRAGMA table_info(consultation_drafts)",
   ).all<{ name: string }>();
@@ -128,7 +122,19 @@ type CompleteConsultationDraftRequest = {
   expectedRevision: number;
   expectedConsultation: Consultation;
   consultation: Consultation;
+  phoneIssued?: boolean;
 };
+
+async function keepPhoneIssuedPrescription(
+  snapshot: CompletedPrescriptionSnapshot,
+) {
+  await queuePhoneIssuedRecord({
+    entityKind: "prescription",
+    recordId: snapshot.id,
+    record: snapshot as unknown as Record<string, unknown>,
+    issuedAt: snapshot.completedAt,
+  });
+}
 
 function snapshotMatchesReview(
   snapshot: CompletedPrescriptionSnapshot,
@@ -146,6 +152,7 @@ export async function completeConsultationDraft({
   expectedRevision,
   expectedConsultation,
   consultation,
+  phoneIssued = false,
 }: CompleteConsultationDraftRequest) {
   await ensureConsultationDraftsTable();
   const expectedFingerprint = consultationFingerprint(expectedConsultation);
@@ -159,6 +166,7 @@ export async function completeConsultationDraft({
         expectedFingerprint,
       )
     ) {
+      if (phoneIssued) await keepPhoneIssuedPrescription(existing.completedSnapshot);
       return existing.completedSnapshot;
     }
     throw new ConsultationRevisionConflictError(
@@ -201,7 +209,10 @@ export async function completeConsultationDraft({
       stored?.consultation_json ?? "",
     )
     .run();
-  if (result.meta.changes > 0) return snapshot;
+  if (result.meta.changes > 0) {
+    if (phoneIssued) await keepPhoneIssuedPrescription(snapshot);
+    return snapshot;
+  }
 
   const current = await getConsultationDraft(id);
   if (
@@ -213,6 +224,7 @@ export async function completeConsultationDraft({
       expectedFingerprint,
     )
   ) {
+    if (phoneIssued) await keepPhoneIssuedPrescription(current.completedSnapshot);
     return current.completedSnapshot;
   }
   throw new ConsultationRevisionConflictError();

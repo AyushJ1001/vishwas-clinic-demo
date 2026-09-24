@@ -9,6 +9,11 @@ import type {
   ReceiptTitle,
 } from "../app/issued-document-model";
 import { savePatientForConsultation } from "./patients";
+import {
+  medicalCertificateIndexesSql,
+  medicalCertificatesTableSql,
+} from "./clinic-record-schema";
+import { queuePhoneIssuedRecord } from "./sync";
 
 type ReceiptRow = { snapshot_json: string };
 type CertificateRow = { snapshot_json: string };
@@ -32,17 +37,8 @@ async function ensureIssuedDocumentTables() {
     db.prepare(
       "CREATE INDEX IF NOT EXISTS idx_receipts_issued_on ON receipts (issued_on)",
     ),
-    db.prepare(`CREATE TABLE IF NOT EXISTS medical_certificates (
-      id TEXT PRIMARY KEY NOT NULL,
-      patient_id TEXT NOT NULL,
-      doctor_name TEXT NOT NULL,
-      issued_on TEXT NOT NULL,
-      snapshot_json TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    )`),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_medical_certificates_issued_on ON medical_certificates (issued_on)",
-    ),
+    db.prepare(medicalCertificatesTableSql),
+    ...medicalCertificateIndexesSql.map((sql) => db.prepare(sql)),
   ]);
 }
 
@@ -180,15 +176,27 @@ export async function issueMedicalCertificate(input: {
   restDays: number;
   fitToResume: boolean;
   resumeFrom: string;
+  phoneIssued?: boolean;
 }) {
   await ensureIssuedDocumentTables();
   const existing = await getMedicalCertificate(input.id);
-  if (existing) return existing;
+  if (existing) {
+    if (input.phoneIssued) {
+      await queuePhoneIssuedRecord({
+        entityKind: "medical-certificate",
+        recordId: existing.id,
+        record: existing as unknown as Record<string, unknown>,
+        issuedAt: existing.createdAt,
+      });
+    }
+    return existing;
+  }
 
   const patient = await savePatientForConsultation(
     input.patient,
     input.issuedOn,
     input.id,
+    { phoneIssued: input.phoneIssued },
   );
   const createdAt = new Date().toISOString();
   const snapshot: MedicalCertificateSnapshot = {
@@ -232,6 +240,14 @@ export async function issueMedicalCertificate(input: {
     const raced = await getMedicalCertificate(input.id);
     if (raced) return raced;
     throw error;
+  }
+  if (input.phoneIssued) {
+    await queuePhoneIssuedRecord({
+      entityKind: "medical-certificate",
+      recordId: snapshot.id,
+      record: snapshot as unknown as Record<string, unknown>,
+      issuedAt: snapshot.createdAt,
+    });
   }
   return snapshot;
 }

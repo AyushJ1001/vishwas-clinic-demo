@@ -6,7 +6,18 @@ import { catalogUpgradeColumns } from "./catalog";
 import type {
   ClinicRecordChange,
   ClinicRecordKind,
+  ConfirmedPhoneIssuedRecord,
+  PhoneIssuedRecord,
+  PhoneIssuedRecordKind,
 } from "../app/sync-model";
+import {
+  consultationDraftsTableSql,
+  medicalCertificateIndexesSql,
+  medicalCertificatesTableSql,
+  patientRecordIndexesSql,
+  patientRecordsTableSql,
+  patientRecordUpgradeColumns,
+} from "./clinic-record-schema";
 
 type RecordValue = Record<string, unknown>;
 
@@ -26,28 +37,8 @@ async function ensureSyncTables() {
       applied_at TEXT NOT NULL,
       PRIMARY KEY (entity_kind, record_id)
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS patient_records (
-      id TEXT PRIMARY KEY NOT NULL,
-      patient_number INTEGER,
-      name TEXT NOT NULL,
-      name_normalized TEXT NOT NULL,
-      date_of_birth TEXT NOT NULL DEFAULT '',
-      date_of_birth_estimated INTEGER NOT NULL DEFAULT 0,
-      sex TEXT NOT NULL DEFAULT 'Other',
-      phone TEXT NOT NULL DEFAULT '',
-      source_draft_id TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS consultation_drafts (
-      id TEXT PRIMARY KEY NOT NULL,
-      revision INTEGER NOT NULL,
-      consultation_json TEXT NOT NULL,
-      lifecycle_status TEXT NOT NULL DEFAULT 'editing',
-      completed_snapshot_json TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )`),
+    db.prepare(patientRecordsTableSql),
+    db.prepare(consultationDraftsTableSql),
     db.prepare(`CREATE TABLE IF NOT EXISTS receipts (
       id TEXT PRIMARY KEY NOT NULL,
       receipt_number INTEGER NOT NULL UNIQUE,
@@ -58,14 +49,7 @@ async function ensureSyncTables() {
       snapshot_json TEXT NOT NULL,
       created_at TEXT NOT NULL
     )`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS medical_certificates (
-      id TEXT PRIMARY KEY NOT NULL,
-      patient_id TEXT NOT NULL,
-      doctor_name TEXT NOT NULL,
-      issued_on TEXT NOT NULL,
-      snapshot_json TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    )`),
+    db.prepare(medicalCertificatesTableSql),
     db.prepare(`CREATE TABLE IF NOT EXISTS catalog_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       record_id TEXT,
@@ -77,25 +61,27 @@ async function ensureSyncTables() {
     db.prepare(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_sync_records_identity ON clinic_sync_records (entity_kind, record_id)",
     ),
-    db.prepare(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_patient_records_number ON patient_records (patient_number)",
-    ),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_patient_records_name ON patient_records (name_normalized)",
-    ),
-    db.prepare(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_patient_records_source_draft ON patient_records (source_draft_id)",
-    ),
+    ...patientRecordIndexesSql.map((sql) => db.prepare(sql)),
     db.prepare(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_number ON receipts (receipt_number)",
     ),
     db.prepare(
       "CREATE INDEX IF NOT EXISTS idx_receipts_issued_on ON receipts (issued_on)",
     ),
+    ...medicalCertificateIndexesSql.map((sql) => db.prepare(sql)),
+    db.prepare(`CREATE TABLE IF NOT EXISTS phone_issued_records (
+      entity_kind TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      issued_at TEXT NOT NULL,
+      collected_at TEXT,
+      PRIMARY KEY (entity_kind, record_id)
+    )`),
     db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_medical_certificates_issued_on ON medical_certificates (issued_on)",
+      "CREATE INDEX IF NOT EXISTS idx_phone_issued_records_waiting ON phone_issued_records (collected_at, issued_at)",
     ),
   ]);
+  await addMissingColumns(db, "patient_records", patientRecordUpgradeColumns);
   await addMissingColumns(db, "catalog_entries", catalogUpgradeColumns);
   await db.batch([
     db.prepare(
@@ -134,8 +120,9 @@ function patientStatement(change: ClinicRecordChange) {
   return env.DB.prepare(
     `INSERT INTO patient_records
        (id, patient_number, name, name_normalized, date_of_birth,
-        date_of_birth_estimated, sex, phone, source_draft_id, created_at, updated_at)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        date_of_birth_estimated, sex, phone, source_draft_id, phone_issued,
+        possible_duplicate, created_at, updated_at)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE ${currentVersion}
      ON CONFLICT(id) DO UPDATE SET
        patient_number = excluded.patient_number,
@@ -146,6 +133,8 @@ function patientStatement(change: ClinicRecordChange) {
        sex = excluded.sex,
        phone = excluded.phone,
        source_draft_id = excluded.source_draft_id,
+       phone_issued = excluded.phone_issued,
+       possible_duplicate = excluded.possible_duplicate,
        created_at = excluded.created_at,
        updated_at = excluded.updated_at`,
   ).bind(
@@ -158,6 +147,8 @@ function patientStatement(change: ClinicRecordChange) {
     record.sex,
     record.phone,
     record.sourceDraftId,
+    record.phoneIssued ? 1 : 0,
+    record.possibleDuplicate ? 1 : 0,
     record.createdAt,
     record.updatedAt,
     change.entityKind,
@@ -327,6 +318,10 @@ function recordMatchesKind(
       isString(record.sex) &&
       isString(record.phone) &&
       (record.sourceDraftId === null || isString(record.sourceDraftId)) &&
+      (record.phoneIssued === undefined ||
+        typeof record.phoneIssued === "boolean") &&
+      (record.possibleDuplicate === undefined ||
+        typeof record.possibleDuplicate === "boolean") &&
       isString(record.createdAt) &&
       isString(record.updatedAt)
     );
@@ -396,4 +391,116 @@ export function isClinicRecordChange(value: unknown): value is ClinicRecordChang
     value.recordId,
     value.record,
   );
+}
+
+const phoneKinds = new Set<PhoneIssuedRecordKind>([
+  "patient",
+  "prescription",
+  "medical-certificate",
+]);
+
+export function isPhoneIssuedRecord(value: unknown): value is PhoneIssuedRecord {
+  if (!isRecord(value)) return false;
+  if (
+    !isString(value.entityKind) ||
+    !phoneKinds.has(value.entityKind as PhoneIssuedRecordKind) ||
+    !isString(value.recordId) ||
+    !value.recordId ||
+    !isRecord(value.record) ||
+    !isString(value.issuedAt) ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.issuedAt) ||
+    !Number.isFinite(Date.parse(value.issuedAt)) ||
+    !recordMatchesKind(
+      value.entityKind as PhoneIssuedRecordKind,
+      value.recordId,
+      value.record,
+    )
+  ) {
+    return false;
+  }
+  return value.entityKind !== "patient" || value.record.patientNumber === null;
+}
+
+export function isConfirmedPhoneIssuedRecord(
+  value: unknown,
+): value is ConfirmedPhoneIssuedRecord {
+  if (!isRecord(value)) return false;
+  return (
+    isString(value.entityKind) &&
+    phoneKinds.has(value.entityKind as PhoneIssuedRecordKind) &&
+    isString(value.recordId) &&
+    Boolean(value.recordId) &&
+    isString(value.issuedAt) &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.issuedAt) &&
+    Number.isFinite(Date.parse(value.issuedAt))
+  );
+}
+
+export async function queuePhoneIssuedRecord(record: PhoneIssuedRecord) {
+  await ensureSyncTables();
+  if (!isPhoneIssuedRecord(record)) {
+    throw new TypeError("The Phone-issued record is invalid.");
+  }
+  await env.DB.prepare(
+    `INSERT INTO phone_issued_records
+       (entity_kind, record_id, record_json, issued_at, collected_at)
+     VALUES (?, ?, ?, ?, NULL)
+     ON CONFLICT(entity_kind, record_id) DO NOTHING`,
+  )
+    .bind(
+      record.entityKind,
+      record.recordId,
+      JSON.stringify(record.record),
+      record.issuedAt,
+    )
+    .run();
+}
+
+export async function confirmPhoneIssuedRecords(
+  confirmations: ConfirmedPhoneIssuedRecord[],
+) {
+  if (!confirmations.length) return;
+  await ensureSyncTables();
+  const collectedAt = new Date().toISOString();
+  await env.DB.batch(
+    confirmations.map((confirmation) =>
+      env.DB.prepare(
+        `UPDATE phone_issued_records SET collected_at = COALESCE(collected_at, ?)
+         WHERE entity_kind = ? AND record_id = ? AND issued_at = ?`,
+      ).bind(
+        collectedAt,
+        confirmation.entityKind,
+        confirmation.recordId,
+        confirmation.issuedAt,
+      ),
+    ),
+  );
+}
+
+export async function listWaitingPhoneIssuedRecords(
+  limit: number,
+): Promise<PhoneIssuedRecord[]> {
+  await ensureSyncTables();
+  const rows = await env.DB.prepare(
+    `SELECT entity_kind, record_id, record_json, issued_at
+     FROM phone_issued_records
+     WHERE collected_at IS NULL
+     ORDER BY issued_at ASC,
+       CASE entity_kind WHEN 'patient' THEN 0 ELSE 1 END,
+       entity_kind ASC, record_id ASC
+     LIMIT ?`,
+  )
+    .bind(limit)
+    .all<{
+      entity_kind: PhoneIssuedRecordKind;
+      record_id: string;
+      record_json: string;
+      issued_at: string;
+    }>();
+  return rows.results.map((row) => ({
+    entityKind: row.entity_kind,
+    recordId: row.record_id,
+    record: JSON.parse(row.record_json) as Record<string, unknown>,
+    issuedAt: row.issued_at,
+  }));
 }

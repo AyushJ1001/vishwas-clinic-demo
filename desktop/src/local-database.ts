@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { renameSync, rmSync } from "node:fs";
+import { patientRecordUpgradeColumns } from "../../db/clinic-record-schema";
 import type {
   LocalQuery,
   LocalQueryMode,
@@ -99,7 +100,25 @@ export class LocalDatabase {
       );
       INSERT OR IGNORE INTO clinic_sync_state (singleton) VALUES (1);
     `);
+    this.upgradeClinicRecordColumns();
     this.installSyncOutboxTriggers();
+  }
+
+  private upgradeClinicRecordColumns() {
+    const exists = this.db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get("patient_records");
+    if (!exists) return;
+    const columns = new Set(
+      (
+        this.db.prepare("PRAGMA table_info(patient_records)").all() as {
+          name: string;
+        }[]
+      ).map((column) => column.name),
+    );
+    for (const column of patientRecordUpgradeColumns) {
+      if (!columns.has(column.name)) this.db.exec(column.sql);
+    }
   }
 
   /**
@@ -167,7 +186,10 @@ const createsTable = /create\s+table/iu;
 const syncOutboxSources = [
   {
     table: 'patient_records',
-    triggers: `CREATE TRIGGER IF NOT EXISTS clinic_sync_patient_insert
+    triggers: `DROP TRIGGER IF EXISTS clinic_sync_patient_insert;
+      DROP TRIGGER IF EXISTS clinic_sync_patient_update;
+
+      CREATE TRIGGER clinic_sync_patient_insert
       AFTER INSERT ON patient_records BEGIN
         INSERT INTO clinic_sync_outbox
           (entity_kind, record_id, record_json, recorded_at, sent_at)
@@ -184,6 +206,10 @@ const syncOutboxSources = [
             'sex', NEW.sex,
             'phone', NEW.phone,
             'sourceDraftId', NEW.source_draft_id,
+            'phoneIssued',
+              CASE WHEN NEW.phone_issued = 1 THEN json('true') ELSE json('false') END,
+            'possibleDuplicate',
+              CASE WHEN NEW.possible_duplicate = 1 THEN json('true') ELSE json('false') END,
             'createdAt', NEW.created_at,
             'updatedAt', NEW.updated_at
           ),
@@ -203,7 +229,7 @@ const syncOutboxSources = [
           sent_at = NULL;
       END;
 
-      CREATE TRIGGER IF NOT EXISTS clinic_sync_patient_update
+      CREATE TRIGGER clinic_sync_patient_update
       AFTER UPDATE ON patient_records BEGIN
         INSERT INTO clinic_sync_outbox
           (entity_kind, record_id, record_json, recorded_at, sent_at)
@@ -220,6 +246,10 @@ const syncOutboxSources = [
             'sex', NEW.sex,
             'phone', NEW.phone,
             'sourceDraftId', NEW.source_draft_id,
+            'phoneIssued',
+              CASE WHEN NEW.phone_issued = 1 THEN json('true') ELSE json('false') END,
+            'possibleDuplicate',
+              CASE WHEN NEW.possible_duplicate = 1 THEN json('true') ELSE json('false') END,
             'createdAt', NEW.created_at,
             'updatedAt', NEW.updated_at
           ),
@@ -252,6 +282,10 @@ const syncOutboxSources = [
           'sex', sex,
           'phone', phone,
           'sourceDraftId', source_draft_id,
+          'phoneIssued',
+            CASE WHEN phone_issued = 1 THEN json('true') ELSE json('false') END,
+          'possibleDuplicate',
+            CASE WHEN possible_duplicate = 1 THEN json('true') ELSE json('false') END,
           'createdAt', created_at,
           'updatedAt', updated_at
         ), updated_at, NULL
