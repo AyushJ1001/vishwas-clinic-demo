@@ -1,5 +1,8 @@
 import { env } from "cloudflare:workers";
 
+import { addMissingColumns } from "./add-column";
+import { catalogUpgradeColumns } from "./catalog";
+
 import type {
   ClinicRecordChange,
   ClinicRecordKind,
@@ -93,12 +96,7 @@ async function ensureSyncTables() {
       "CREATE INDEX IF NOT EXISTS idx_medical_certificates_issued_on ON medical_certificates (issued_on)",
     ),
   ]);
-  const columns = await db.prepare("PRAGMA table_info(catalog_entries)").all<{
-    name: string;
-  }>();
-  if (!columns.results.some((column) => column.name === "record_id")) {
-    await db.prepare("ALTER TABLE catalog_entries ADD COLUMN record_id TEXT").run();
-  }
+  await addMissingColumns(db, "catalog_entries", catalogUpgradeColumns);
   await db.batch([
     db.prepare(
       "UPDATE catalog_entries SET record_id = lower(hex(randomblob(16))) WHERE record_id IS NULL OR record_id = ''",

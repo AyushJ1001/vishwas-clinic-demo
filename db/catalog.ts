@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 
+import { addMissingColumns } from "./add-column";
+
 export type SavedCatalogEntry = {
   id: number;
   record_id: string;
@@ -7,6 +9,14 @@ export type SavedCatalogEntry = {
   group_name: string;
   item_name: string;
 };
+
+// Catalog entries made before Sync existed have no record id yet.
+export const catalogUpgradeColumns = [
+  {
+    name: "record_id",
+    sql: "ALTER TABLE catalog_entries ADD COLUMN record_id TEXT",
+  },
+] as const;
 
 async function ensureCatalogTable() {
   const db = env.DB;
@@ -23,12 +33,7 @@ async function ensureCatalogTable() {
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_entries_unique ON catalog_entries (catalog, group_name, item_name)",
     ),
   ]);
-  const columns = await db.prepare("PRAGMA table_info(catalog_entries)").all<{
-    name: string;
-  }>();
-  if (!columns.results.some((column) => column.name === "record_id")) {
-    await db.prepare("ALTER TABLE catalog_entries ADD COLUMN record_id TEXT").run();
-  }
+  await addMissingColumns(db, "catalog_entries", catalogUpgradeColumns);
   await db.batch([
     db.prepare(
       "UPDATE catalog_entries SET record_id = lower(hex(randomblob(16))) WHERE record_id IS NULL OR record_id = ''",
