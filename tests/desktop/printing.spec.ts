@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { launchClinicPc, openPage } from "./clinic-pc";
+import { launchClinicPc, openPage, printedSheets } from "./clinic-pc";
 
 let dataDirectory: string;
 
@@ -87,6 +87,18 @@ test("shows Settings in the Clinic PC navigation", async () => {
       name: "Settings",
     }),
   ).toBeVisible();
+
+  await app.close();
+});
+
+test("the test page prints on one A5 sheet, not two", async () => {
+  const app = await launchClinicPc(dataDirectory);
+  const window = await openPage(app, "/settings");
+  await expect(
+    window.getByRole("button", { name: "Send a test page" }),
+  ).toBeVisible();
+
+  expect(await printedSheets(app)).toBe(1);
 
   await app.close();
 });

@@ -460,6 +460,12 @@ test("overflow keeps identical two-page breaks and content across mobile review,
     elements.map((element) => getComputedStyle(element).breakAfter),
   );
   expect(printBreaks).toEqual(["page", "auto"]);
+  // Two pages on screen are two sheets from the printer: the rest of the
+  // app, though invisible in print, must not push a blank third sheet out.
+  const printed = (
+    await page.pdf({ preferCSSPageSize: true, printBackground: true })
+  ).toString("latin1");
+  expect(printed.match(/\/Type\s*\/Page(?![s\w])/g)).toHaveLength(2);
   await page.emulateMedia({ media: "screen" });
 
   const downloadEvent = page.waitForEvent("download");
@@ -656,7 +662,9 @@ test("print is available only for a completed A5 prescription and prints only th
     return { width: style.width, height: style.height };
   });
   expect(Number.parseFloat(printSize.width)).toBeCloseTo(559.37, 0);
-  expect(Number.parseFloat(printSize.height)).toBeCloseTo(793.7, 0);
+  // A5 is 793.7px tall; the printed page is a pixel short of it so that
+  // Chromium never spills it onto a second, blank sheet.
+  expect(Number.parseFloat(printSize.height)).toBeCloseTo(793.7 - 1, 0);
 });
 
 test("downloaded PDF is a readable A5 document with the completed Unicode content", async ({

@@ -29,3 +29,20 @@ export async function openPage(app: ElectronApplication, pathname: string) {
   await window.goto(`clinic://app${pathname}`);
   return window;
 }
+
+/**
+ * Counts the sheets the open page would print on A5. printToPDF lays the page
+ * out exactly as a print job does, so a blank extra sheet shows up here.
+ */
+export async function printedSheets(app: ElectronApplication) {
+  const pdf = await app.evaluate(async ({ BrowserWindow }) => {
+    const [open] = BrowserWindow.getAllWindows();
+    const data = await open.webContents.printToPDF({
+      pageSize: "A5",
+      printBackground: true,
+      margins: { marginType: "none" },
+    });
+    return data.toString("latin1");
+  });
+  return pdf.match(/\/Type\s*\/Page(?![s\w])/g)?.length ?? 0;
+}
