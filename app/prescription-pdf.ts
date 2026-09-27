@@ -20,8 +20,11 @@ import {
   type PrescriptionTextScale,
 } from "./prescription-document";
 
-const ink = rgb(0.125, 0.173, 0.161);
-const mutedInk = rgb(0.36, 0.43, 0.41);
+// DESIGN.md: ink #221c1d, graphite #5e5658, and the logo's maroon #650219,
+// which the PDF sent to a patient keeps and a black-and-white print turns dark.
+const ink = rgb(0.133, 0.11, 0.114);
+const mutedInk = rgb(0.369, 0.337, 0.345);
+const maroon = rgb(0.396, 0.008, 0.098);
 
 type PdfFonts = {
   regular: PDFFont;
@@ -271,13 +274,13 @@ function drawPage(
       top -= lineHeight;
     });
   };
-  const rule = () => {
+  const rule = (color = ink) => {
     top -= gap;
     pdfPage.drawLine({
       start: { x: left, y: top - ruleThickness / 2 },
       end: { x: right, y: top - ruleThickness / 2 },
       thickness: ruleThickness,
-      color: ink,
+      color,
     });
     top -= ruleThickness + gap;
   };
@@ -293,18 +296,20 @@ function drawPage(
     y: top - baselineOffset(titleSize, titleBox),
     size: titleSize,
     font: bold,
-    color: ink,
+    color: maroon,
   });
   top -= titleBox + gap;
 
   if (mark) {
-    // The clinic's mark sits beside the doctor's details, as on screen.
-    const markSize = lineHeight * 2;
+    // The clinic's logo rises beside the clinic's name and the doctor's
+    // three lines, as on screen.
+    const markHeight = titleBox + gap + lineHeight * 3;
+    const markWidth = (markHeight * mark.width) / mark.height;
     pdfPage.drawImage(mark, {
-      x: right - markSize,
-      y: doctorBlockTop - titleSize * 1.2 - gap - markSize,
-      width: markSize,
-      height: markSize,
+      x: right - markWidth,
+      y: doctorBlockTop - markHeight,
+      width: markWidth,
+      height: markHeight,
     });
   }
   line(documentPage.doctor.name, bold);
@@ -329,12 +334,12 @@ function drawPage(
   if (documentPage.doctor.specialty) {
     wrapped(documentPage.doctor.specialty, regular);
   }
-  rule();
+  rule(maroon);
 
   wrapped(documentPage.clinic.address, regular, "center");
   wrapped(documentPage.clinic.hours, regular, "center");
   wrapped(documentPage.clinic.services, regular, "center");
-  rule();
+  rule(maroon);
 
   const nameLabel = "Name: ";
   const nameIndent = textWidth(nameLabel, regular, fonts, fontSize);

@@ -2,12 +2,12 @@
 name: Vishwas Clinic
 description: A plain, fast consultation desk for a two-doctor clinic, built around the printed A5 sheet.
 colors:
-  letterhead-green: "#1e5646"
-  letterhead-green-dark: "#163f34"
-  ink: "#1d2522"
-  graphite: "#56625d"
-  rule: "#cdd3d0"
-  desk: "#eef1ef"
+  logo-maroon: "#650219"
+  logo-maroon-dark: "#4a0112"
+  ink: "#221c1d"
+  graphite: "#5e5658"
+  rule: "#d6d0d1"
+  desk: "#f2f0f0"
   paper: "#ffffff"
   signal-red: "#b3261e"
   attention-amber: "#7a4e00"
@@ -48,13 +48,13 @@ So the interface is a desk, not a brochure. It is dense, still, and predictable.
 
 ## Colour
 
-The clinic's printed letterhead is green, so the app wears the same green as its frame and uses it for the one primary action on each screen. Everything else is ink on white on a light desk grey.
+The app wears the maroon of the clinic's logo as its frame and uses it for the one primary action on each screen. Everything else is ink on white on a light desk grey. The logo's bright red and gold stay in the logo: red already means an error, and a second accent would blur that.
 
-- **Letterhead green** `#1e5646`: the top bar, primary buttons, selected tabs and options, focus rings. White on it is 8:1.
-- **Ink** `#1d2522`: text.
-- **Graphite** `#56625d`: labels and secondary text (6:1 on white).
-- **Rule** `#cdd3d0`: borders and dividers.
-- **Desk** `#eef1ef`: the page behind panels.
+- **Logo maroon** `#650219`: the top bar, primary buttons, selected tabs and options, focus rings, and on documents the clinic's name and the letterhead's rules. White on it is 13:1, and it prints as near-black in black and white.
+- **Ink** `#221c1d`: text.
+- **Graphite** `#5e5658`: labels and secondary text (7:1 on white).
+- **Rule** `#d6d0d1`: borders and dividers.
+- **Desk** `#f2f0f0`: the page behind panels.
 - **Paper** `#ffffff`: panels, inputs, and the document sheet.
 - **Signal red** `#b3261e`: errors and destructive actions only.
 - **Attention amber** `#7a4e00` on `#fff3d6`: something needs the doctor before they can finish (unsaved draft that failed, follow-up without its earlier prescription).
@@ -69,7 +69,7 @@ Sizes: 20 (page title), 16 (section title), 14 (body and inputs), 13 (labels), 1
 
 ## Layout
 
-A fixed frame: a 44 px green bar with the clinic name, the page tabs, and "Writing as" (the Author) on the right. Below it, each page has one title row with its main action at the right, then the work.
+A fixed frame: a 44 px maroon bar with the clinic name, the page tabs, and "Writing as" (the Author) on the right. Below it, each page has one title row with its main action at the right, then the work.
 
 ```
 ▓ Vishwas Clinic │ Prescription  Patients  Receipts  Certificates  Summaries  Backups │ Writing as Dr. M. V. Apte ▾ ▓
