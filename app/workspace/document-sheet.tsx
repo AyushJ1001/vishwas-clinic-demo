@@ -1,6 +1,6 @@
 "use client";
 
-import { Pulse } from "@phosphor-icons/react";
+import Image from "next/image";
 import { useLayoutEffect, useRef } from "react";
 
 import type {
@@ -32,7 +32,14 @@ export function DocumentLetterhead({
           )}
           {doctor.specialty && <p>{doctor.specialty}</p>}
         </div>
-        <Pulse size={24} weight="duotone" aria-hidden="true" />
+        {/* Replace public/icons/clinic-logo.svg with the clinic's own logo. */}
+        <Image
+          src="/icons/clinic-logo.svg"
+          alt=""
+          width={24}
+          height={24}
+          className="rx-clinic-mark"
+        />
       </div>
       <div className="rx-clinic rx-block">
         <p>{clinic.address}</p>

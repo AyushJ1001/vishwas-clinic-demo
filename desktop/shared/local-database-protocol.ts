@@ -35,3 +35,31 @@ export const backupChannels = {
   restoreLocal: "clinic-backups:restore-local",
   restoreUsb: "clinic-backups:restore-usb",
 } as const;
+
+export type PrintPaper = "a5" | "a5-on-a4-top";
+
+export type PrintSettings = {
+  printerName: string | null;
+  paper: PrintPaper;
+  askEveryTime: boolean;
+};
+
+export type ClinicPrinter = {
+  name: string;
+  displayName: string;
+  isDefault: boolean;
+};
+
+export type PrintResult =
+  | { status: "printed" }
+  | { status: "cancelled" }
+  | { status: "no-printer" }
+  | { status: "failed"; message: string };
+
+export const printingChannels = {
+  listPrinters: "clinic-print:list-printers",
+  settings: "clinic-print:settings",
+  saveSettings: "clinic-print:save-settings",
+  print: "clinic-print:print",
+  printWithOptions: "clinic-print:print-with-options",
+} as const;

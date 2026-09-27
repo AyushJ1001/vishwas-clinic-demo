@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { launchClinicPc as launch, openPage } from "./clinic-pc";
+import { launchClinicPc as launch, openPage, printedSheets } from "./clinic-pc";
 
 let dataDirectory: string;
 
@@ -102,6 +102,7 @@ test("a fresh Clinic PC starts empty and numbers its first patient 1", async () 
   await expect(
     window.getByRole("button", { name: "Download PDF" }),
   ).toBeEnabled({ timeout: 15_000 });
+  expect(await printedSheets(app)).toBe(1);
 
   await window.reload();
   await expect(

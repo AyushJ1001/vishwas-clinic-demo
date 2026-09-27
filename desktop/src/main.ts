@@ -4,10 +4,13 @@ import path from "node:path";
 import {
   backupChannels,
   localDatabaseChannels,
+  printingChannels,
   type LocalQuery,
+  type PrintSettings,
 } from "../shared/local-database-protocol";
 import { Backups } from "./backups";
 import { LocalDatabase } from "./local-database";
+import { Printing } from "./printing";
 
 // The app is served from its own scheme so it never depends on a network,
 // and so pages get a stable origin for storage and `fetch("/api/...")`.
@@ -108,6 +111,23 @@ function connectBackups(backups: Backups) {
   );
 }
 
+function connectPrinting(printing: Printing) {
+  ipcMain.handle(printingChannels.listPrinters, (event) =>
+    printing.listPrinters(event.sender),
+  );
+  ipcMain.handle(printingChannels.settings, () => printing.settings());
+  ipcMain.handle(
+    printingChannels.saveSettings,
+    (_event, settings: PrintSettings) => printing.saveSettings(settings),
+  );
+  ipcMain.handle(printingChannels.print, (event) =>
+    printing.print(event.sender),
+  );
+  ipcMain.handle(printingChannels.printWithOptions, (event) =>
+    printing.print(event.sender, true),
+  );
+}
+
 function keepDailyBackups(backups: Backups) {
   const backUpIfDue = () =>
     backups.backUpDailyIfDue().catch((error: unknown) =>
@@ -159,10 +179,12 @@ function openMainWindow() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  const clinicDataDirectory = dataDirectory();
   const database = new LocalDatabase(
-    path.join(dataDirectory(), "clinic.sqlite"),
+    path.join(clinicDataDirectory, "clinic.sqlite"),
   );
-  const backups = new Backups(database, dataDirectory());
+  const backups = new Backups(database, clinicDataDirectory);
+  const printing = new Printing(clinicDataDirectory);
   let mainWindow: BrowserWindow | null = null;
 
   app.on("second-instance", () => {
@@ -176,6 +198,7 @@ if (!app.requestSingleInstanceLock()) {
     blockRemoteContent();
     connectLocalDatabase(database);
     connectBackups(backups);
+    connectPrinting(printing);
     keepDailyBackups(backups);
     backUpOnClose(backups);
     mainWindow = openMainWindow();

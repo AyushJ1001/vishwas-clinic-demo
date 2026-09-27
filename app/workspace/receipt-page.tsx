@@ -18,6 +18,10 @@ import {
 } from "../issued-document-model";
 import { PatientNameSearch } from "../patient-search";
 import { useAuthor } from "../use-author";
+import {
+  PrintFeedbackNotice,
+  useDocumentPrinting,
+} from "../use-document-printing";
 import { RouteWorkspace } from "./a5-workspace";
 import {
   documentPatientFromRecord,
@@ -98,6 +102,9 @@ export function ReceiptPage() {
   const [receipts, setReceipts] = useState<ReceiptSnapshot[]>([]);
   const [issued, setIssued] = useState<ReceiptSnapshot | null>(null);
   const [state, setState] = useState<"idle" | "issuing" | "error">("idle");
+  const documentPrinting = useDocumentPrinting(
+    "The print dialog did not open. Check the printer, then try again.",
+  );
 
   const loadRegister = () =>
     fetch("/api/receipts")
@@ -215,12 +222,28 @@ export function ReceiptPage() {
               </div>
               <div className="panel mt-4">
                 <div className="panel-section grid gap-2">
-                  <button type="button" className="btn btn-primary justify-start" onClick={() => window.print()}>
+                  <button
+                    type="button"
+                    className="btn btn-primary justify-start"
+                    onClick={documentPrinting.print}
+                    disabled={documentPrinting.printing}
+                  >
                     <Printer size={18} aria-hidden="true" /> Print receipt
                   </button>
+                  {documentPrinting.isClinicPc && (
+                    <button
+                      type="button"
+                      className="btn btn-quiet justify-start"
+                      onClick={documentPrinting.printWithOptions}
+                      disabled={documentPrinting.printing}
+                    >
+                      <Printer size={18} aria-hidden="true" /> Print with options…
+                    </button>
+                  )}
                   <button type="button" className="btn btn-secondary justify-start" onClick={startNew}>
                     New receipt
                   </button>
+                  <PrintFeedbackNotice feedback={documentPrinting.feedback} />
                 </div>
               </div>
             </div>

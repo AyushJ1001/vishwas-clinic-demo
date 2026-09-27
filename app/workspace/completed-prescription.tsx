@@ -25,6 +25,10 @@ import {
   retryPrescriptionPdf,
 } from "../prescription-output";
 import { getClinicPc } from "../clinic-pc";
+import {
+  PrintFeedbackNotice,
+  useDocumentPrinting,
+} from "../use-document-printing";
 
 import { getVisitTypeLabel } from "./prescription-page";
 import { PrescriptionDocument } from "./prescription-paper";
@@ -70,6 +74,9 @@ export function CompletedPrescriptionView({
     text: string;
   } | null>(null);
   const [sharing, setSharing] = useState(false);
+  const documentPrinting = useDocumentPrinting(
+    "The print dialog did not open. Try again or download the PDF.",
+  );
   const completedStatusRef = useRef<HTMLDivElement>(null);
   const downloadButtonRef = useRef<HTMLButtonElement>(null);
   const retryPdfButtonRef = useRef<HTMLButtonElement>(null);
@@ -115,17 +122,6 @@ export function CompletedPrescriptionView({
     };
   }, [document]);
 
-  const printPrescription = () => {
-    setOutputMessage(null);
-    try {
-      window.print();
-    } catch {
-      setOutputMessage({
-        kind: "error",
-        text: "The print dialog did not open. Try again or download the PDF.",
-      });
-    }
-  };
   const downloadPdf = () => {
     if (pdfState.status !== "ready") return;
     setOutputMessage(null);
@@ -257,12 +253,24 @@ export function CompletedPrescriptionView({
               <div className="mt-3 grid gap-2">
                 <button
                   type="button"
-                  onClick={printPrescription}
+                  onClick={documentPrinting.print}
+                  disabled={documentPrinting.printing}
                   className="btn btn-primary w-full justify-start"
                 >
                   <Printer size={18} weight="bold" />
                   Print prescription
                 </button>
+                {documentPrinting.isClinicPc && (
+                  <button
+                    type="button"
+                    onClick={documentPrinting.printWithOptions}
+                    disabled={documentPrinting.printing}
+                    className="btn btn-quiet w-full justify-start"
+                  >
+                    <Printer size={18} weight="bold" />
+                    Print with options…
+                  </button>
+                )}
                 <button
                   ref={downloadButtonRef}
                   type="button"
@@ -309,6 +317,7 @@ export function CompletedPrescriptionView({
                   Medical certificate
                 </button>
               </div>
+              <PrintFeedbackNotice feedback={documentPrinting.feedback} />
               {pdfState.status === "failed" && (
                 <div role="alert" className="notice notice-error mt-3">
                   <p>

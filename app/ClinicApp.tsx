@@ -6,12 +6,14 @@ import { CertificatePage } from "./workspace/certificate-page";
 import { SummaryPage } from "./workspace/summary-page";
 import { PrescriptionPage } from "./workspace/prescription-page";
 import { BackupsPage } from "./workspace/backups-page";
+import { SettingsPage } from "./workspace/settings-page";
 import type { RouteName } from "./workspace/shell";
 
 export type { RouteName };
 
 export default function ClinicApp({ route }: { route: RouteName }) {
   if (route === "backups") return <BackupsPage />;
+  if (route === "settings") return <SettingsPage />;
   if (route === "receipts") return <ReceiptPage />;
   if (route === "patients") return <PatientsPage />;
   if (route === "certificate") return <CertificatePage />;

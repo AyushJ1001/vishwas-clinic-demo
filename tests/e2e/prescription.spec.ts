@@ -460,13 +460,23 @@ test("overflow keeps identical two-page breaks and content across mobile review,
     elements.map((element) => getComputedStyle(element).breakAfter),
   );
   expect(printBreaks).toEqual(["page", "auto"]);
+  // Two pages on screen are two sheets from the printer: the rest of the
+  // app, though invisible in print, must not push a blank third sheet out.
+  const printed = (
+    await page.pdf({ preferCSSPageSize: true, printBackground: true })
+  ).toString("latin1");
+  expect(printed.match(/\/Type\s*\/Page(?![s\w])/g)).toHaveLength(2);
   await page.emulateMedia({ media: "screen" });
 
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download PDF" }).click();
-  const path = await (await downloadEvent).path();
+  const download = await downloadEvent;
+  const path = await download.path();
   expect(path).not.toBeNull();
+  if (process.env.SAVE_PDF) await download.saveAs(process.env.SAVE_PDF);
   const bytes = await readFile(path!);
+  // The clinic's mark is embedded on the letterhead of every page.
+  expect(bytes.includes(Buffer.from("/Subtype /Image"))).toBe(true);
   const pdf = await getDocument({ data: new Uint8Array(bytes) }).promise;
   expect(pdf.numPages).toBe(2);
   const pdfText: string[] = [];
@@ -610,6 +620,11 @@ test("print is available only for a completed A5 prescription and prints only th
   });
   await openPrescription(page, "completed-print");
   await expect(
+    page.getByRole("navigation", { name: "Main" }).getByRole("link", {
+      name: "Settings",
+    }),
+  ).toHaveCount(0);
+  await expect(
     page.getByRole("button", { name: "Print prescription" }),
   ).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Download PDF" })).toHaveCount(
@@ -632,6 +647,9 @@ test("print is available only for a completed A5 prescription and prints only th
     "data-print-called",
     "true",
   );
+  await expect(
+    page.getByRole("button", { name: "Print with options…" }),
+  ).toHaveCount(0);
 
   await page.emulateMedia({ media: "print" });
   await expect(page.getByRole("navigation")).toBeHidden();
@@ -644,7 +662,9 @@ test("print is available only for a completed A5 prescription and prints only th
     return { width: style.width, height: style.height };
   });
   expect(Number.parseFloat(printSize.width)).toBeCloseTo(559.37, 0);
-  expect(Number.parseFloat(printSize.height)).toBeCloseTo(793.7, 0);
+  // A5 is 793.7px tall; the printed page is a pixel short of it so that
+  // Chromium never spills it onto a second, blank sheet.
+  expect(Number.parseFloat(printSize.height)).toBeCloseTo(793.7 - 1, 0);
 });
 
 test("downloaded PDF is a readable A5 document with the completed Unicode content", async ({

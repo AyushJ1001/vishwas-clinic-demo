@@ -24,7 +24,8 @@
     "electronVersion": "22.3.27",
     "npmRebuild": false,
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "resources"
     },
     "files": [
       "build/**/*",
@@ -33,7 +34,8 @@
       "!node_modules/better-sqlite3/src/**"
     ],
     "win": {
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "icon": "resources/icon.ico"
     },
     "nsis": {
       "oneClick": true,
@@ -41,7 +43,9 @@
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "shortcutName": "Vishwas Clinic",
-      "artifactName": "Vishwas-Clinic-Setup-${version}-${arch}.${ext}"
+      "artifactName": "Vishwas-Clinic-Setup-${version}-${arch}.${ext}",
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico"
     }
   }
 }

@@ -1025,6 +1025,9 @@ select.input-field {
   background: var(--color-desk);
   padding: 1rem;
 }
+.print-test-document {
+  display: none;
+}
 @media (max-width: 1023px) {
   .review-dialog {
     width: 100vw;
@@ -1308,16 +1311,49 @@ select.input-field {
     size: A5 portrait;
     margin: 0;
   }
+  @page clinic-a5 {
+    size: A5 portrait;
+    margin: 0;
+  }
+  @page clinic-a4 {
+    size: A4 portrait;
+    margin: 0;
+  }
+  /* Chromium gives a printed page a fraction of a pixel less than the paper,
+     so a box exactly as tall as the paper spills onto a second, blank sheet. */
+  :root {
+    --print-a5-height: calc(210mm - 1px);
+    --print-a4-height: calc(297mm - 1px);
+  }
   html,
   body,
   main {
     width: 148mm;
-    height: 210mm;
+    height: var(--print-a5-height);
     overflow: visible !important;
     background: #fff;
   }
+  html[data-print-paper="a5-on-a4-top"],
+  html[data-print-paper="a5-on-a4-top"] body,
+  html[data-print-paper="a5-on-a4-top"] main {
+    width: 210mm;
+    height: var(--print-a4-height);
+  }
   body * {
     visibility: hidden !important;
+  }
+  /* Hidden content still takes up room, and every page of room it takes is
+     another sheet out of the printer. Only the document and the elements
+     that hold it stay in the layout. */
+  body
+    *:not(.completed-document-shell):not(.completed-document-shell *):not(
+      :has(.completed-document-shell)
+    ) {
+    display: none !important;
+  }
+  /* The app shell is at least one window tall, which is taller than A5. */
+  body *:has(.completed-document-shell) {
+    min-height: 0 !important;
   }
   .completed-document-shell,
   .completed-document-shell * {
@@ -1327,11 +1363,22 @@ select.input-field {
     position: absolute;
     inset: 0;
     width: 148mm;
-    height: 210mm;
+    height: var(--print-a5-height);
     padding: 0 !important;
+    border: 0 !important;
     border-radius: 0 !important;
     background: #fff !important;
     box-shadow: none !important;
+  }
+  .print-test-document {
+    display: flex;
+    align-items: flex-start;
+    padding: 16mm !important;
+    color: var(--color-ink);
+  }
+  .print-test-document h2,
+  .print-test-document p {
+    margin: 0 0 4mm;
   }
   .prescription-pages {
     display: block;
@@ -1345,15 +1392,29 @@ select.input-field {
   .prescription-page {
     position: static;
     width: 148mm !important;
-    height: 210mm !important;
+    height: var(--print-a5-height) !important;
     max-width: none !important;
-    min-height: 210mm;
+    min-height: var(--print-a5-height);
     overflow: hidden !important;
     break-after: page;
     border-radius: 0 !important;
     box-shadow: none !important;
+    page: clinic-a5;
+  }
+  html[data-print-paper="a5-on-a4-top"] .prescription-page,
+  html[data-print-paper="a5-on-a4-top"] .print-test-document {
+    page: clinic-a4;
+  }
+  html:not([data-print-paper="a5-on-a4-top"]) .print-test-document {
+    page: clinic-a5;
   }
   .prescription-page-frame:last-child .prescription-page {
     break-after: auto;
   }
+}
+
+.rx-clinic-mark {
+  width: calc(var(--rx-line-height) * 2);
+  height: calc(var(--rx-line-height) * 2);
+  flex: 0 0 auto;
 }
