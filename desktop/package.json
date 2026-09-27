@@ -9,7 +9,8 @@
     "package:windows": "node scripts/package-windows.mjs"
   },
   "dependencies": {
-    "better-sqlite3": "9.6.0"
+    "better-sqlite3": "9.6.0",
+    "electron-updater": "6.8.9"
   },
   "devDependencies": {
     "@electron/get": "^2.0.3",
@@ -26,6 +27,11 @@
     "directories": {
       "output": "release",
       "buildResources": "resources"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "AyushJ1001",
+      "repo": "vishwas-clinic-demo"
     },
     "files": [
       "build/**/*",

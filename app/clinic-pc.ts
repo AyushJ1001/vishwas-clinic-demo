@@ -13,8 +13,20 @@ export type { ClinicPrinter, PrintPaper, PrintResult, PrintSettings };
 export type LocalBackup = {
   id: string;
   createdAt: string;
-  reason: "daily" | "on-close" | "manual" | "before-restore";
+  reason:
+    | "daily"
+    | "on-close"
+    | "manual"
+    | "before-restore"
+    | "before-update";
   bytes: number;
+};
+
+export type ClinicUpdateState = {
+  appVersion: string;
+  state: "idle" | "checking" | "downloading" | "ready" | "offline";
+  readyVersion?: string;
+  lastCheckedAt?: string;
 };
 
 export type UsbDrive = {
@@ -62,9 +74,15 @@ export type ClinicPcPrinting = {
   printWithOptions(): Promise<PrintResult>;
 };
 
+export type ClinicPcUpdates = {
+  state(): Promise<ClinicUpdateState>;
+  check(): Promise<ClinicUpdateState>;
+};
+
 export type ClinicPc = {
   backups: ClinicPcBackups;
   printing: ClinicPcPrinting;
+  updates: ClinicPcUpdates;
 };
 
 export const minimumPassphraseLength = 8;

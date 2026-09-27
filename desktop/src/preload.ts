@@ -5,6 +5,7 @@ import {
   localDatabaseChannels,
   printingChannels,
   type ClinicDesktopBridge,
+  updateChannels,
 } from "../shared/local-database-protocol";
 
 const bridge: ClinicDesktopBridge = {
@@ -34,6 +35,10 @@ const clinicPc: ClinicPc = {
     print: () => ipcRenderer.invoke(printingChannels.print),
     printWithOptions: () =>
       ipcRenderer.invoke(printingChannels.printWithOptions),
+  },
+  updates: {
+    state: () => ipcRenderer.invoke(updateChannels.state),
+    check: () => ipcRenderer.invoke(updateChannels.check),
   },
 };
 

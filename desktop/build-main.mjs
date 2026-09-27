@@ -6,7 +6,7 @@ const shared = {
   platform: "node",
   format: "cjs",
   target: "node16",
-  external: ["electron", "better-sqlite3"],
+  external: ["electron", "better-sqlite3", "electron-updater"],
   logLevel: "info",
 };
 
