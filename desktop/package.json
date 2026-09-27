@@ -1,0 +1,47 @@
+{
+  "name": "vishwas-clinic-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vishwas Clinic desktop app for the Clinic PC",
+  "main": "build/main.cjs",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "package:windows": "node scripts/package-windows.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "9.6.0"
+  },
+  "devDependencies": {
+    "@electron/get": "^2.0.3",
+    "@types/better-sqlite3": "^7.6.13",
+    "electron": "22.3.27",
+    "electron-builder": "^26.15.3",
+    "prebuild-install": "^7.1.3"
+  },
+  "build": {
+    "appId": "in.vishwasclinic.desktop",
+    "productName": "Vishwas Clinic",
+    "electronVersion": "22.3.27",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "build/**/*",
+      "package.json",
+      "!node_modules/better-sqlite3/deps/**",
+      "!node_modules/better-sqlite3/src/**"
+    ],
+    "win": {
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "Vishwas Clinic",
+      "artifactName": "Vishwas-Clinic-Setup-${version}-${arch}.${ext}"
+    }
+  }
+}
