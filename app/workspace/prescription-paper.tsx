@@ -1,13 +1,7 @@
 "use client";
 
-import { Pulse } from "@phosphor-icons/react";
 import Image from "next/image";
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  type CSSProperties,
-} from "react";
+import { useEffect, type CSSProperties } from "react";
 import {
   clinicDoctors,
   clinicIdentity,
@@ -26,6 +20,7 @@ import {
   type PrescriptionDocumentPage,
 } from "../prescription-document";
 import { prescriptionTextFontFace } from "../prescription-fonts";
+import { DocumentLetterhead, PageFrame } from "./document-sheet";
 
 
 
@@ -131,32 +126,7 @@ export function PrescriptionDocument({
               style={prescriptionPageStyle(page)}
               className="prescription-page"
             >
-              <header className="rx-letterhead">
-                <h2 className="rx-title">{page.clinic.name}</h2>
-                <div className="rx-doctor rx-block">
-                  <div>
-                    <b>{page.doctor.name}</b>
-                    <p>
-                      {page.doctor.qualifications} ·{" "}
-                      <span className="rx-registration">
-                        {page.doctor.registration}
-                      </span>
-                    </p>
-                    {page.doctor.mobile && (
-                      <p>
-                        <b>Mobile: {page.doctor.mobile}</b>
-                      </p>
-                    )}
-                    {page.doctor.specialty && <p>{page.doctor.specialty}</p>}
-                  </div>
-                  <Pulse size={24} weight="duotone" aria-hidden="true" />
-                </div>
-                <div className="rx-clinic rx-block">
-                  <p>{page.clinic.address}</p>
-                  <p>{page.clinic.hours}</p>
-                  <p>{page.clinic.services}</p>
-                </div>
-              </header>
+              <DocumentLetterhead clinic={page.clinic} doctor={page.doctor} />
               <div className="rx-patient rx-block">
                 <p>
                   Name: <b>{page.patient.name || "—"}</b>
@@ -265,38 +235,6 @@ export function PrescriptionDocument({
   );
 }
 
-/**
- * Shows a true-size A5 page scaled to the width available. Chromium 108 (the
- * Clinic PC) cannot divide one length by another in CSS, so the scale is
- * measured here; the stylesheet's calc() remains for printing and newer
- * browsers.
- */
-function PageFrame({ children }: { children: React.ReactNode }) {
-  const frameRef = useRef<HTMLDivElement>(null);
-  const scaleRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const frame = frameRef.current;
-    const scale = scaleRef.current;
-    if (!frame || !scale) return;
-    const fit = () => {
-      const page = scale.firstElementChild as HTMLElement | null;
-      if (!page?.offsetWidth) return;
-      scale.style.transform = `scale(${frame.clientWidth / page.offsetWidth})`;
-    };
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(frame);
-    return () => observer.disconnect();
-  }, []);
-  return (
-    <div ref={frameRef} className="prescription-page-frame">
-      <div ref={scaleRef} className="prescription-page-scale">
-        {children}
-      </div>
-    </div>
-  );
-}
-
 export function PrescriptionReviewDocument({
   consultation,
 }: {
@@ -316,4 +254,3 @@ export function PrescriptionReviewDocument({
     </div>
   );
 }
-

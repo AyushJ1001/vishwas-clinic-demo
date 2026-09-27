@@ -3,8 +3,10 @@
 import {
   ArrowClockwise,
   DownloadSimple,
+  FileText,
   Plus,
   Printer,
+  Receipt,
   SealCheck,
   ShareNetwork,
 } from "@phosphor-icons/react";
@@ -22,6 +24,7 @@ import {
   preparePrescriptionPdf,
   retryPrescriptionPdf,
 } from "../prescription-output";
+import { getClinicPc } from "../clinic-pc";
 
 import { getVisitTypeLabel } from "./prescription-page";
 import { PrescriptionDocument } from "./prescription-paper";
@@ -195,6 +198,14 @@ export function CompletedPrescriptionView({
     }
   };
   const linkedPriorVisit = snapshot.consultation.linkedPriorVisit;
+  const patientQuery = encodeURIComponent(
+    snapshot.consultation.patient.patientId,
+  );
+  const certificateQuery = new URLSearchParams({
+    patient: snapshot.consultation.patient.patientId,
+    diagnosis: snapshot.consultation.provisionalDiagnosis,
+    since: snapshot.consultation.consultationDate,
+  }).toString();
   const completedTime = new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -272,6 +283,30 @@ export function CompletedPrescriptionView({
                 >
                   <ShareNetwork size={18} weight="bold" />
                   {sharing ? "Sharing prescription…" : "Share prescription"}
+                </button>
+                {getClinicPc() && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary w-full justify-start"
+                    onClick={() =>
+                      window.location.assign(`/receipts?patient=${patientQuery}`)
+                    }
+                  >
+                    <Receipt size={18} weight="bold" />
+                    Receipt for this visit
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary w-full justify-start"
+                  onClick={() =>
+                    window.location.assign(
+                      `/medical-certificate?${certificateQuery}`,
+                    )
+                  }
+                >
+                  <FileText size={18} weight="bold" />
+                  Medical certificate
                 </button>
               </div>
               {pdfState.status === "failed" && (

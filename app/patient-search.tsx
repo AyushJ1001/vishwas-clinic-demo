@@ -22,6 +22,7 @@ export function PatientNameSearch({
   disabled = false,
   invalid = false,
   describedBy,
+  newPatientMessage,
   onNameChange,
   onPatientSelected,
 }: {
@@ -30,6 +31,7 @@ export function PatientNameSearch({
   disabled?: boolean;
   invalid?: boolean;
   describedBy?: string;
+  newPatientMessage?: (name: string) => string;
   onNameChange: (name: string) => void;
   onPatientSelected: (patient: PatientRecord) => void;
 }) {
@@ -45,7 +47,8 @@ export function PatientNameSearch({
   const listboxShown = panelOpen && results.length > 0;
   const emptyMessage =
     state === "ready" && results.length === 0
-      ? `No saved patient matches “${query}”. They will be registered with the next patient number when this prescription is completed.`
+      ? newPatientMessage?.(query) ??
+        `No saved patient matches “${query}”. They will be registered with the next patient number when this prescription is completed.`
       : "";
 
   useEffect(() => {
