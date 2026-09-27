@@ -67,9 +67,12 @@ export type Consultation = {
   vitals: ConsultationVitals;
   complaints: string[];
   examinationFindings: string[];
+  pastMedicalHistory: string;
   provisionalDiagnosis: string;
   advice: string[];
   investigations: string[];
+  // YYYY-MM-DD, or "" when no next visit is set.
+  nextVisit: string;
   medicines: PrescribedMedicine[];
 };
 
@@ -160,9 +163,11 @@ export function createEmptyConsultation(
     },
     complaints: [],
     examinationFindings: [],
+    pastMedicalHistory: "",
     provisionalDiagnosis: "",
     advice: [],
     investigations: [],
+    nextVisit: "",
     medicines: [],
   };
 }
@@ -195,6 +200,10 @@ export function withCurrentPatientFields(consultation: Consultation): Consultati
     linkedPriorVisit: priorVisit
       ? { ...priorVisit, patientId: priorVisit.patientId ?? "" }
       : null,
+    ...missingFields(consultation, {
+      pastMedicalHistory: "",
+      nextVisit: "",
+    }),
   };
 }
 

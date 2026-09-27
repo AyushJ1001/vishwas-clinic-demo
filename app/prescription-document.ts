@@ -75,7 +75,7 @@ export type PrescriptionTextLine = {
 };
 
 export type PrescriptionClinicalChunk = {
-  key: "complaints" | "examination" | "diagnosis";
+  key: "complaints" | "examination" | "history" | "diagnosis";
   label: string;
   continued: boolean;
   lines: readonly PrescriptionTextLine[];
@@ -88,8 +88,9 @@ export type PrescriptionListChunk = {
 };
 
 export type PrescriptionListSection = {
-  key: "advice" | "investigations";
-  title: "Advice" | "Investigations";
+  key: "advice" | "investigations" | "nextVisit";
+  title: "Advice" | "Investigations" | "Next visit";
+  presentation: "list" | "inline";
   chunks: readonly PrescriptionListChunk[];
 };
 
@@ -123,9 +124,11 @@ export type PrescriptionDocumentSource = {
   vitals: Consultation["vitals"];
   complaints: readonly string[];
   examinationFindings: readonly string[];
+  pastMedicalHistory: string;
   provisionalDiagnosis: string;
   advice: readonly string[];
   investigations: readonly string[];
+  nextVisit: string;
   medicines: readonly CompletedMedicineSnapshot[];
   footer: typeof prescriptionFooter;
 };
@@ -195,6 +198,7 @@ type PendingChunk = {
 type PendingListChunk = PendingChunk & {
   section: PrescriptionListSection["key"];
   title: PrescriptionListSection["title"];
+  presentation: PrescriptionListSection["presentation"];
 };
 
 type PendingMedicineChunk = PendingChunk & {
@@ -441,7 +445,8 @@ function paginateLeftColumn(
     const sectionOverhead =
       activeSection?.key === pending.section
         ? 0
-        : lineHeight + (sections.length ? ruleGap : 0);
+        : (pending.presentation === "list" ? lineHeight : 0) +
+          (sections.length ? ruleGap : 0);
     const result = takePendingChunk(
       pending,
       available - used,
@@ -454,6 +459,7 @@ function paginateLeftColumn(
       activeSection = {
         key: pending.section,
         title: pending.title,
+        presentation: pending.presentation,
         chunks: [],
       };
       sections.push(activeSection);
@@ -535,6 +541,16 @@ function buildQueues(source: PrescriptionDocumentSource, layout: PageLayout) {
       source.examinationFindings.join(", "),
       measures.fullWidth,
     ),
+    ...(source.pastMedicalHistory.trim()
+      ? [
+          clinicalQueueEntry(
+            "history",
+            "Past medical history",
+            source.pastMedicalHistory,
+            measures.fullWidth,
+          ),
+        ]
+      : []),
     clinicalQueueEntry(
       "diagnosis",
       "Provisional diagnosis",
@@ -553,6 +569,7 @@ function buildQueues(source: PrescriptionDocumentSource, layout: PageLayout) {
         key: `${section}-${index}`,
         section,
         title,
+        presentation: "list",
         lines: textLines(item, measures.leftColumn),
         cursor: 0,
       });
@@ -560,6 +577,21 @@ function buildQueues(source: PrescriptionDocumentSource, layout: PageLayout) {
   };
   addList("advice", "Advice", source.advice);
   addList("investigations", "Investigations", source.investigations);
+  if (source.nextVisit) {
+    left.push({
+      key: "next-visit",
+      section: "nextVisit",
+      title: "Next visit",
+      presentation: "inline",
+      lines: wrapMeasuredText(
+        source.nextVisit,
+        measures.leftColumn,
+        "regular",
+        measuredWidth("Next visit: ", "bold"),
+      ).map((line) => ({ text: line, tone: "normal" })),
+      cursor: 0,
+    });
+  }
 
   const medicines: PendingMedicineChunk[] = source.medicines.map(
     (medicine, index) => ({
@@ -722,9 +754,13 @@ export function createCompletedPrescriptionDocument(
     vitals: { ...consultation.vitals },
     complaints: [...consultation.complaints],
     examinationFindings: [...consultation.examinationFindings],
+    pastMedicalHistory: consultation.pastMedicalHistory,
     provisionalDiagnosis: consultation.provisionalDiagnosis,
     advice: [...consultation.advice],
     investigations: [...consultation.investigations],
+    nextVisit: consultation.nextVisit
+      ? formatConsultationDate(consultation.nextVisit)
+      : "",
     medicines: snapshot.medicines.map((medicine) => ({ ...medicine })),
     footer: prescriptionFooter,
   };
