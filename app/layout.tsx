@@ -1,26 +1,11 @@
 import type { Metadata } from 'next';
-import { Outfit } from 'next/font/google';
+import './fonts';
 import './globals.css';
 
-const outfit = Outfit({
-  variable: '--font-outfit',
-  subsets: ['latin'],
-});
-
 export const metadata: Metadata = {
-  title: 'Vishwas Clinic | Doctor workspace demo',
-  description: 'A guided demo of Vishwas Clinic prescription, receipt, certificate, and reporting workflows.',
-  openGraph: {
-    title: 'Vishwas Clinic | Doctor workspace demo',
-    description: 'One calm workspace for the whole consultation.',
-    images: ['/og.png'],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Vishwas Clinic | Doctor workspace demo',
-    description: 'One calm workspace for the whole consultation.',
-    images: ['/og.png'],
-  },
+  title: 'Vishwas Clinic',
+  description: 'Prescriptions, receipts, certificates and patient records for Vishwas Clinic.',
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({
@@ -29,12 +14,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${outfit.variable} antialiased`}
-      >
-        {children}
-      </body>
+    <html lang="en-IN">
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

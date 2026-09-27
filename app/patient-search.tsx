@@ -168,7 +168,7 @@ export function PatientNameSearch({
         aria-hidden="true"
         size={15}
         weight="bold"
-        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#536760]"
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-graphite"
       />
       {panelOpen && (
         <div className="picker-panel">
@@ -209,7 +209,7 @@ export function PatientNameSearch({
                       <span className="block truncate text-sm font-bold">
                         {patient.name}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs font-semibold text-[#536760]">
+                      <span className="mt-0.5 block truncate text-[13px] text-graphite">
                         {describePatient(patient)}
                       </span>
                     </span>

@@ -124,7 +124,9 @@ test("imports keep old patient numbers, number everyone else, and never merge by
     .getByRole("searchbox", { name: "Search saved patient records" })
     .fill(suffix);
   await expect(directory.getByText(numbered)).toBeVisible();
-  await expect(directory.getByText(`No. ${oldNumber} ·`)).toBeVisible();
+  await expect(
+    directory.getByRole("row", { name: new RegExp(numbered) }),
+  ).toContainText(String(oldNumber));
 
   // The same number is the same patient: the row updates that record.
   await rows.fill(`number,name,phone\n${oldNumber},${numbered},99999 11111`);

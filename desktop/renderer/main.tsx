@@ -1,4 +1,4 @@
-import "@fontsource-variable/outfit";
+import "../../app/fonts";
 import "../../app/globals.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -15,7 +15,6 @@ const pageRoutes: Record<string, RouteName> = {
 };
 
 serveApiLocally();
-document.documentElement.style.setProperty("--font-outfit", '"Outfit Variable"');
 
 const route = pageRoutes[window.location.pathname.replace(/\/+$/, "") || "/"];
 
