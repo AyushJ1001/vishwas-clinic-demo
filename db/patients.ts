@@ -182,7 +182,12 @@ type NewPatient = {
 
 // The next Patient number is worked out inside the insert itself, so two
 // registrations can never be given the same number.
-async function insertPatient(patient: NewPatient) {
+async function insertPatient(patient: NewPatient): Promise<PatientRecord>;
+async function insertPatient(
+  patient: NewPatient,
+  readBack: false,
+): Promise<null>;
+async function insertPatient(patient: NewPatient, readBack = true) {
   const id = crypto.randomUUID();
   const timestamp = new Date().toISOString();
   await env.DB.prepare(
@@ -210,6 +215,9 @@ async function insertPatient(patient: NewPatient) {
       timestamp,
     )
     .run();
+  // Imports do not use the returned record. Avoid repeating table setup and a
+  // SELECT for every row when a register contains thousands of patients.
+  if (!readBack) return null;
   const saved = (await getPatient(id))!;
   if (patient.phoneIssued) {
     await queuePhoneIssuedRecord({
@@ -320,18 +328,26 @@ export async function savePatientForConsultation(
 
 async function importPatientRow(
   row: ParsedPatientRow,
-): Promise<"imported" | "updated" | "unchanged"> {
+): Promise<
+  | { outcome: "imported" | "updated" | "unchanged" }
+  | { outcome: "conflict"; existingName: string }
+> {
   const dateOfBirth = row.dateOfBirth || estimatedDateOfBirth(row.age, today());
   const estimated = !row.dateOfBirth && Boolean(dateOfBirth);
   if (row.number) {
-    // ADR 0003: an Imported patient keeps the number from the old system, so
-    // a row naming an existing number updates that same patient.
+    // ADR 0003 keeps an Imported patient's old number. A number can update a
+    // record only when the normalized name confirms it is the same patient.
     const existing = await env.DB.prepare(
       `SELECT ${columns} FROM patient_records WHERE patient_number = ?`,
     )
       .bind(Number(row.number))
       .first<PatientRow>();
     if (existing) {
+      if (
+        normalizePatientName(existing.name) !== normalizePatientName(row.name)
+      ) {
+        return { outcome: "conflict", existingName: existing.name };
+      }
       await env.DB.prepare(
         `UPDATE patient_records SET name = ?, name_normalized = ?,
            date_of_birth = CASE WHEN ? != '' THEN ? ELSE date_of_birth END,
@@ -356,7 +372,7 @@ async function importPatientRow(
           existing.id,
         )
         .run();
-      return "updated";
+      return { outcome: "updated" };
     }
   } else {
     // Without a number, only an identical row counts as already saved, so
@@ -374,17 +390,49 @@ async function importPatientRow(
         dateOfBirth,
       )
       .first();
-    if (identical) return "unchanged";
+    if (identical) return { outcome: "unchanged" };
   }
-  await insertPatient({
-    number: row.number ? Number(row.number) : undefined,
-    name: row.name,
-    dateOfBirth,
-    dateOfBirthEstimated: estimated,
-    sex: row.sex,
-    phone: row.phone,
-  });
-  return "imported";
+  await insertPatient(
+    {
+      number: row.number ? Number(row.number) : undefined,
+      name: row.name,
+      dateOfBirth,
+      dateOfBirthEstimated: estimated,
+      sex: row.sex,
+      phone: row.phone,
+    },
+    false,
+  );
+  return { outcome: "imported" };
+}
+
+type IndexedImportRow = {
+  requestIndex: number;
+  row: unknown;
+};
+
+function importSourceRow({ requestIndex, row }: IndexedImportRow) {
+  if (row && typeof row === "object" && !Array.isArray(row)) {
+    const sourceRow = (row as { sourceRow?: unknown }).sourceRow;
+    if (
+      typeof sourceRow === "number" &&
+      Number.isSafeInteger(sourceRow) &&
+      sourceRow > 0
+    ) {
+      return sourceRow;
+    }
+  }
+  return requestIndex + 1;
+}
+
+function hasPatientNumber({ row }: IndexedImportRow) {
+  return Boolean(
+    row &&
+      typeof row === "object" &&
+      !Array.isArray(row) &&
+      typeof (row as { number?: unknown }).number === "string" &&
+      (row as { number: string }).number,
+  );
 }
 
 export async function importPatients(
@@ -398,18 +446,38 @@ export async function importPatients(
     skipped: 0,
     problems: [],
   };
-  for (const [index, row] of rows.entries()) {
+  const indexedRows = rows.map((row, requestIndex) => ({ requestIndex, row }));
+  // Imported numbers must be reserved before the Clinic PC assigns new ones.
+  // Keep the original index so every problem still points to the doctor's row.
+  const orderedRows = [
+    ...indexedRows.filter(hasPatientNumber),
+    ...indexedRows.filter((row) => !hasPatientNumber(row)),
+  ];
+  for (const indexedRow of orderedRows) {
+    const { row } = indexedRow;
+    const sourceRow = importSourceRow(indexedRow);
     if (!isValidPatientInput(row)) {
       summary.skipped += 1;
       summary.problems.push(
-        `Row ${index + 1}: missing or invalid name, number, age, date of birth, sex, or phone.`,
+        `Row ${sourceRow}: missing or invalid name, number, age, date of birth, sex, or phone.`,
       );
       continue;
     }
-    const outcome = await importPatientRow(row);
-    if (outcome === "imported") summary.imported += 1;
-    else if (outcome === "updated") summary.updated += 1;
-    else summary.skipped += 1;
+    const result = await importPatientRow(row);
+    if (result.outcome === "imported") summary.imported += 1;
+    else if (result.outcome === "updated") summary.updated += 1;
+    else {
+      summary.skipped += 1;
+      if (result.outcome === "conflict") {
+        summary.problems.push(
+          `Row ${sourceRow}: Patient number ${row.number} already belongs to "${result.existingName}", so "${row.name.trim()}" was skipped.`,
+        );
+      } else {
+        summary.problems.push(
+          `Row ${sourceRow}: An identical patient record is already saved, so this row was skipped.`,
+        );
+      }
+    }
   }
   return summary;
 }

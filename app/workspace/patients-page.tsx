@@ -15,40 +15,77 @@ export type ImportState = "idle" | "importing" | "done" | "failed";
 
 export type DirectoryState = "loading" | "ready" | "failed";
 
+const importBatchSize = 500;
+const visibleImportProblemLimit = 50;
+
+function formatImportCount(count: number) {
+  return count.toLocaleString("en-IN");
+}
+
+function emptyImportSummary(): PatientImportSummary {
+  return {
+    requested: 0,
+    imported: 0,
+    updated: 0,
+    skipped: 0,
+    problems: [],
+  };
+}
+
 export function PatientImportCard({ onImported }: { onImported: () => void }) {
   const [text, setText] = useState("");
   const [importState, setImportState] = useState<ImportState>("idle");
   const [summary, setSummary] = useState<PatientImportSummary | null>(null);
   const [failureMessage, setFailureMessage] = useState("");
+  const [completedRows, setCompletedRows] = useState(0);
   const fileInputId = useId();
   const parsed = useMemo(() => parsePatientImportText(text), [text]);
   const hasRows = parsed.rows.length > 0;
 
   const importPatients = async () => {
     setImportState("importing");
+    setSummary(null);
     setFailureMessage("");
+    setCompletedRows(0);
+    const orderedRows = [
+      ...parsed.rows.filter((row) => row.number),
+      ...parsed.rows.filter((row) => !row.number),
+    ];
+    const combinedSummary = emptyImportSummary();
     try {
-      const response = await fetch("/api/patients/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      const data = (await response.json()) as {
-        summary?: PatientImportSummary;
-        error?: string;
-      };
-      if (!response.ok || !data.summary) {
-        throw new Error(data.error ?? "Import failed");
+      for (let offset = 0; offset < orderedRows.length; offset += importBatchSize) {
+        const batch = orderedRows.slice(offset, offset + importBatchSize);
+        const response = await fetch("/api/patients/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ patients: batch }),
+        });
+        const data = (await response.json().catch(() => null)) as {
+          summary?: PatientImportSummary;
+          error?: string;
+        } | null;
+        if (!response.ok || !data?.summary) {
+          throw new Error(data?.error ?? "Import failed");
+        }
+        combinedSummary.requested += data.summary.requested;
+        combinedSummary.imported += data.summary.imported;
+        combinedSummary.updated += data.summary.updated;
+        combinedSummary.skipped += data.summary.skipped;
+        combinedSummary.problems.push(...data.summary.problems);
+        setCompletedRows(Math.min(offset + batch.length, orderedRows.length));
       }
-      setSummary(data.summary);
+      setSummary(combinedSummary);
       setImportState("done");
       onImported();
     } catch {
-      setSummary(null);
+      setSummary(combinedSummary);
+      const saved = combinedSummary.imported + combinedSummary.updated;
       setFailureMessage(
-        "The import could not be saved. Check the file and try again.",
+        `The import stopped after ${formatImportCount(combinedSummary.requested)} of ${formatImportCount(orderedRows.length)} rows. ${formatImportCount(saved)} patient record${saved === 1 ? " was" : "s were"} confirmed saved. Press Import again; records already saved will not be duplicated.`,
       );
       setImportState("failed");
+      // Batches before the failure are saved, so the directory shows them.
+      if (saved > 0) onImported();
     }
   };
 
@@ -61,8 +98,9 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
         Import from the old register
       </h2>
       <p className="hint mt-2">
-        Accepted columns: number, name, date of birth (dd/mm/yyyy), age,
-        gender, phone. Only name is required.
+        From Excel, select the columns including the header row, copy, and
+        paste below. Or save as CSV UTF-8 and choose the file. Only name is
+        required.
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <label
@@ -77,11 +115,13 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
           className="sr-only"
           type="file"
           accept=".csv,.json,.txt,text/csv,application/json,text/plain"
+          disabled={importState === "importing"}
           onChange={async (event) => {
             const file = event.target.files?.[0];
             if (!file) return;
             setSummary(null);
             setImportState("idle");
+            setCompletedRows(0);
             setText(await file.text());
             event.target.value = "";
           }}
@@ -90,10 +130,12 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
           <button
             type="button"
             className="btn btn-quiet"
+            disabled={importState === "importing"}
             onClick={() => {
               setText("");
               setSummary(null);
               setImportState("idle");
+              setCompletedRows(0);
             }}
           >
             Clear
@@ -108,17 +150,19 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
         className="input-field min-h-32 font-mono text-sm"
         value={text}
         placeholder={"number,name,date of birth,age,sex,phone"}
+        disabled={importState === "importing"}
         onChange={(event) => {
           setText(event.target.value);
           setImportState("idle");
           setSummary(null);
+          setCompletedRows(0);
         }}
       />
       {text.trim() && (
         <div className="mt-4 border border-rule bg-paper p-3">
           {hasRows ? (
             <p className="font-semibold" role="status">
-              {parsed.rows.length} patient row
+              {formatImportCount(parsed.rows.length)} patient row
               {parsed.rows.length === 1 ? "" : "s"} ready to import.
             </p>
           ) : (
@@ -128,12 +172,19 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
           )}
           {parsed.problems.length > 0 && (
             <ul className="mt-2 list-disc space-y-1 pl-5 text-signal">
-              {parsed.problems.map((problem, index) => (
-                <li key={index}>
-                  <b>{problem.source}:</b> {problem.message}
-                </li>
-              ))}
+              {parsed.problems
+                .slice(0, visibleImportProblemLimit)
+                .map((problem, index) => (
+                  <li key={index}>
+                    <b>{problem.source}:</b> {problem.message}
+                  </li>
+                ))}
             </ul>
+          )}
+          {parsed.problems.length > visibleImportProblemLimit && (
+            <p className="hint mt-2">
+              …and {parsed.problems.length - visibleImportProblemLimit} more.
+            </p>
           )}
           {hasRows && (
             <ul className="mt-3 divide-y divide-rule border-t border-rule">
@@ -163,7 +214,7 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
           )}
           {parsed.rows.length > 5 && (
             <p className="hint mt-2">
-              …and {parsed.rows.length - 5} more.
+              …and {formatImportCount(parsed.rows.length - 5)} more.
             </p>
           )}
         </div>
@@ -176,24 +227,41 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
       >
         <SealCheck size={17} weight="bold" />
         {importState === "importing"
-          ? "Saving patient records…"
-          : `Import ${parsed.rows.length || ""} patient${parsed.rows.length === 1 ? "" : "s"}`.trimEnd()}
+          ? `Saving patient records… ${formatImportCount(completedRows)} of ${formatImportCount(parsed.rows.length)}`
+          : `Import ${parsed.rows.length ? formatImportCount(parsed.rows.length) : ""} patient${parsed.rows.length === 1 ? "" : "s"}`.trimEnd()}
       </button>
       {importState === "done" && summary && (
         <p className="notice notice-done mt-4" role="status">
-          {summary.imported} new patient record
+          {formatImportCount(summary.imported)} new patient record
           {summary.imported === 1 ? "" : "s"} saved
           {summary.updated > 0
-            ? ` · ${summary.updated} existing record${summary.updated === 1 ? "" : "s"} updated by number.`
+            ? ` · ${formatImportCount(summary.updated)} existing record${summary.updated === 1 ? "" : "s"} updated by number.`
             : "."}
           {summary.skipped > 0 &&
-            ` ${summary.skipped} row${summary.skipped === 1 ? " was" : "s were"} already saved or invalid.`}
+            ` ${formatImportCount(summary.skipped)} row${summary.skipped === 1 ? " was" : "s were"} already saved or invalid.`}
         </p>
       )}
       {importState === "failed" && (
         <p className="notice notice-error mt-4" role="alert">
           {failureMessage}
         </p>
+      )}
+      {summary && summary.problems.length > 0 && (
+        <div className="mt-3 border border-rule bg-paper p-3">
+          <p className="font-semibold">Problems found while saving:</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-signal">
+            {summary.problems
+              .slice(0, visibleImportProblemLimit)
+              .map((problem, index) => (
+                <li key={index}>{problem}</li>
+              ))}
+          </ul>
+          {summary.problems.length > visibleImportProblemLimit && (
+            <p className="hint mt-2">
+              …and {summary.problems.length - visibleImportProblemLimit} more.
+            </p>
+          )}
+        </div>
       )}
     </article>
   );

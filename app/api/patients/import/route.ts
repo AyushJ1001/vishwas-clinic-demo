@@ -13,8 +13,8 @@ export async function POST(request: Request) {
     );
   }
   const body = (await request.json().catch(() => null)) as {
-    patients?: unknown[];
-    text?: string;
+    patients?: unknown;
+    text?: unknown;
   } | null;
   if (!body) {
     return NextResponse.json(
@@ -22,9 +22,18 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  let rows = body.patients;
+  let parseProblems: string[] = [];
+  let rows: unknown = body.patients;
   if (!Array.isArray(rows)) {
-    rows = body.text ? parsePatientImportText(body.text).rows : [];
+    if (typeof body.text === "string") {
+      const parsed = parsePatientImportText(body.text);
+      rows = parsed.rows;
+      parseProblems = parsed.problems.map(
+        (problem) => `${problem.source}: ${problem.message}`,
+      );
+    } else {
+      rows = [];
+    }
   }
   if (!Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json(
@@ -39,5 +48,6 @@ export async function POST(request: Request) {
     );
   }
   const summary = await importPatients(rows);
+  summary.problems.unshift(...parseProblems);
   return NextResponse.json({ summary });
 }
