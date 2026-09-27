@@ -327,12 +327,12 @@ function drawPage(
     ink,
   );
   top -= lineHeight;
+  if (documentPage.doctor.specialty) {
+    wrapped(documentPage.doctor.specialty, regular);
+  }
   if (documentPage.doctor.mobile) {
     line(`Mobile: ${documentPage.doctor.mobile}`, bold);
     top -= lineHeight;
-  }
-  if (documentPage.doctor.specialty) {
-    wrapped(documentPage.doctor.specialty, regular);
   }
   rule(maroon);
 

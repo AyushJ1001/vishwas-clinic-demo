@@ -25,12 +25,12 @@ export function DocumentLetterhead({
             {doctor.qualifications} ·{" "}
             <span className="rx-registration">{doctor.registration}</span>
           </p>
+          {doctor.specialty && <p>{doctor.specialty}</p>}
           {doctor.mobile && (
             <p>
               <b>Mobile: {doctor.mobile}</b>
             </p>
           )}
-          {doctor.specialty && <p>{doctor.specialty}</p>}
         </div>
         <Image
           src="/icons/clinic-logo.png"
