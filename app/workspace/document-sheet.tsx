@@ -32,12 +32,11 @@ export function DocumentLetterhead({
           )}
           {doctor.specialty && <p>{doctor.specialty}</p>}
         </div>
-        {/* Replace public/icons/clinic-logo.svg with the clinic's own logo. */}
         <Image
-          src="/icons/clinic-logo.svg"
+          src="/icons/clinic-logo.png"
           alt=""
-          width={24}
-          height={24}
+          width={640}
+          height={514}
           className="rx-clinic-mark"
         />
       </div>

@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
-/* See DESIGN.md. One green (the letterhead's), ink on white, a light desk
+/* See DESIGN.md. One maroon (the clinic logo's), ink on white, a light desk
    grey behind panels, and nothing that moves by itself. */
 @theme {
-  --color-green: #1e5646;
-  --color-green-dark: #163f34;
-  --color-green-wash: #e3eeea;
-  --color-ink: #1d2522;
-  --color-graphite: #56625d;
-  --color-rule: #cdd3d0;
-  --color-desk: #eef1ef;
+  --color-maroon: #650219;
+  --color-maroon-dark: #4a0112;
+  --color-maroon-wash: #f8eaed;
+  --color-ink: #221c1d;
+  --color-graphite: #5e5658;
+  --color-rule: #d6d0d1;
+  --color-desk: #f2f0f0;
   --color-paper: #ffffff;
   --color-signal: #b3261e;
   --color-signal-wash: #fdecea;
@@ -47,7 +47,7 @@ button {
   cursor: pointer;
 }
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--color-green);
+  outline: 2px solid var(--color-maroon);
   outline-offset: 2px;
 }
 
@@ -57,7 +57,7 @@ button {
   position: sticky;
   top: 0;
   z-index: 50;
-  background: var(--color-green);
+  background: var(--color-maroon);
   color: #fff;
 }
 .app-bar-inner {
@@ -126,7 +126,7 @@ button {
   max-width: 17rem;
   border: 1px solid rgb(255 255 255 / 0.4);
   border-radius: 4px;
-  background: var(--color-green-dark)
+  background: var(--color-maroon-dark)
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E")
     no-repeat right 0.55rem center;
   padding: 0 1.6rem 0 0.55rem;
@@ -244,8 +244,8 @@ select.input-field {
 }
 .input-field:focus,
 .small-input:focus {
-  border-color: var(--color-green);
-  outline: 2px solid var(--color-green);
+  border-color: var(--color-maroon);
+  outline: 2px solid var(--color-maroon);
   outline-offset: -1px;
 }
 .input-field[aria-invalid="true"],
@@ -294,11 +294,11 @@ select.input-field {
   opacity: 0.5;
 }
 .btn-primary {
-  background: var(--color-green);
+  background: var(--color-maroon);
   color: #fff;
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-green-dark);
+  background: var(--color-maroon-dark);
 }
 .btn-secondary {
   border-color: #b7bfbb;
@@ -311,11 +311,11 @@ select.input-field {
 }
 .btn-quiet {
   background: transparent;
-  color: var(--color-green);
+  color: var(--color-maroon);
   padding-inline: 0.5rem;
 }
 .btn-quiet:hover:not(:disabled) {
-  background: var(--color-green-wash);
+  background: var(--color-maroon-wash);
 }
 .btn-danger {
   border-color: var(--color-signal);
@@ -380,7 +380,7 @@ select.input-field {
   border-radius: 0 3px 3px 0;
 }
 .segmented input:checked + span {
-  background: var(--color-green);
+  background: var(--color-maroon);
   color: #fff;
   font-weight: 600;
 }
@@ -388,7 +388,7 @@ select.input-field {
   background: var(--color-desk);
 }
 .segmented input:focus-visible + span {
-  outline: 2px solid var(--color-green);
+  outline: 2px solid var(--color-maroon);
   outline-offset: 2px;
 }
 .segmented input:disabled + span {
@@ -407,8 +407,8 @@ select.input-field {
   font-size: 14px;
 }
 .notice-done {
-  border-color: var(--color-green);
-  background: var(--color-green-wash);
+  border-color: var(--color-maroon);
+  background: var(--color-maroon-wash);
 }
 .notice-attention {
   border-color: #c99a3b;
@@ -439,9 +439,9 @@ select.input-field {
   align-items: center;
   gap: 0.25rem;
   border-radius: 3px;
-  background: var(--color-green-wash);
+  background: var(--color-maroon-wash);
   padding: 0.1rem 0.45rem;
-  color: var(--color-green-dark);
+  color: var(--color-maroon-dark);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -471,8 +471,8 @@ select.input-field {
   border-color: var(--color-graphite);
 }
 .picker-trigger[aria-expanded="true"] {
-  border-color: var(--color-green);
-  outline: 2px solid var(--color-green);
+  border-color: var(--color-maroon);
+  outline: 2px solid var(--color-maroon);
   outline-offset: -1px;
 }
 .picker-trigger:disabled {
@@ -580,7 +580,7 @@ select.input-field {
   align-items: center;
   justify-content: center;
   border-radius: 3px;
-  background: var(--color-green);
+  background: var(--color-maroon);
   padding: 0 0.3rem;
   color: #fff;
   font-size: 12px;
@@ -605,11 +605,11 @@ select.input-field {
   background: var(--color-desk);
 }
 .picker-option[aria-selected="true"] {
-  color: var(--color-green-dark);
+  color: var(--color-maroon-dark);
   font-weight: 600;
 }
 .picker-option[aria-selected="true"][data-active="true"] {
-  background: var(--color-green-wash);
+  background: var(--color-maroon-wash);
 }
 .picker-option svg {
   flex: 0 0 auto;
@@ -637,12 +637,12 @@ select.input-field {
   margin-top: 0.25rem;
   border-top: 1px solid var(--color-rule);
   padding: 0.35rem 0.5rem;
-  color: var(--color-green);
+  color: var(--color-maroon);
   font-weight: 600;
   text-align: left;
 }
 .picker-add:hover {
-  background: var(--color-green-wash);
+  background: var(--color-maroon-wash);
 }
 .picker-add-form {
   display: grid;
@@ -1091,9 +1091,9 @@ select.input-field {
   height: 210mm;
   overflow: hidden;
   overflow-wrap: anywhere;
-  background: #fffef9;
+  background: #ffffff;
   padding: var(--rx-margin);
-  color: #202c29;
+  color: var(--color-ink);
   font-family:
     "Prescription Noto Sans", "Prescription Noto Sans Devanagari",
     "Prescription Noto Sans SC", sans-serif;
@@ -1110,6 +1110,7 @@ select.input-field {
 }
 .rx-title {
   margin: 0 0 var(--rx-gap);
+  color: var(--color-maroon);
   text-align: center;
   font-size: var(--rx-title-size);
   font-weight: 700;
@@ -1118,9 +1119,14 @@ select.input-field {
 }
 /* Every ruled block keeps the same gap between its text and the rule. */
 .rx-block {
-  border-bottom: var(--rx-rule) solid #202c29;
+  border-bottom: var(--rx-rule) solid var(--color-ink);
   padding-bottom: var(--rx-gap);
   margin-bottom: var(--rx-gap);
+}
+/* The letterhead's own rules are in the clinic's maroon, as printed
+   stationery is; the rules between clinical sections stay ink. */
+.rx-letterhead .rx-block {
+  border-bottom-color: var(--color-maroon);
 }
 .rx-doctor {
   display: flex;
@@ -1144,7 +1150,7 @@ select.input-field {
   margin-top: var(--rx-gap);
 }
 .rx-muted {
-  color: #65716d;
+  color: var(--color-graphite);
 }
 .prescription-columns {
   display: grid;
@@ -1159,7 +1165,7 @@ select.input-field {
   overflow: hidden;
 }
 .rx-left-column {
-  border-right: var(--rx-rule) solid #202c29;
+  border-right: var(--rx-rule) solid var(--color-ink);
   padding-right: var(--rx-gap);
 }
 .rx-left-column ul {
@@ -1189,12 +1195,12 @@ select.input-field {
   height: calc(var(--rx-line-height) * 2 - var(--rx-gap));
 }
 .rx-footer {
-  border-top: var(--rx-rule) solid #202c29;
+  border-top: var(--rx-rule) solid var(--color-ink);
   padding-top: var(--rx-gap);
   text-align: center;
 }
 .prescription-page-number {
-  color: #65716d;
+  color: var(--color-graphite);
 }
 
 /* ---------- Receipts and medical certificates ---------- */
@@ -1413,8 +1419,13 @@ select.input-field {
   }
 }
 
+/* The clinic's logo rises beside the clinic's name as well as the doctor's
+   three lines, so it is large enough to read yet adds nothing to the
+   letterhead's height. */
 .rx-clinic-mark {
-  width: calc(var(--rx-line-height) * 2);
-  height: calc(var(--rx-line-height) * 2);
+  --rx-title-box: calc(var(--rx-title-size) * 1.2 + var(--rx-gap));
+  width: auto;
+  height: calc(var(--rx-title-box) + var(--rx-line-height) * 3);
+  margin-top: calc(var(--rx-title-box) * -1);
   flex: 0 0 auto;
 }
