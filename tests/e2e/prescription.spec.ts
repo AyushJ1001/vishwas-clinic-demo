@@ -1852,7 +1852,7 @@ test("phone catalog, review, and removal controls keep 44 pixel targets with saf
     .getByRole("combobox", { name: "Search Major complaints" })
     .fill("Demo touch target term");
   const addCustom = page.getByRole("button", {
-    name: "Add “Demo touch target term” as a clinic term",
+    name: "Add “Demo touch target term” as a new complaint",
   });
   const addCustomBox = await addCustom.boundingBox();
   expect(addCustomBox).not.toBeNull();
@@ -2894,7 +2894,7 @@ test("catalog picker separates choices from controls and closes when focus leave
   );
   await expect(
     listbox.getByRole("button", {
-      name: "Add “Missing catalog term” as a clinic term",
+      name: "Add “Missing catalog term” as a new complaint",
     }),
   ).toHaveCount(0);
 
@@ -3104,7 +3104,18 @@ test("empty clinic terms and an empty search have distinct guidance", async ({
   await expect(page.getByText("No matching catalog choices.")).toBeVisible();
   await expect(
     page.getByRole("button", {
-      name: "Add “Demo unmatched complaint” as a clinic term",
+      name: "Add “Demo unmatched complaint” as a new complaint",
+    }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("combobox", { name: "Medicines", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Search Medicines" })
+    .fill("Demo unmatched medicine");
+  await expect(
+    page.getByRole("button", {
+      name: "Add “Demo unmatched medicine” as a new medicine",
     }),
   ).toBeVisible();
 });
@@ -3150,7 +3161,7 @@ test("custom term save failure keeps the proposed value available for retry", as
   await search.fill("Demo seasonal fatigue");
   await page
     .getByRole("button", {
-      name: "Add “Demo seasonal fatigue” as a clinic term",
+      name: "Add “Demo seasonal fatigue” as a new complaint",
     })
     .click();
 
@@ -3167,7 +3178,7 @@ test("custom term save failure keeps the proposed value available for retry", as
   await saveButton.click();
   await saveStarted;
   await expect(saveButton).toBeDisabled();
-  await expect(saveButton).toHaveText("Saving clinic term…");
+  await expect(saveButton).toHaveText("Saving new complaint…");
 
   await saveRequest!.fulfill({ status: 500, body: "Save failed" });
   await expect(
@@ -3239,7 +3250,7 @@ for (const viewport of [
       .fill("Demo unmatched accessibility term");
     await page
       .getByRole("button", {
-        name: "Add “Demo unmatched accessibility term” as a clinic term",
+        name: "Add “Demo unmatched accessibility term” as a new complaint",
       })
       .click();
     await expectNoAxeViolations(page);
