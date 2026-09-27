@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   getClinicPc,
   type ClinicPrinter,
+  type ClinicSyncStatus,
   type ClinicUpdateState,
   type PrintSettings,
 } from "../clinic-pc";
@@ -37,12 +38,53 @@ function updateLine(update: ClinicUpdateState) {
   return `${version} · up to date`;
 }
 
+function syncTime(value: string) {
+  const date = new Date(value);
+  const today = new Date();
+  const time = new Intl.DateTimeFormat("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+    .format(date)
+    .toLocaleLowerCase()
+    .replace(":", ".");
+  if (date.toDateString() === today.toDateString()) return `today at ${time}`;
+  const day = new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
+  return `${day} at ${time}`;
+}
+
+function syncLine(sync: ClinicSyncStatus) {
+  if (sync.setupIssue === "cloud-address") {
+    return "Not set up: no cloud address";
+  }
+  if (sync.setupIssue === "device-key") {
+    return "Not set up: no device key";
+  }
+  const waiting = `${sync.pendingCount} ${sync.pendingCount === 1 ? "change" : "changes"} waiting`;
+  if (sync.pendingCount > 0 && sync.lastFailedAt) {
+    return `${waiting} · no internet since ${syncTime(sync.lastFailedAt)}`;
+  }
+  if (sync.pendingCount > 0) {
+    return sync.lastSucceededAt
+      ? `${waiting} · last synced ${syncTime(sync.lastSucceededAt)}`
+      : `${waiting} · not synced yet`;
+  }
+  return sync.lastSucceededAt
+    ? `All changes sent · last synced ${syncTime(sync.lastSucceededAt)}`
+    : "All changes sent · not synced yet";
+}
+
 export function SettingsPage() {
   const clinicPc = getClinicPc();
   const [printers, setPrinters] = useState<ClinicPrinter[]>([]);
   const [settings, setSettings] = useState<PrintSettings | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [updateState, setUpdateState] = useState<ClinicUpdateState | null>(null);
+  const [syncStatus, setSyncStatus] = useState<ClinicSyncStatus | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
     "idle",
   );
@@ -69,6 +111,25 @@ export function SettingsPage() {
     );
     return () => {
       current = false;
+    };
+  }, [clinicPc]);
+
+  useEffect(() => {
+    if (!clinicPc) return;
+    let current = true;
+    const read = () => {
+      void clinicPc.sync.status().then(
+        (found) => {
+          if (current) setSyncStatus(found);
+        },
+        () => undefined,
+      );
+    };
+    read();
+    const interval = window.setInterval(read, 500);
+    return () => {
+      current = false;
+      window.clearInterval(interval);
     };
   }, [clinicPc]);
 
@@ -239,6 +300,19 @@ export function SettingsPage() {
             )}
           </div>
         </section>
+
+        {clinicPc && syncStatus && (
+          <section className="panel" aria-labelledby="sync-heading">
+            <div className="panel-section">
+              <h2 id="sync-heading" className="section-title">
+                Sync
+              </h2>
+              <p className="status-line mt-2" role="status">
+                {syncLine(syncStatus)}
+              </p>
+            </div>
+          </section>
+        )}
 
         {clinicPc && updateState && (
           <section className="panel" aria-labelledby="updates-heading">
