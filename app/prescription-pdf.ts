@@ -13,6 +13,7 @@ import type {
   PrescriptionDocumentPage,
 } from "./prescription-document";
 import {
+  formatPrescriptionPatientLine,
   formatPrescriptionVitals,
   prescriptionTypography,
   type PrescriptionTextScale,
@@ -335,10 +336,7 @@ function drawPage(
     line(row, bold, "left", left + nameIndent);
     top -= lineHeight;
   });
-  line(
-    `Age/Gender: ${documentPage.patient.age || "—"}/${documentPage.patient.sex || "—"}`,
-    regular,
-  );
+  line(formatPrescriptionPatientLine(documentPage.patient), regular);
   line(`Date: ${documentPage.consultationDate}`, regular, "right");
   top -= lineHeight;
   wrapped(formatPrescriptionVitals(documentPage.vitals).join(" · "), regular);

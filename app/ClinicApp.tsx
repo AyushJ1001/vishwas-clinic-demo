@@ -43,6 +43,7 @@ import {
   type CatalogGroup,
 } from "./clinic-data";
 import {
+  ageOn,
   formatConsultationDate,
   formatPriorVisitDate,
   type ClinicDoctorName,
@@ -53,7 +54,7 @@ import {
   type PrescribedMedicine,
   type CompletedPrescriptionSnapshot,
 } from "./consultation-model";
-import { normalizePatientName, parsePatientImportText } from "./patient-import";
+import { parsePatientImportText } from "./patient-import";
 import {
   clinicDoctors,
   clinicIdentity,
@@ -71,6 +72,7 @@ import {
 import {
   createCompletedPrescriptionDocument,
   createPrescriptionDocumentPages,
+  formatPrescriptionPatientLine,
   formatPrescriptionVitals,
   prescriptionFooter,
   prescriptionTypography,
@@ -82,7 +84,7 @@ import {
   preparePrescriptionPdf,
   retryPrescriptionPdf,
 } from "./prescription-output";
-import { PatientNameSearch } from "./patient-search";
+import { describePatient, PatientNameSearch } from "./patient-search";
 import { BackupsPanel } from "./backups-panel";
 import { getClinicPc } from "./clinic-pc";
 
@@ -1104,39 +1106,58 @@ function PrescriptionPage() {
     (consultation.visitType === "followup" && !consultation.linkedPriorVisit);
   const [patientSynced, setPatientSynced] = useState(false);
   const updatePatient = (
-    field: keyof Consultation["patient"],
+    field: "name" | "age" | "sex" | "phone",
     value: string,
   ) => {
+    // A different name is a different person: typing over a chosen
+    // patient's name starts a new patient instead of renaming them.
     if (field === "name") setPatientSynced(false);
+    setConsultation((current) => {
+      const unlink = field === "name" && current.patient.patientId !== "";
+      return {
+        ...current,
+        linkedPriorVisit: unlink ? null : current.linkedPriorVisit,
+        patient: {
+          ...current.patient,
+          ...(unlink ? { patientId: "", patientNumber: null } : {}),
+          [field]: value,
+        },
+      };
+    });
+  };
+  const updateDateOfBirth = (dateOfBirth: string) => {
     setConsultation((current) => ({
       ...current,
-      patient: { ...current.patient, [field]: value },
+      patient: {
+        ...current.patient,
+        dateOfBirth,
+        age: dateOfBirth
+          ? ageOn(dateOfBirth, current.consultationDate) || current.patient.age
+          : current.patient.age,
+      },
     }));
   };
   const applyPatientRecord = (record: PatientRecord) => {
     setPatientSynced(true);
-    setConsultation((current) => {
-      const patient = {
-        name: record.name,
-        age: record.age || current.patient.age,
-        sex: record.sex,
-      };
-      if (current.visitType !== "followup") return { ...current, patient };
-      const normalized = normalizePatientName(record.name);
-      const isSamePatient = (visit: { patient: { name: string } }) =>
-        normalizePatientName(visit.patient.name) === normalized;
-      // Never keep a visit that belongs to someone else: a follow-up linked
-      // to the wrong patient's history is worse than asking for a new link.
-      const linkedPriorVisit =
-        [...priorVisits]
-          .filter(isSamePatient)
-          .sort((a, b) => b.consultationDate.localeCompare(a.consultationDate))
-          .at(0) ??
-        (current.linkedPriorVisit && isSamePatient(current.linkedPriorVisit)
+    setConsultation((current) => ({
+      ...current,
+      // Never keep an earlier prescription that belongs to someone else.
+      linkedPriorVisit:
+        current.linkedPriorVisit?.patientId === record.id
           ? current.linkedPriorVisit
-          : null);
-      return { ...current, patient, linkedPriorVisit };
-    });
+          : null,
+      patient: {
+        patientId: record.id,
+        patientNumber: record.number,
+        name: record.name,
+        // An estimated birth date only stands in for a remembered age.
+        dateOfBirth: record.dateOfBirthEstimated ? "" : record.dateOfBirth,
+        age:
+          ageOn(record.dateOfBirth, current.consultationDate) || record.age,
+        sex: record.sex,
+        phone: record.phone,
+      },
+    }));
   };
   const updateVital = (field: keyof Consultation["vitals"], value: string) => {
     setConsultation((current) => ({
@@ -1291,7 +1312,7 @@ function PrescriptionPage() {
                   [
                     "followup",
                     "Follow-up prescription",
-                    "Choose and link a completed demo visit",
+                    "Continues an earlier prescription for a saved patient",
                   ],
                 ].map(([key, title, copy]) => {
                   const selected = consultation.visitType === key;
@@ -1336,10 +1357,178 @@ function PrescriptionPage() {
                 </FieldError>
               )}
             </fieldset>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <label htmlFor="patient-name" className="field-label">
+                    Patient name
+                  </label>
+                  <span
+                    id="patient-number"
+                    className="text-xs font-bold text-[#435c54] tabular-nums"
+                  >
+                    {consultation.patient.patientNumber !== null
+                      ? `Patient no. ${consultation.patient.patientNumber}`
+                      : "New patient: numbered on completion"}
+                  </span>
+                </div>
+                <PatientNameSearch
+                  id="patient-name"
+                  value={consultation.patient.name}
+                  disabled={saveState === "loading"}
+                  invalid={Boolean(errorFor("patient-name"))}
+                  describedBy={
+                    errorFor("patient-name")
+                      ? "patient-name-error"
+                      : undefined
+                  }
+                  onNameChange={(name) => updatePatient("name", name)}
+                  onPatientSelected={applyPatientRecord}
+                />
+                {patientSynced && !errorFor("patient-name") && (
+                  <p className="patient-sync-note">
+                    <Check size={13} weight="bold" />
+                    Saved patient
+                  </p>
+                )}
+                {errorFor("patient-name") && (
+                  <FieldError id="patient-name-error">
+                    {errorFor("patient-name")!}
+                  </FieldError>
+                )}
+              </div>
+            </div>
+            <div className="mt-5 grid gap-5 sm:grid-cols-[.6fr_1fr_1fr]">
+              <label>
+                <span className="field-label">Date of birth</span>
+                <input
+                  id="patient-date-of-birth"
+                  aria-label="Date of birth"
+                  className="input-field tabular-nums"
+                  type="date"
+                  value={consultation.patient.dateOfBirth}
+                  max={consultation.consultationDate || undefined}
+                  aria-invalid={Boolean(errorFor("patient-date-of-birth"))}
+                  aria-describedby={
+                    errorFor("patient-date-of-birth")
+                      ? "patient-date-of-birth-error"
+                      : undefined
+                  }
+                  onChange={(event) => updateDateOfBirth(event.target.value)}
+                />
+                {errorFor("patient-date-of-birth") && (
+                  <FieldError id="patient-date-of-birth-error">
+                    {errorFor("patient-date-of-birth")!}
+                  </FieldError>
+                )}
+              </label>
+              <label>
+                <span className="field-label">Phone</span>
+                <input
+                  id="patient-phone"
+                  aria-label="Phone"
+                  className="input-field tabular-nums"
+                  type="tel"
+                  inputMode="tel"
+                  value={consultation.patient.phone}
+                  onChange={(event) => updatePatient("phone", event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="mt-5 grid gap-5 sm:grid-cols-[.6fr_1fr_1.2fr]">
+              <label>
+                <span className="field-label">Age</span>
+                <input
+                  id="patient-age"
+                  aria-label="Age"
+                  className="input-field"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  value={consultation.patient.age}
+                  readOnly={Boolean(consultation.patient.dateOfBirth)}
+                  aria-invalid={Boolean(errorFor("patient-age"))}
+                  aria-describedby={
+                    errorFor("patient-age") ? "patient-age-error" : undefined
+                  }
+                    onChange={(event) =>
+                      updatePatient("age", event.target.value)
+                    }
+                />
+                {errorFor("patient-age") && (
+                  <FieldError id="patient-age-error">
+                    {errorFor("patient-age")!}
+                  </FieldError>
+                )}
+              </label>
+              <label>
+                <span className="field-label">Gender</span>
+                <select
+                  id="patient-sex"
+                  aria-label="Gender"
+                  className="input-field"
+                  value={consultation.patient.sex}
+                  aria-invalid={Boolean(errorFor("patient-sex"))}
+                  aria-describedby={
+                    errorFor("patient-sex") ? "patient-sex-error" : undefined
+                  }
+                  onChange={(event) =>
+                    updatePatient("sex", event.target.value as PatientSex)
+                  }
+                >
+                  <option>Female</option>
+                  <option>Male</option>
+                  <option>Other</option>
+                </select>
+                {errorFor("patient-sex") && (
+                  <FieldError id="patient-sex-error">
+                    {errorFor("patient-sex")!}
+                  </FieldError>
+                )}
+              </label>
+              <label>
+                <span className="field-label">Consultation date</span>
+                <input
+                  id="consultation-date"
+                  aria-label="Consultation date"
+                  className="input-field tabular-nums"
+                  type="date"
+                  value={consultation.consultationDate}
+                  aria-invalid={Boolean(errorFor("consultation-date"))}
+                  aria-describedby={
+                    errorFor("consultation-date")
+                      ? "consultation-date-error"
+                      : undefined
+                  }
+                  onChange={(event) =>
+                    setConsultation((current) => ({
+                      ...current,
+                      consultationDate: event.target.value,
+                      patient: current.patient.dateOfBirth
+                        ? {
+                            ...current.patient,
+                            age:
+                              ageOn(
+                                current.patient.dateOfBirth,
+                                event.target.value,
+                              ) || current.patient.age,
+                          }
+                        : current.patient,
+                    }))
+                  }
+                />
+                {errorFor("consultation-date") && (
+                  <FieldError id="consultation-date-error">
+                    {errorFor("consultation-date")!}
+                  </FieldError>
+                )}
+              </label>
+            </div>
+            <div className="mt-8" />
             {consultation.visitType === "followup" && (
               <div className="mb-8 rounded-[24px] border border-[#15362f]/15 bg-[#ece7dc] p-5">
                 <label>
-                  <span className="field-label">Prior demo visit</span>
+                  <span className="field-label">Earlier prescription</span>
                   <select
                     id="prior-visit"
                     className="input-field"
@@ -1354,30 +1543,28 @@ function PrescriptionPage() {
                     }
                     aria-invalid={Boolean(errorFor("prior-visit"))}
                     disabled={
-                      saveState === "loading" || priorVisitsState !== "ready"
+                      saveState === "loading" ||
+                      priorVisitsState !== "ready" ||
+                      !consultation.patient.patientId
                     }
                     onChange={(event) => {
                       const linkedPriorVisit = priorVisits.find(
                         (visit) => visit.id === event.target.value,
                       );
-                      setPatientSynced(Boolean(linkedPriorVisit));
                       setConsultation((current) => ({
                         ...current,
                         linkedPriorVisit: linkedPriorVisit ?? null,
-                        patient: linkedPriorVisit
-                          ? {
-                              name: linkedPriorVisit.patient.name,
-                              age: linkedPriorVisit.patient.age,
-                              sex: linkedPriorVisit.patient.sex,
-                            }
-                          : current.patient,
                       }));
                     }}
                   >
                     <option value="">
-                      {priorVisitsState === "loading"
-                        ? "Loading completed demo visits…"
-                        : "Choose a completed demo visit"}
+                      {!consultation.patient.patientId
+                        ? "Choose a saved patient first"
+                        : priorVisitsState === "loading"
+                          ? "Loading earlier prescriptions…"
+                          : priorVisits.length
+                            ? "Choose an earlier prescription"
+                            : "No earlier prescriptions for this patient"}
                     </option>
                     {priorVisits.map((visit) => (
                       <option key={visit.id} value={visit.id}>
@@ -1395,7 +1582,7 @@ function PrescriptionPage() {
                 {priorVisitsState === "failed" && (
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-red-900">
                     <p role="alert">
-                      Completed demo visits could not be loaded.
+                      Earlier prescriptions could not be loaded.
                     </p>
                     <button
                       type="button"
@@ -1419,7 +1606,9 @@ function PrescriptionPage() {
                       id="prior-visit-required"
                       className="mt-3 text-sm font-semibold text-[#9b492f]"
                     >
-                      Choose a prior demo visit to continue.
+                      {consultation.patient.patientId
+                        ? "Choose the earlier prescription this follow-up continues."
+                        : "Search for the patient by name or number, then choose their earlier prescription."}
                     </p>
                   )}
                 {consultation.linkedPriorVisit && (
@@ -1497,131 +1686,10 @@ function PrescriptionPage() {
             >
               {clinicalEntryBlocked && saveState !== "loading" && (
                 <span id="followup-link-required" className="sr-only">
-                  Clinical entry is unavailable until a prior demo visit is
+                  Clinical entry is unavailable until an earlier prescription is
                   linked.
                 </span>
               )}
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <label htmlFor="patient-name" className="field-label">
-                    Patient name
-                  </label>
-                  <Link
-                    href="/patients"
-                    className="text-xs font-bold text-[#9b492f] underline decoration-dotted underline-offset-4 transition hover:text-[#b85a36] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      window.location.assign("/patients");
-                    }}
-                  >
-                    Import patient records
-                  </Link>
-                </div>
-                <PatientNameSearch
-                  id="patient-name"
-                  value={consultation.patient.name}
-                  disabled={saveState === "loading"}
-                  invalid={Boolean(errorFor("patient-name"))}
-                  describedBy={
-                    errorFor("patient-name")
-                      ? "patient-name-error"
-                      : undefined
-                  }
-                  onNameChange={(name) => updatePatient("name", name)}
-                  onPatientSelected={applyPatientRecord}
-                />
-                {patientSynced && !errorFor("patient-name") && (
-                  <p className="patient-sync-note">
-                    <Check size={13} weight="bold" />
-                    Synced from saved patient details
-                  </p>
-                )}
-                {errorFor("patient-name") && (
-                  <FieldError id="patient-name-error">
-                    {errorFor("patient-name")!}
-                  </FieldError>
-                )}
-              </div>
-            </div>
-            <div className="mt-5 grid gap-5 sm:grid-cols-[.6fr_1fr_1.2fr]">
-              <label>
-                <span className="field-label">Age</span>
-                <input
-                  id="patient-age"
-                  aria-label="Age"
-                  className="input-field"
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  value={consultation.patient.age}
-                  aria-invalid={Boolean(errorFor("patient-age"))}
-                  aria-describedby={
-                    errorFor("patient-age") ? "patient-age-error" : undefined
-                  }
-                    onChange={(event) =>
-                      updatePatient("age", event.target.value)
-                    }
-                />
-                {errorFor("patient-age") && (
-                  <FieldError id="patient-age-error">
-                    {errorFor("patient-age")!}
-                  </FieldError>
-                )}
-              </label>
-              <label>
-                <span className="field-label">Gender</span>
-                <select
-                  id="patient-sex"
-                  aria-label="Gender"
-                  className="input-field"
-                  value={consultation.patient.sex}
-                  aria-invalid={Boolean(errorFor("patient-sex"))}
-                  aria-describedby={
-                    errorFor("patient-sex") ? "patient-sex-error" : undefined
-                  }
-                  onChange={(event) =>
-                    updatePatient("sex", event.target.value as PatientSex)
-                  }
-                >
-                  <option>Female</option>
-                  <option>Male</option>
-                  <option>Other</option>
-                </select>
-                {errorFor("patient-sex") && (
-                  <FieldError id="patient-sex-error">
-                    {errorFor("patient-sex")!}
-                  </FieldError>
-                )}
-              </label>
-              <label>
-                <span className="field-label">Consultation date</span>
-                <input
-                  id="consultation-date"
-                  aria-label="Consultation date"
-                  className="input-field tabular-nums"
-                  type="date"
-                  value={consultation.consultationDate}
-                  aria-invalid={Boolean(errorFor("consultation-date"))}
-                  aria-describedby={
-                    errorFor("consultation-date")
-                      ? "consultation-date-error"
-                      : undefined
-                  }
-                  onChange={(event) =>
-                    setConsultation((current) => ({
-                      ...current,
-                      consultationDate: event.target.value,
-                    }))
-                  }
-                />
-                {errorFor("consultation-date") && (
-                  <FieldError id="consultation-date-error">
-                    {errorFor("consultation-date")!}
-                  </FieldError>
-                )}
-              </label>
-            </div>
             <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-5">
               <UnitInput
                 inputId="weight"
@@ -1851,13 +1919,6 @@ function PrescriptionPage() {
                 ))}
               </div>
             </div>
-            <div className="mt-8 rounded-2xl bg-[#ece7dc] px-4 py-3 text-xs leading-relaxed text-[#536760]">
-              <b className="text-[#15362f]">Demo workspace:</b> use fictional
-              patient details only. Search or use the categories above to
-              record this consultation. If the right term is missing, type it
-              and save it as a clinic term. Your draft saves automatically
-              after a short pause.
-            </div>
             </fieldset>
             <p className="mt-8 border-t border-[#15362f]/10 pt-7 text-sm leading-relaxed text-[#60736c]">
               Review every patient, clinical, and medicine detail before the
@@ -2056,10 +2117,7 @@ function PrescriptionDocument({
                   Name: <b>{page.patient.name || "—"}</b>
                 </p>
                 <p className="rx-patient-row">
-                  <span>
-                    Age/Gender: {page.patient.age || "—"}/
-                    {page.patient.sex || "—"}
-                  </span>
+                  <span>{formatPrescriptionPatientLine(page.patient)}</span>
                   <span>Date: {page.consultationDate}</span>
                 </p>
                 <p>{formatPrescriptionVitals(page.vitals).join(" · ")}</p>
@@ -2279,9 +2337,17 @@ function PrescriptionReviewDialog({
               <ul className="mt-4 space-y-2">
                 {problems.map((problem) => {
                   const mustLinkPriorVisit =
-                    requiresPriorVisit && problem.fieldId !== "prior-visit";
+                    requiresPriorVisit &&
+                    !fieldsOpenBeforeLinking.has(problem.fieldId);
+                  // The earlier prescription can only be chosen once the
+                  // patient is, so that comes first.
                   const correction = mustLinkPriorVisit
-                    ? { ...problem, fieldId: "prior-visit" }
+                    ? {
+                        ...problem,
+                        fieldId: consultation.patient.patientId
+                          ? "prior-visit"
+                          : "patient-name",
+                      }
                     : problem;
                   return (
                     <li key={problem.key}>
@@ -2292,7 +2358,7 @@ function PrescriptionReviewDialog({
                         className="flex min-h-11 w-full items-start justify-between gap-4 rounded-xl bg-white px-4 py-3 text-left text-sm font-semibold transition hover:bg-[#ece7dc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
                         aria-label={
                           mustLinkPriorVisit
-                            ? `Link prior visit before fixing ${problem.fieldLabel}`
+                            ? `Choose the earlier prescription before fixing ${problem.fieldLabel}`
                             : `Fix ${problem.fieldLabel}`
                         }
                       >
@@ -2431,6 +2497,18 @@ function PrescriptionReviewDialog({
     </dialog>
   );
 }
+
+// The patient and visit details stay editable while a follow-up waits for its
+// earlier prescription; everything clinical is locked until it is linked.
+const fieldsOpenBeforeLinking = new Set([
+  "prior-visit",
+  "prescription-type-new",
+  "patient-name",
+  "patient-date-of-birth",
+  "patient-age",
+  "patient-sex",
+  "consultation-date",
+]);
 
 type PdfOutputState =
   | { status: "preparing" }
@@ -2765,9 +2843,7 @@ function CompletedPrescriptionView({
 
 function ReceiptPage() {
   const [amount, setAmount] = useState("600");
-  const [patientName, setPatientName] = useState(
-    "Demo Patient Ananya Deshmukh",
-  );
+  const [patientName, setPatientName] = useState("");
   return (
     <Shell active="receipts">
       <RouteHeader
@@ -2825,14 +2901,10 @@ function ReceiptPage() {
 }
 
 function CertificatePage() {
-  const [patientName, setPatientName] = useState(
-    "Demo Patient Ananya Deshmukh",
-  );
-  const [diagnosis, setDiagnosis] = useState(
-    "Viral upper respiratory tract infection",
-  );
-  const [treatmentDate, setTreatmentDate] = useState("26/08/26");
-  const [restDays, setRestDays] = useState("4 days");
+  const [patientName, setPatientName] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [treatmentDate, setTreatmentDate] = useState("");
+  const [restDays, setRestDays] = useState("");
   const [isFit, setIsFit] = useState(true);
   return (
     <Shell active="certificate">
@@ -3044,15 +3116,6 @@ function A5Document({
   );
 }
 
-const sampleImportText = [
-  "name,age,sex,phone",
-  "Ananya Deshmukh,32,Female,98765 43210",
-  "Rohan Shah,36,Male,98220 11223",
-  "Kavya Mehta,44,Female",
-  "Samira Iyer,51,female,98450 77661",
-  "Vikram Oak,27,m,97000 55442",
-].join("\n");
-
 type ImportState = "idle" | "importing" | "done" | "failed";
 type DirectoryState = "loading" | "ready" | "failed";
 
@@ -3107,8 +3170,9 @@ function PatientImportCard({ onImported }: { onImported: () => void }) {
       </h2>
       <p className="mt-3 max-w-xl text-base leading-relaxed text-[#536760]">
         Paste rows from the clinic register, or upload a CSV or JSON export.
-        Name is required; age, sex, and phone are optional. Patients already
-        saved under the same name are updated instead of duplicated.
+        Only the name is required. Patients keep the number from the old
+        register if a number column is included; everyone else gets the next
+        number. Two patients with the same name stay separate.
       </p>
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <label
@@ -3132,17 +3196,6 @@ function PatientImportCard({ onImported }: { onImported: () => void }) {
             event.target.value = "";
           }}
         />
-        <button
-          type="button"
-          className="min-h-11 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#15362f] shadow-sm transition hover:bg-[#f0ece3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d85f39]"
-          onClick={() => {
-            setSummary(null);
-            setImportState("idle");
-            setText(sampleImportText);
-          }}
-        >
-          Fill a sample list
-        </button>
         {text && (
           <button
             type="button"
@@ -3164,7 +3217,7 @@ function PatientImportCard({ onImported }: { onImported: () => void }) {
         id="patient-import-text"
         className="input-field min-h-40 font-mono text-sm"
         value={text}
-        placeholder={"name,age,sex,phone\nAnanya Deshmukh,32,Female,98765 43210\nRohan Shah,36,Male"}
+        placeholder={"number,name,date of birth,age,sex,phone"}
         onChange={(event) => {
           setText(event.target.value);
           setImportState("idle");
@@ -3202,7 +3255,12 @@ function PatientImportCard({ onImported }: { onImported: () => void }) {
                   <span className="font-bold">{row.name}</span>
                   <span className="text-[#536760]">
                     {[
-                      row.age ? `Age ${row.age}` : "Age not given",
+                      row.number ? `No. ${row.number}` : "Next number",
+                      row.dateOfBirth
+                        ? `Born ${formatConsultationDate(row.dateOfBirth)}`
+                        : row.age
+                          ? `Age ${row.age}`
+                          : "Age not given",
                       row.sex,
                       row.phone,
                     ]
@@ -3239,10 +3297,10 @@ function PatientImportCard({ onImported }: { onImported: () => void }) {
           {summary.imported} new patient record
           {summary.imported === 1 ? "" : "s"} saved
           {summary.updated > 0
-            ? ` · ${summary.updated} existing record${summary.updated === 1 ? "" : "s"} updated.`
+            ? ` · ${summary.updated} existing record${summary.updated === 1 ? "" : "s"} updated by number.`
             : "."}
           {summary.skipped > 0 &&
-            ` ${summary.skipped} row${summary.skipped === 1 ? "" : "s"} skipped.`}
+            ` ${summary.skipped} row${summary.skipped === 1 ? " was" : "s were"} already saved or invalid.`}
         </p>
       )}
       {importState === "failed" && (
@@ -3344,13 +3402,7 @@ function PatientDirectoryCard({ reloadKey }: { reloadKey: number }) {
                 {patient.name}
               </span>
               <span className="flex-none text-xs font-semibold text-[#536760]">
-                {[
-                  patient.age ? `Age ${patient.age}` : "Age not given",
-                  patient.sex,
-                  patient.phone,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {describePatient(patient)}
               </span>
             </li>
           ))}

@@ -10,6 +10,16 @@ export type PatientDemographics = {
   sex: PatientSex;
 };
 
+// The patient on a consultation. `patientId` links a saved Patient; it is
+// blank for someone seen for the first time, who is registered (and given a
+// Patient number) when their first prescription is completed.
+export type ConsultationPatient = PatientDemographics & {
+  patientId: string;
+  patientNumber: number | null;
+  dateOfBirth: string;
+  phone: string;
+};
+
 export type ConsultationVitals = {
   weight: string;
   temperature: string;
@@ -28,6 +38,7 @@ export type PrescribedMedicine = {
 
 export type PriorVisitSnapshot = {
   id: string;
+  patientId: string;
   patient: PatientDemographics;
   consultationDate: string;
   doctorName: ClinicDoctorName;
@@ -35,8 +46,13 @@ export type PriorVisitSnapshot = {
 };
 
 export type PatientRecord = {
-  id: number;
+  id: string;
+  // Null only for a Phone-issued patient the Clinic PC has not numbered yet.
+  number: number | null;
   name: string;
+  // YYYY-MM-DD, or "" when only an approximate age is known.
+  dateOfBirth: string;
+  dateOfBirthEstimated: boolean;
   age: string;
   sex: PatientSex;
   phone: string;
@@ -46,7 +62,7 @@ export type Consultation = {
   visitType: "new" | "followup" | null;
   linkedPriorVisit: PriorVisitSnapshot | null;
   doctorName: ClinicDoctorName;
-  patient: PatientDemographics;
+  patient: ConsultationPatient;
   consultationDate: string;
   vitals: ConsultationVitals;
   complaints: string[];
@@ -124,47 +140,6 @@ export type PatientImportSummary = {
   problems: string[];
 };
 
-export function createDemoConsultation(): Consultation {
-  return {
-    visitType: null,
-    linkedPriorVisit: null,
-    doctorName: "Dr. Makarand Vishwas Apte",
-    patient: {
-      name: "Demo Patient Ananya Deshmukh",
-      age: "32",
-      sex: "Female",
-    },
-    consultationDate: "",
-    vitals: {
-      weight: "62",
-      temperature: "100.2",
-      pulse: "88",
-      systolic: "118",
-      diastolic: "76",
-      spo2: "98",
-    },
-    complaints: ["Low-grade fever", "Dry cough"],
-    examinationFindings: ["Throat congestion"],
-    provisionalDiagnosis: "Viral upper respiratory tract infection",
-    advice: ["Warm saline gargles", "Maintain hydration"],
-    investigations: [],
-    medicines: [
-      {
-        name: "Paracetamol 500 mg tablet",
-        dose: "",
-        duration: "",
-        method: "",
-      },
-      {
-        name: "Levocetirizine 5 mg tablet",
-        dose: "",
-        duration: "",
-        method: "",
-      },
-    ],
-  };
-}
-
 export function createEmptyConsultation(
   doctorName: ClinicDoctorName,
   consultationDate: string,
@@ -173,7 +148,7 @@ export function createEmptyConsultation(
     visitType: null,
     linkedPriorVisit: null,
     doctorName,
-    patient: { name: "", age: "", sex: "Female" },
+    patient: emptyConsultationPatient(),
     consultationDate,
     vitals: {
       weight: "",
@@ -190,6 +165,58 @@ export function createEmptyConsultation(
     investigations: [],
     medicines: [],
   };
+}
+
+export function emptyConsultationPatient(): ConsultationPatient {
+  return {
+    patientId: "",
+    patientNumber: null,
+    name: "",
+    age: "",
+    dateOfBirth: "",
+    sex: "Female",
+    phone: "",
+  };
+}
+
+function missingFields<T extends object>(value: Partial<T>, defaults: T) {
+  return Object.fromEntries(
+    Object.entries(defaults).filter(([key]) => !(key in value)),
+  ) as Partial<T>;
+}
+
+/** Fills fields added after a draft or snapshot was first saved. */
+export function withCurrentPatientFields(consultation: Consultation): Consultation {
+  const priorVisit = consultation.linkedPriorVisit;
+  return {
+    ...consultation,
+    // Existing fields keep their order; missing ones are appended.
+    patient: { ...consultation.patient, ...missingFields(consultation.patient, emptyConsultationPatient()) },
+    linkedPriorVisit: priorVisit
+      ? { ...priorVisit, patientId: priorVisit.patientId ?? "" }
+      : null,
+  };
+}
+
+/** Whole years between a YYYY-MM-DD birth date and another date. */
+export function ageOn(dateOfBirth: string, onDate: string) {
+  const birth = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOfBirth);
+  const on = /^(\d{4})-(\d{2})-(\d{2})$/.exec(onDate);
+  if (!birth || !on) return "";
+  const [, by, bm, bd] = birth.map(Number);
+  const [, oy, om, od] = on.map(Number);
+  const years = oy - by - (om < bm || (om === bm && od < bd) ? 1 : 0);
+  return years >= 0 ? String(years) : "";
+}
+
+/**
+ * A birth date that makes someone `age` on `onDate`, for patients whose
+ * exact date of birth is unknown; kept marked as estimated.
+ */
+export function estimatedDateOfBirth(age: string, onDate: string) {
+  const on = /^(\d{4})-(\d{2})-(\d{2})$/.exec(onDate);
+  if (!/^\d+$/.test(age) || !on) return "";
+  return `${String(Number(on[1]) - Number(age)).padStart(4, "0")}-${on[2]}-${on[3]}`;
 }
 
 export function toLocalDateInputValue(date: Date) {

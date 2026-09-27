@@ -14,7 +14,6 @@ import {
   type ConsultationDraftRepository,
 } from "./consultation-draft-repository";
 import {
-  createDemoConsultation,
   createEmptyConsultation,
   toLocalDateInputValue,
   type Consultation,
@@ -38,6 +37,23 @@ type PriorVisitsLoadResult =
 
 const autosaveDelayMs = 800;
 
+function sortedJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortedJson);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, sortedJson((value as Record<string, unknown>)[key])]),
+    );
+  }
+  return value;
+}
+
+function sameJson(a: unknown, b: unknown) {
+  return JSON.stringify(sortedJson(a)) === JSON.stringify(sortedJson(b));
+}
+const defaultDoctor = "Dr. Makarand Vishwas Apte";
+
 export function useConsultationDraft(): {
   consultation: Consultation;
   setConsultation: Dispatch<SetStateAction<Consultation>>;
@@ -57,8 +73,9 @@ export function useConsultationDraft(): {
     () => createConsultationDraftRepository(),
     [],
   );
-  const [consultation, setConsultation] =
-    useState<Consultation>(createDemoConsultation);
+  const [consultation, setConsultation] = useState<Consultation>(() =>
+    createEmptyConsultation(defaultDoctor, ""),
+  );
   const [saveState, setSaveState] = useState<DraftSaveState>("loading");
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [completionState, setCompletionState] =
@@ -76,10 +93,10 @@ export function useConsultationDraft(): {
 
   useEffect(() => {
     let active = true;
-    const initialConsultation = {
-      ...createDemoConsultation(),
-      consultationDate: toLocalDateInputValue(new Date()),
-    };
+    const initialConsultation = createEmptyConsultation(
+      defaultDoctor,
+      toLocalDateInputValue(new Date()),
+    );
 
     repository.load().then(
       (draft) => {
@@ -120,18 +137,20 @@ export function useConsultationDraft(): {
     };
   }, [repository]);
 
+  const patientId = consultation.patient.patientId;
   const requestPriorVisits = useCallback(
     async (): Promise<PriorVisitsLoadResult> => {
       const request = priorVisitsRequestRef.current + 1;
       priorVisitsRequestRef.current = request;
+      if (!patientId) return { request, state: "ready", visits: [] };
       try {
-        const visits = await repository.listPriorVisits();
+        const visits = await repository.listPriorVisits(patientId);
         return { request, state: "ready", visits };
       } catch {
         return { request, state: "failed" };
       }
     },
-    [repository],
+    [patientId, repository],
   );
 
   const commitPriorVisits = useCallback((result: PriorVisitsLoadResult) => {
@@ -175,10 +194,11 @@ export function useConsultationDraft(): {
           snapshotFingerprint === JSON.stringify(consultationRef.current);
         if (!isLatestEdit) return;
 
-        const savedFingerprint = JSON.stringify(result.draft.consultation);
+        // Compared without regard to key order: the server may add fields
+        // an older draft lacked.
         if (
           result.draft.revision === revision &&
-          savedFingerprint === snapshotFingerprint
+          sameJson(result.draft.consultation, snapshot)
         ) {
           setSavedAt(result.draft.updatedAt);
           setSaveState("saved");

@@ -12,7 +12,7 @@ export const demoDraftIdStorageKey = "vishwas-clinic-demo-draft-id";
 export interface ConsultationDraftRepository {
   load(): Promise<SavedConsultationDraft | null>;
   startNew(consultation: Consultation): Promise<SavedConsultationDraft>;
-  listPriorVisits(): Promise<PriorVisitSnapshot[]>;
+  listPriorVisits(patientId: string): Promise<PriorVisitSnapshot[]>;
   save(
     consultation: Consultation,
     revision: number,
@@ -27,7 +27,7 @@ function getOrCreateDemoDraftId() {
   const savedId = window.localStorage.getItem(demoDraftIdStorageKey);
   if (savedId) return savedId;
 
-  const id = `demo-${window.crypto.randomUUID()}`;
+  const id = `draft-${window.crypto.randomUUID()}`;
   window.localStorage.setItem(demoDraftIdStorageKey, id);
   return id;
 }
@@ -55,7 +55,7 @@ export function createConsultationDraftRepository(): ConsultationDraftRepository
 
   return {
     async startNew(consultation) {
-      const id = `demo-${window.crypto.randomUUID()}`;
+      const id = `draft-${window.crypto.randomUUID()}`;
       const result = await saveToId(id, consultation, 1);
       if (!result.accepted || result.draft.lifecycle !== "editing") {
         throw new Error("The next consultation could not be created.");
@@ -76,8 +76,10 @@ export function createConsultationDraftRepository(): ConsultationDraftRepository
       const body = (await response.json()) as { draft: SavedConsultationDraft };
       return body.draft;
     },
-    async listPriorVisits() {
-      const body = await request<ListPriorVisitsResult>("/api/prior-visits");
+    async listPriorVisits(patientId) {
+      const body = await request<ListPriorVisitsResult>(
+        `/api/prior-visits?patientId=${encodeURIComponent(patientId)}`,
+      );
       return body.visits;
     },
     async save(consultation, revision) {

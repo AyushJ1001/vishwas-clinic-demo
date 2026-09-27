@@ -65,30 +65,38 @@ test("keeps Clinic records in the local database across restarts", async () => {
   await app.close();
 });
 
-test("completes a prescription and prepares its A5 PDF offline", async () => {
+test("a fresh Clinic PC starts empty and numbers its first patient 1", async () => {
   const app = await launchClinicPc();
   const window = await app.firstWindow();
   await expect(window.getByRole("status")).toContainText("Saved", {
     timeout: 15_000,
   });
+  await expect(window.getByLabel("Patient name")).toHaveValue("");
   await window.getByRole("radio", { name: "New prescription" }).check();
-  for (const medicine of [
-    "Paracetamol 500 mg tablet",
-    "Levocetirizine 5 mg tablet",
+  await window.getByLabel("Patient name").fill("Test Patient माधुरी देशमुख");
+  await window.keyboard.press("Escape");
+  await window.getByLabel("Age").fill("41");
+  for (const [field, item] of [
+    ["Major complaints", "Dry cough"],
+    ["Examination findings", "Throat congestion"],
+    ["Provisional diagnosis", "Viral upper respiratory tract infection"],
+    ["Medicines", "Paracetamol 500 mg tablet"],
   ]) {
-    await window.getByLabel(`${medicine} dose`).selectOption("1–0–1");
-    await window.getByLabel(`${medicine} duration`).selectOption("5 days");
-    await window.getByLabel(`${medicine} method`).selectOption("After food");
+    await window.getByRole("combobox", { name: field, exact: true }).click();
+    await window.getByPlaceholder(`Search ${field.toLowerCase()}`).fill(item);
+    await window.getByRole("option", { name: item, exact: true }).click();
+    await window.keyboard.press("Escape");
   }
-  await window.getByLabel("Patient name").fill("Demo Patient माधुरी देशमुख");
+  await window.getByLabel("Paracetamol 500 mg tablet dose").selectOption("1–0–1");
+  await window.getByLabel("Paracetamol 500 mg tablet duration").selectOption("5 days");
+  await window.getByLabel("Paracetamol 500 mg tablet method").selectOption("After food");
   await window.getByRole("button", { name: "Review prescription" }).click();
   await window
     .getByRole("dialog", { name: "Review prescription" })
     .getByRole("button", { name: "Complete prescription" })
     .click();
-  await expect(
-    window.getByRole("status", { name: "Prescription completed" }),
-  ).toBeVisible();
+  const completed = window.getByRole("article", { name: "Completed prescription" });
+  await expect(completed).toContainText("Patient no. 1 · Age/Gender: 41/Female");
   await expect(
     window.getByRole("button", { name: "Download PDF" }),
   ).toBeEnabled({ timeout: 15_000 });

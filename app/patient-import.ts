@@ -1,8 +1,12 @@
 import type { PatientSex } from "./consultation-model";
 
 export type ParsedPatientRow = {
+  // The Patient number from the old system; blank to assign the next one.
+  number: string;
   name: string;
   age: string;
+  // YYYY-MM-DD, or blank when not given.
+  dateOfBirth: string;
   // Blank means "not given", so an import never overwrites a known value.
   sex: PatientSex | "";
   phone: string;
@@ -39,6 +43,36 @@ function normalizeAge(value: unknown) {
   return /^\d+$/.test(text) ? text : "";
 }
 
+function normalizePatientNumber(value: unknown) {
+  const text = String(value ?? "").trim().replace(/^#/u, "");
+  return /^\d{1,9}$/.test(text) && Number(text) > 0 ? String(Number(text)) : "";
+}
+
+function isRealBirthDate(year: number, month: number, day: number) {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    year >= 1900 &&
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+// Registers in India write dates day first: 31/12/1980, 31-12-1980 or
+// 31.12.1980. ISO dates (1980-12-31) are accepted too.
+export function normalizeDateOfBirth(value: unknown) {
+  const text = String(value ?? "").trim();
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/u.exec(text);
+  const dayFirst = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/u.exec(text);
+  const [year, month, day] = iso
+    ? [iso[1], iso[2], iso[3]].map(Number)
+    : dayFirst
+      ? [dayFirst[3], dayFirst[2], dayFirst[1]].map(Number)
+      : [0, 0, 0];
+  if (!isRealBirthDate(year, month, day)) return "";
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 function normalizePhone(value: unknown) {
   const text = String(value ?? "").trim();
   return /^[+0-9 ()-]{4,20}$/.test(text) ? text : "";
@@ -48,7 +82,7 @@ type RawPatientRow = Record<string, unknown>;
 
 function pickValue(row: RawPatientRow, keys: string[]) {
   for (const [key, value] of Object.entries(row)) {
-    const normalizedKey = key.trim().toLowerCase().replace(/[\s_-]+/gu, "");
+    const normalizedKey = key.trim().toLowerCase().replace(/[\s_.-]+/gu, "");
     if (keys.includes(normalizedKey) && String(value ?? "").trim()) {
       return String(value).trim();
     }
@@ -62,8 +96,14 @@ function rowFromObject(value: unknown): ParsedPatientRow | null {
   const name = pickValue(row, ["name", "patientname", "patient", "fullname"]);
   if (!name) return null;
   return {
+    number: normalizePatientNumber(
+      pickValue(row, ["number", "patientnumber", "patientno", "no", "patientid", "id", "regno"]),
+    ),
     name: normalizePatientName(name) ? name.trim() : "",
     age: normalizeAge(pickValue(row, ["age", "ageyears", "years"])),
+    dateOfBirth: normalizeDateOfBirth(
+      pickValue(row, ["dateofbirth", "dob", "birthdate", "born"]),
+    ),
     sex: normalizePatientSex(pickValue(row, ["sex", "gender"])),
     phone: normalizePhone(pickValue(row, ["phone", "mobile", "phonenumber", "contact", "contactnumber"])),
   };
@@ -98,6 +138,17 @@ function splitCsvLine(line: string) {
 }
 
 const csvHeaderKeys: Record<string, string> = {
+  number: "number",
+  patientnumber: "number",
+  patientno: "number",
+  no: "number",
+  patientid: "number",
+  id: "number",
+  regno: "number",
+  dateofbirth: "dob",
+  dob: "dob",
+  birthdate: "dob",
+  born: "dob",
   name: "name",
   patient: "name",
   patientname: "name",
@@ -115,7 +166,7 @@ const csvHeaderKeys: Record<string, string> = {
 };
 
 function normalizeHeader(cell: string) {
-  return cell.toLowerCase().replace(/[\s_-]+/gu, "");
+  return cell.toLowerCase().replace(/[\s_.-]+/gu, "");
 }
 
 function rowsFromCsv(text: string, problems: PatientParseProblem[]) {
@@ -207,7 +258,11 @@ export function isValidPatientInput(value: unknown): value is ParsedPatientRow {
   if (!value || typeof value !== "object") return false;
   const row = value as Partial<ParsedPatientRow>;
   return Boolean(
-    typeof row.name === "string" &&
+    typeof row.number === "string" &&
+      /^\d{0,9}$/.test(row.number) &&
+      typeof row.dateOfBirth === "string" &&
+      (row.dateOfBirth === "" || normalizeDateOfBirth(row.dateOfBirth) === row.dateOfBirth) &&
+      typeof row.name === "string" &&
       normalizePatientName(row.name).length > 0 &&
       row.name.trim().length <= 120 &&
       typeof row.age === "string" &&

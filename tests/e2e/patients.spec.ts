@@ -1,25 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-
-const draftIdStorageKey = "vishwas-clinic-demo-draft-id";
-
-// The patient directory is shared by every test, so each test uses names that
-// no other test (or earlier run) can match.
-function uniqueSuffix() {
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-}
-
-async function openIsolatedPrescription(page: Page, testName: string) {
-  const draftId = `e2e-patients-${testName}-${uniqueSuffix()}`;
-  await page.addInitScript(
-    ({ key, value }) => window.localStorage.setItem(key, value),
-    { key: draftIdStorageKey, value: draftId },
-  );
-  await page.goto("/");
-  await expect(page.getByRole("status")).toContainText("Saved", {
-    timeout: 15_000,
-  });
-}
+import {
+  openDraft,
+  sampleConsultation,
+  todayInIndia,
+  uniqueSuffix,
+} from "./fixtures";
+import {
+  emptyConsultationPatient,
+  type Consultation,
+  type PatientRecord,
+} from "../../app/consultation-model";
 
 async function openPatientsPage(page: Page) {
   await page.goto("/patients");
@@ -40,66 +31,120 @@ function patientOption(page: Page, name: string | RegExp) {
     .getByRole("option", { name });
 }
 
-async function searchDirectory(page: Page, name: string) {
+async function findPatients(page: Page, query: string) {
   const response = await page.request.get(
-    `/api/patients?q=${encodeURIComponent(name)}`,
+    `/api/patients?q=${encodeURIComponent(query)}&limit=25`,
   );
   expect(response.ok()).toBe(true);
-  const data = (await response.json()) as {
-    patients: { name: string; age: string; sex: string; phone: string }[];
-  };
-  return data.patients;
+  return ((await response.json()) as { patients: PatientRecord[] }).patients;
 }
 
-test("pasted rows preview, import, and update existing patients instead of duplicating", async ({
+async function importPatients(page: Page, patients: object[]) {
+  const response = await page.request.post("/api/patients/import", {
+    data: {
+      patients: patients.map((patient) => ({
+        number: "",
+        age: "",
+        dateOfBirth: "",
+        sex: "",
+        phone: "",
+        ...patient,
+      })),
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+}
+
+function readyConsultation(patient: Partial<Consultation["patient"]>): Consultation {
+  return {
+    ...sampleConsultation(),
+    visitType: "new",
+    consultationDate: todayInIndia(),
+    patient: { ...emptyConsultationPatient(), sex: "Female", age: "38", ...patient },
+    medicines: [
+      {
+        name: "Paracetamol 500 mg tablet",
+        dose: "1–0–1",
+        duration: "5 days",
+        method: "After food",
+      },
+    ],
+  };
+}
+
+async function completeOpenPrescription(page: Page) {
+  await page.getByRole("button", { name: "Review prescription" }).click();
+  await page
+    .getByRole("dialog", { name: "Review prescription" })
+    .getByRole("button", { name: "Complete prescription" })
+    .click();
+  await expect(
+    page.getByRole("status", { name: "Prescription completed" }),
+  ).toBeVisible();
+}
+
+test("imports keep old patient numbers, number everyone else, and never merge by name", async ({
   page,
 }) => {
   const suffix = uniqueSuffix();
-  const first = `Import Asha ${suffix}`;
-  const second = `Import Bhavin ${suffix}`;
+  const numbered = `Import Asha ${suffix}`;
+  const unnumbered = `Import Bhavin ${suffix}`;
+  // Far above anything another test registers, and different every run.
+  const oldNumber = 800_000_000 + Math.floor(Math.random() * 99_000_000);
   await openPatientsPage(page);
 
   const rows = page.getByLabel("Or paste patient rows");
   await rows.fill(
     [
-      "patient name,age,gender,phone number",
-      `"${first}",41,f,98765 43210`,
-      ",30,Male,",
-      `${second},29,m,`,
+      "patient no.,patient name,dob,gender,phone number",
+      `${oldNumber},"${numbered}",14/03/1984,f,98765 43210`,
+      ",,,Male,",
+      `,${unnumbered},,m,`,
     ].join("\n"),
   );
   await expect(page.getByText("2 patient rows ready to import.")).toBeVisible();
   await expect(page.getByText("Name is missing, so the row was skipped.")).toBeVisible();
   await page.getByRole("button", { name: "Import 2 patients" }).click();
-  await expect(
-    page.getByText("2 new patient records saved."),
-  ).toBeVisible();
+  await expect(page.getByText("2 new patient records saved.")).toBeVisible();
 
-  const directorySearch = page.getByRole("searchbox", {
-    name: "Search saved patient records",
-  });
-  await directorySearch.fill(suffix);
-  const directory = page.getByRole("article", {
-    name: "Saved patient records",
-  });
-  await expect(directory.getByText(first)).toBeVisible();
-  await expect(directory.getByText("Age 41 · Female · 98765 43210")).toBeVisible();
-  await expect(directory.getByText(second)).toBeVisible();
-
-  await rows.fill(`name,age\n${first.toUpperCase()},42`);
-  await page.getByRole("button", { name: "Import 1 patient" }).click();
-  await expect(
-    page.getByText("0 new patient records saved · 1 existing record updated."),
-  ).toBeVisible();
-
-  const saved = await searchDirectory(page, first);
-  expect(saved).toHaveLength(1);
-  expect(saved[0]).toMatchObject({
-    name: first,
-    age: "42",
+  const [asha] = await findPatients(page, numbered);
+  expect(asha).toMatchObject({
+    number: oldNumber,
+    dateOfBirth: "1984-03-14",
+    dateOfBirthEstimated: false,
     sex: "Female",
     phone: "98765 43210",
   });
+  const [bhavin] = await findPatients(page, unnumbered);
+  expect(bhavin.number).toBeGreaterThan(0);
+  expect(bhavin.number).not.toBe(oldNumber);
+
+  const directory = page.getByRole("article", { name: "Saved patient records" });
+  await page
+    .getByRole("searchbox", { name: "Search saved patient records" })
+    .fill(suffix);
+  await expect(directory.getByText(numbered)).toBeVisible();
+  await expect(directory.getByText(`No. ${oldNumber} ·`)).toBeVisible();
+
+  // The same number is the same patient: the row updates that record.
+  await rows.fill(`number,name,phone\n${oldNumber},${numbered},99999 11111`);
+  await page.getByRole("button", { name: "Import 1 patient" }).click();
+  await expect(
+    page.getByText("0 new patient records saved · 1 existing record updated by number."),
+  ).toBeVisible();
+  expect(await findPatients(page, numbered)).toEqual([
+    expect.objectContaining({ number: oldNumber, phone: "99999 11111" }),
+  ]);
+
+  // The same name without a number is someone else unless every detail matches.
+  await rows.fill(`name,sex\n${unnumbered},m\n${unnumbered},f`);
+  await page.getByRole("button", { name: "Import 2 patients" }).click();
+  await expect(
+    page.getByText("1 new patient record saved. 1 row was already saved or invalid."),
+  ).toBeVisible();
+  const bhavins = await findPatients(page, unnumbered);
+  expect(bhavins.map((patient) => patient.sex).sort()).toEqual(["Female", "Male"]);
+  expect(new Set(bhavins.map((patient) => patient.number)).size).toBe(2);
 });
 
 test("the import API rejects empty, invalid, and oversized requests", async ({
@@ -113,8 +158,10 @@ test("the import API rejects empty, invalid, and oversized requests", async ({
   const tooMany = await request.post("/api/patients/import", {
     data: {
       patients: Array.from({ length: 501 }, (_, index) => ({
+        number: "",
         name: `Too Many ${index}`,
         age: "",
+        dateOfBirth: "",
         sex: "Other",
         phone: "",
       })),
@@ -123,12 +170,14 @@ test("the import API rejects empty, invalid, and oversized requests", async ({
   expect(tooMany.status()).toBe(413);
 
   const suffix = uniqueSuffix();
+  const blank = { number: "", age: "", dateOfBirth: "", sex: "Male", phone: "" };
   const mixed = await request.post("/api/patients/import", {
     data: {
       patients: [
-        { name: `Api Valid ${suffix}`, age: "30", sex: "Male", phone: "" },
-        { name: `Api Invalid ${suffix}`, age: "thirty", sex: "Male", phone: "" },
-        { name: "", age: "", sex: "Other", phone: "" },
+        { ...blank, name: `Api Valid ${suffix}`, age: "30" },
+        { ...blank, name: `Api Invalid ${suffix}`, age: "thirty" },
+        { ...blank, name: `Api Bad Date ${suffix}`, dateOfBirth: "31/02/1990" },
+        { ...blank, name: "" },
       ],
     },
   });
@@ -136,137 +185,123 @@ test("the import API rejects empty, invalid, and oversized requests", async ({
   const { summary } = (await mixed.json()) as {
     summary: { imported: number; updated: number; skipped: number };
   };
-  expect(summary).toMatchObject({ imported: 1, updated: 0, skipped: 2 });
+  expect(summary).toMatchObject({ imported: 1, updated: 0, skipped: 3 });
 });
 
-test("typing a saved patient's name offers the record and syncs age and sex", async ({
+test("choosing a saved patient fills their number and details; a new name starts a new patient", async ({
   page,
 }) => {
   const suffix = uniqueSuffix();
   const name = `Search Meera ${suffix}`;
-  const imported = await page.request.post("/api/patients/import", {
-    data: { patients: [{ name, age: "57", sex: "Male", phone: "91234 56789" }] },
-  });
-  expect(imported.ok()).toBe(true);
+  await importPatients(page, [
+    { name, dateOfBirth: "1969-01-05", sex: "Male", phone: "91234 56789" },
+  ]);
+  const [meera] = await findPatients(page, name);
 
-  await openIsolatedPrescription(page, "search-sync");
+  await openDraft(page, "search-fills", readyConsultation({ name: "" }));
   const patientName = page.getByRole("combobox", { name: "Patient name" });
-  await patientName.fill(`search meera ${suffix}`.slice(0, -2));
-  const options = page.getByRole("listbox", {
-    name: "Matching patient records",
-  });
-  await expect(options.getByRole("option", { name: new RegExp(name) })).toBeVisible();
+  await patientName.fill(String(meera.number));
+  await expect(patientOption(page, new RegExp(name))).toBeVisible();
   await expect(patientName).toHaveAttribute("aria-expanded", "true");
 
   await page.keyboard.press("Enter");
-  await expect(options).toHaveCount(0);
   await expect(patientName).toHaveValue(name);
-  await expect(page.getByLabel("Age")).toHaveValue("57");
-  await expect(page.getByLabel("Sex")).toHaveValue("Male");
-  await expect(page.getByText("Synced from saved patient details")).toBeVisible();
+  await expect(page.getByText(`Patient no. ${meera.number}`, { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Date of birth")).toHaveValue("1969-01-05");
+  await expect(page.getByLabel("Age")).toHaveValue(meera.age);
+  await expect(page.getByLabel("Gender")).toHaveValue("Male");
+  await expect(page.getByLabel("Phone")).toHaveValue("91234 56789");
 
-  await patientName.fill(`${name} edited`);
-  await expect(page.getByText("Synced from saved patient details")).toHaveCount(0);
+  await patientName.fill(`${name} Junior`);
   await page.keyboard.press("Escape");
-  await expect(options).toHaveCount(0);
+  await expect(page.getByText("New patient: numbered on completion")).toBeVisible();
 });
 
-test("an unknown name explains that the record is created on completion", async ({
-  page,
-}) => {
-  await openIsolatedPrescription(page, "search-unknown");
-  const suffix = uniqueSuffix();
-  await page
-    .getByRole("combobox", { name: "Patient name" })
-    .fill(`Nobody Saved ${suffix}`);
-  await expect(
-    page.getByRole("paragraph").filter({
-      hasText: `No saved patient matches “Nobody Saved ${suffix}”. A record will be created when this prescription is completed.`,
-    }),
-  ).toBeVisible();
-});
-
-test("completing a prescription registers the patient in the directory", async ({
+test("completing for a new patient registers the next number, even when the name is taken", async ({
   page,
 }) => {
   const name = `Completed Nisha ${uniqueSuffix()}`;
-  await openIsolatedPrescription(page, "complete-registers");
-  await page.getByRole("radio", { name: "New prescription" }).check();
-  for (const medicine of [
-    "Paracetamol 500 mg tablet",
-    "Levocetirizine 5 mg tablet",
-  ]) {
-    await page.getByLabel(`${medicine} dose`).selectOption("1–0–1");
-    await page.getByLabel(`${medicine} duration`).selectOption("5 days");
-    await page.getByLabel(`${medicine} method`).selectOption("After food");
-  }
-  await page.getByRole("combobox", { name: "Patient name" }).fill(name);
-  await page.keyboard.press("Escape");
-  await page.getByLabel("Age").fill("38");
-  await page.getByLabel("Sex").selectOption("Female");
-  await page.getByRole("button", { name: "Review prescription" }).click();
-  await page
-    .getByRole("dialog", { name: "Review prescription" })
-    .getByRole("button", { name: "Complete prescription" })
-    .click();
-  await expect(
-    page.getByRole("status", { name: "Prescription completed" }),
-  ).toBeVisible();
+  await importPatients(page, [{ name, age: "60", sex: "Female" }]);
+  const [existing] = await findPatients(page, name);
 
-  await expect
-    .poll(async () => (await searchDirectory(page, name)).length)
-    .toBe(1);
-  expect((await searchDirectory(page, name))[0]).toMatchObject({
-    name,
+  await openDraft(
+    page,
+    "complete-registers",
+    readyConsultation({ name, age: "38", phone: "90000 12345" }),
+  );
+  await completeOpenPrescription(page);
+
+  const nishas = await findPatients(page, name);
+  expect(nishas).toHaveLength(2);
+  const registered = nishas.find((patient) => patient.id !== existing.id)!;
+  expect(registered).toMatchObject({
     age: "38",
-    sex: "Female",
+    dateOfBirthEstimated: true,
+    phone: "90000 12345",
   });
+  expect(registered.number).toBeGreaterThan(existing.number!);
+  await expect(
+    page.getByRole("article", { name: "Completed prescription" }),
+  ).toContainText(`Patient no. ${registered.number} · Age/Gender: 38/Female`);
 });
 
-test("follow-up search links the patient's latest prior visit and never keeps another patient's visit", async ({
+test("a follow-up continues one of the chosen patient's own earlier prescriptions", async ({
   page,
 }) => {
-  const unrelated = `Followup Unrelated ${uniqueSuffix()}`;
-  const imported = await page.request.post("/api/patients/import", {
-    data: {
-      patients: [
-        { name: "Demo Patient Rohan Shah", age: "36", sex: "Male", phone: "" },
-        { name: unrelated, age: "22", sex: "Female", phone: "" },
-      ],
-    },
+  const suffix = uniqueSuffix();
+  const first = `Followup Kavya ${suffix}`;
+  const other = `Followup Other ${suffix}`;
+  await importPatients(page, [
+    { name: first, age: "44", sex: "Female" },
+    { name: other, age: "22", sex: "Female" },
+  ]);
+  const [kavya] = await findPatients(page, first);
+  await openDraft(
+    page,
+    "followup-first-visit",
+    readyConsultation({
+      patientId: kavya.id,
+      patientNumber: kavya.number,
+      name: first,
+      age: "44",
+    }),
+  );
+  await completeOpenPrescription(page);
+
+  await openDraft(page, "followup-second-visit", {
+    ...readyConsultation({ name: "" }),
+    visitType: "followup",
   });
-  expect(imported.ok()).toBe(true);
+  const priorVisit = page.getByRole("combobox", { name: /^Earlier prescription/ });
+  await expect(priorVisit).toBeDisabled();
+  await expect(page.getByText("Search for the patient by name or number")).toBeVisible();
 
-  await openIsolatedPrescription(page, "followup-search");
-  await page.getByRole("radio", { name: "Follow-up prescription" }).check();
-  await page
-    .getByLabel("Prior demo visit")
-    .selectOption("demo-visit-kavya-mehta-2026-08-18");
-  const linkedVisit = page.getByRole("region", { name: "Linked prior visit" });
-  await expect(linkedVisit).toContainText("Demo Patient Kavya Mehta");
   const patientName = page.getByRole("combobox", { name: "Patient name" });
-  await expect(patientName).toHaveValue("Demo Patient Kavya Mehta");
+  await patientName.fill(first);
+  await patientOption(page, new RegExp(first)).click();
+  await expect(priorVisit).toBeEnabled();
+  await priorVisit.selectOption({ index: 1 });
+  const linkedVisit = page.getByRole("region", { name: "Linked prior visit" });
+  await expect(linkedVisit).toContainText(first);
+  await expect(linkedVisit).toContainText("Viral upper respiratory tract infection");
 
-  await patientName.fill("Demo Patient Rohan");
-  await patientOption(page, /Demo Patient Rohan Shah/).click();
-  await expect(linkedVisit).toContainText("Demo Patient Rohan Shah");
-  await expect(page.getByLabel("Prior demo visit")).not.toHaveValue("");
-
-  await patientName.fill(unrelated);
-  await patientOption(page, new RegExp(unrelated)).click();
+  await patientName.fill(other);
+  await patientOption(page, new RegExp(other)).click();
   await expect(linkedVisit).toHaveCount(0);
-  await expect(page.getByLabel("Prior demo visit")).toHaveValue("");
-  await expect(
-    page.getByText("Choose a prior demo visit to continue."),
-  ).toBeVisible();
+  await expect(priorVisit).toHaveValue("");
+  await expect(priorVisit.locator("option").first()).toHaveText(
+    "No earlier prescriptions for this patient",
+  );
 });
 
 test("the patients page passes accessibility scans with a preview and directory", async ({
   page,
 }) => {
   await openPatientsPage(page);
-  await page.getByRole("button", { name: "Fill a sample list" }).click();
-  await expect(page.getByText("5 patient rows ready to import.")).toBeVisible();
+  await page
+    .getByLabel("Or paste patient rows")
+    .fill("number,name,age\n,Axe Scan One,40\n,Axe Scan Two,");
+  await expect(page.getByText("2 patient rows ready to import.")).toBeVisible();
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
