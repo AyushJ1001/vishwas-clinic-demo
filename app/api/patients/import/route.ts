@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { importPatients } from "../../../../db/patients";
 import { parsePatientImportText } from "../../../patient-import";
+import { isPhoneIssuedRequest } from "../../../phone-issued-request";
 
 const maxImportRows = 500;
 
 export async function POST(request: Request) {
+  if (isPhoneIssuedRequest(request)) {
+    return NextResponse.json(
+      { error: "Patients can only be imported on the Clinic PC" },
+      { status: 403 },
+    );
+  }
   const body = (await request.json().catch(() => null)) as {
     patients?: unknown[];
     text?: string;

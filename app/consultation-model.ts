@@ -56,6 +56,8 @@ export type PatientRecord = {
   age: string;
   sex: PatientSex;
   phone: string;
+  phoneIssued: boolean;
+  possibleDuplicate: boolean;
 };
 
 export type Consultation = {

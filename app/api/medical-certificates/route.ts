@@ -8,6 +8,7 @@ import {
   issueMedicalCertificate,
   listRecentMedicalCertificates,
 } from "../../../db/issued-documents";
+import { isPhoneIssuedRequest } from "../../phone-issued-request";
 
 function validId(value: unknown): value is string {
   return typeof value === "string" && /^[a-zA-Z0-9-]{8,120}$/.test(value);
@@ -44,6 +45,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const phoneIssued = isPhoneIssuedRequest(request);
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const doctorName = body?.doctorName;
   const title = body?.title;
@@ -81,6 +83,7 @@ export async function POST(request: Request) {
     restDays: body.restDays as number,
     fitToResume: body.fitToResume,
     resumeFrom: body.resumeFrom,
+    phoneIssued,
   });
   return NextResponse.json({ certificate }, { status: 201 });
 }

@@ -5,8 +5,15 @@ import {
   clinicSyncBatchLimit,
   clinicSyncDeviceKeyHeader,
   type ClinicRecordChange,
+  type ConfirmedPhoneIssuedRecord,
 } from "../../sync-model";
-import { applyClinicRecordChanges, isClinicRecordChange } from "../../../db/sync";
+import {
+  applyClinicRecordChanges,
+  confirmPhoneIssuedRecords,
+  isClinicRecordChange,
+  isConfirmedPhoneIssuedRecord,
+  listWaitingPhoneIssuedRecords,
+} from "../../../db/sync";
 
 const maxRequestBytes = 1_000_000;
 
@@ -45,16 +52,27 @@ export async function POST(request: Request) {
   if (new TextEncoder().encode(text).byteLength > maxRequestBytes) {
     return NextResponse.json({ error: "Sync batch is too large" }, { status: 413 });
   }
-  let body: { changes?: unknown } | null;
+  let body: { changes?: unknown; collected?: unknown } | null;
   try {
-    body = JSON.parse(text || "null") as { changes?: unknown } | null;
+    body = JSON.parse(text || "null") as {
+      changes?: unknown;
+      collected?: unknown;
+    } | null;
   } catch {
     return NextResponse.json({ error: "The Sync batch is invalid" }, { status: 400 });
   }
-  if (!body || !Array.isArray(body.changes) || body.changes.length === 0) {
-    return NextResponse.json({ error: "Send a non-empty Sync batch" }, { status: 400 });
+  if (
+    !body ||
+    !Array.isArray(body.changes) ||
+    !Array.isArray(body.collected ?? [])
+  ) {
+    return NextResponse.json({ error: "The Sync batch is invalid" }, { status: 400 });
   }
-  if (body.changes.length > clinicSyncBatchLimit) {
+  const collected = (body.collected ?? []) as unknown[];
+  if (
+    body.changes.length > clinicSyncBatchLimit ||
+    collected.length > clinicSyncBatchLimit
+  ) {
     return NextResponse.json(
       { error: `Sync at most ${clinicSyncBatchLimit} changes per request` },
       { status: 413 },
@@ -63,13 +81,19 @@ export async function POST(request: Request) {
   if (!body.changes.every(isClinicRecordChange)) {
     return NextResponse.json({ error: "The Sync batch is invalid" }, { status: 400 });
   }
+  if (!collected.every(isConfirmedPhoneIssuedRecord)) {
+    return NextResponse.json({ error: "The Sync batch is invalid" }, { status: 400 });
+  }
   const changes = body.changes as ClinicRecordChange[];
-  await applyClinicRecordChanges(changes);
+  if (changes.length) await applyClinicRecordChanges(changes);
+  await confirmPhoneIssuedRecords(collected as ConfirmedPhoneIssuedRecord[]);
   return NextResponse.json({
     accepted: changes.map(({ entityKind, recordId, recordedAt }) => ({
       entityKind,
       recordId,
       recordedAt,
     })),
+    collected,
+    phoneIssued: await listWaitingPhoneIssuedRecords(clinicSyncBatchLimit),
   });
 }

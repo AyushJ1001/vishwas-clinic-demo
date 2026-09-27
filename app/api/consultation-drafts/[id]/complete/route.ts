@@ -12,6 +12,7 @@ import {
   validateConsultation,
 } from "../../../../consultation-validation";
 import type { Consultation } from "../../../../consultation-model";
+import { isPhoneIssuedRequest } from "../../../../phone-issued-request";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -19,16 +20,18 @@ function isDraftId(value: string) {
   return /^[a-zA-Z0-9-]{8,120}$/.test(value);
 }
 
-// The prescription carries the Patient number, so the patient is saved (and
-// a new one numbered) before the prescription is locked.
+// The Patient link is settled before the prescription is locked. On the
+// Cloud copy the number stays pending until the Clinic PC collects it.
 async function withSavedPatient(
   consultation: Consultation,
   draftId: string,
+  phoneIssued: boolean,
 ): Promise<Consultation> {
   const patient = await savePatientForConsultation(
     consultation.patient,
     consultation.consultationDate,
     draftId,
+    { phoneIssued },
   );
   return {
     ...consultation,
@@ -41,6 +44,7 @@ async function withSavedPatient(
 }
 
 export async function POST(request: Request, context: RouteContext) {
+  const phoneIssued = isPhoneIssuedRequest(request);
   const { id } = await context.params;
   const body = (await request.json().catch(() => null)) as {
     revision?: unknown;
@@ -70,6 +74,7 @@ export async function POST(request: Request, context: RouteContext) {
         expectedRevision: body.revision as number,
         expectedConsultation: body.expectedConsultation,
         consultation: body.expectedConsultation,
+        phoneIssued,
       });
       if (!snapshot) {
         return NextResponse.json({ error: "Draft not found" }, { status: 404 });
@@ -113,7 +118,8 @@ export async function POST(request: Request, context: RouteContext) {
       id,
       expectedRevision: body.revision as number,
       expectedConsultation: body.expectedConsultation,
-      consultation: await withSavedPatient(consultation, id),
+      consultation: await withSavedPatient(consultation, id, phoneIssued),
+      phoneIssued,
     });
     if (!snapshot) {
       return NextResponse.json({ error: "Draft not found" }, { status: 404 });

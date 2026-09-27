@@ -50,6 +50,13 @@
       "when": 1789919252637,
       "tag": "0006_clinic_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1789968908489,
+      "tag": "0007_friendly_winter_soldier",
+      "breakpoints": true
     }
   ]
 }
