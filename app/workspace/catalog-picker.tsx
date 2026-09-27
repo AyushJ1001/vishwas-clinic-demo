@@ -12,6 +12,16 @@ import { type CatalogGroup } from "../clinic-data";
 
 import { FieldError } from "./fields";
 
+// What one entry in each catalog is called, for the add-a-new-term prompts.
+const termNoun = {
+  symptoms: "complaint",
+  findings: "finding",
+  diagnoses: "diagnosis",
+  medicines: "medicine",
+  advice: "advice",
+  investigations: "investigation",
+} as const;
+
 export function CatalogPicker({
   label,
   catalogName,
@@ -522,8 +532,8 @@ export function CatalogPicker({
                 }}
                 className="picker-add"
               >
-                <Plus size={15} weight="bold" /> Add “{query.trim()}” as a
-                clinic term
+                <Plus size={15} weight="bold" /> Add “{query.trim()}” as a new{" "}
+                {termNoun[catalogName]}
               </button>
             )}
             {adding && (
@@ -573,7 +583,7 @@ export function CatalogPicker({
                     aria-label={`Save ${query.trim()} to ${label} catalog`}
                   >
                     {saveState === "saving"
-                      ? "Saving clinic term…"
+                      ? `Saving new ${termNoun[catalogName]}…`
                       : saveState === "error"
                         ? "Try saving again"
                         : "Save to catalog"}
