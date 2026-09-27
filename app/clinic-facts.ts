@@ -29,8 +29,8 @@ export const clinicDoctors: Record<ClinicDoctorName, DoctorIdentitySnapshot> = {
     name: "Dr. Gauri Makarand Apte",
     qualifications: "MBBS, MD (Physiology)",
     registration: "Reg. No. 2000/31891",
-    mobile: "+91 99228 63676",
-    specialty: "CC EBDM, CCMTD · Diabetes & Thyroid Consultation",
+    mobile: "9730034907",
+    specialty: "CCEBDM, CCMTD · Diabetes & Thyroid Consultation",
   },
 };
 
