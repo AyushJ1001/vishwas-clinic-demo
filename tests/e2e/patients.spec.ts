@@ -12,6 +12,8 @@ import {
   type PatientRecord,
 } from "../../app/consultation-model";
 
+test.describe.configure({ mode: "serial" });
+
 async function openPatientsPage(page: Page) {
   await page.goto("/patients");
   // The directory only loads after hydration, so this also guarantees the
@@ -188,6 +190,190 @@ test("the import API rejects empty, invalid, and oversized requests", async ({
     summary: { imported: number; updated: number; skipped: number };
   };
   expect(summary).toMatchObject({ imported: 1, updated: 0, skipped: 3 });
+});
+
+test("imports more than 500 patient rows in ordered batches", async ({ page }) => {
+  test.setTimeout(180_000);
+  const suffix = uniqueSuffix();
+  const total = 1_201;
+  const batchSizes: number[] = [];
+  page.on("request", (request) => {
+    if (!request.url().endsWith("/api/patients/import")) return;
+    const body = request.postDataJSON() as { patients?: unknown[] };
+    batchSizes.push(body.patients?.length ?? 0);
+  });
+  await openPatientsPage(page);
+
+  const rows = Array.from(
+    { length: total },
+    (_, index) => `Large Import ${suffix} ${index + 1}\t${20 + (index % 70)}`,
+  );
+  await page
+    .getByLabel("Or paste patient rows")
+    .fill(["name\tage", ...rows].join("\n"));
+  await expect(page.getByText(`${total.toLocaleString("en-IN")} patient rows ready to import.`)).toBeVisible();
+
+  await page.getByRole("button", { name: `Import ${total.toLocaleString("en-IN")} patients` }).click();
+  // The same button reports progress, so its name changes once it is pressed.
+  const importButton = page.getByRole("button", {
+    name: /^Saving patient records…/,
+  });
+  await expect(importButton).toContainText(
+    new RegExp(
+      `Saving patient records… (?:0|500|1,000) of ${total.toLocaleString("en-IN")}`,
+    ),
+  );
+  await expect(
+    page.getByText(`${total.toLocaleString("en-IN")} new patient records saved.`),
+  ).toBeVisible({ timeout: 180_000 });
+  expect(batchSizes).toEqual([500, 500, 201]);
+  expect(await findPatients(page, `Large Import ${suffix} ${total}`)).toHaveLength(1);
+});
+
+test("reports a conflicting Patient number without overwriting its patient", async ({
+  page,
+}) => {
+  const suffix = uniqueSuffix();
+  const patientNumber = 700_000_000 + Math.floor(Math.random() * 50_000_000);
+  const existingName = `Conflict Existing ${suffix}`;
+  const incomingName = `Conflict Incoming ${suffix}`;
+  await importPatients(page, [
+    {
+      number: String(patientNumber),
+      name: existingName,
+      age: "52",
+      sex: "Female",
+      phone: "98765 11111",
+    },
+  ]);
+  await openPatientsPage(page);
+
+  await page
+    .getByLabel("Or paste patient rows")
+    .fill(
+      `patient number\tpatient name\tage\tsex\tphone\n${patientNumber}\t${incomingName}\t31\tMale\t99999 22222`,
+    );
+  await page.getByRole("button", { name: "Import 1 patient" }).click();
+
+  await expect(
+    page.getByText("0 new patient records saved. 1 row was already saved or invalid."),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      `Row 2: Patient number ${patientNumber} already belongs to "${existingName}", so "${incomingName}" was skipped.`,
+    ),
+  ).toBeVisible();
+  expect(await findPatients(page, existingName)).toEqual([
+    expect.objectContaining({
+      number: patientNumber,
+      name: existingName,
+      age: "52",
+      sex: "Female",
+      phone: "98765 11111",
+    }),
+  ]);
+  expect(await findPatients(page, incomingName)).toEqual([]);
+});
+
+test("imports numbered rows before earlier unnumbered rows", async ({ page }) => {
+  const suffix = uniqueSuffix();
+  const baselineNumber =
+    970_000_000 + Math.floor(Math.random() * 10_000_000);
+  const reservedNumber = baselineNumber + 1;
+  const unnumberedName = `Wrong Order Unnumbered ${suffix}`;
+  const numberedName = `Wrong Order Numbered ${suffix}`;
+  await importPatients(page, [
+    { number: String(baselineNumber), name: `Wrong Order Baseline ${suffix}` },
+  ]);
+  await openPatientsPage(page);
+  const sentNames: string[] = [];
+  page.on("request", (request) => {
+    if (!request.url().endsWith("/api/patients/import")) return;
+    const body = request.postDataJSON() as {
+      patients?: Array<{ name?: string }>;
+    };
+    sentNames.push(...(body.patients ?? []).map((patient) => patient.name ?? ""));
+  });
+
+  await page
+    .getByLabel("Or paste patient rows")
+    .fill(
+      [
+        "name\tpatient number",
+        `${unnumberedName}\t`,
+        `${numberedName}\t${reservedNumber}`,
+      ].join("\n"),
+    );
+  await page.getByRole("button", { name: "Import 2 patients" }).click();
+  await expect(page.getByText("2 new patient records saved.")).toBeVisible();
+
+  expect(sentNames).toEqual([numberedName, unnumberedName]);
+  expect(await findPatients(page, numberedName)).toEqual([
+    expect.objectContaining({ number: reservedNumber }),
+  ]);
+  const [unnumbered] = await findPatients(page, unnumberedName);
+  expect(unnumbered.number).toBeGreaterThan(reservedNumber);
+});
+
+test("importing the same numbered and unnumbered rows twice creates no duplicates", async ({
+  page,
+}) => {
+  const suffix = uniqueSuffix();
+  const patientNumber = 750_000_000 + Math.floor(Math.random() * 40_000_000);
+  const numberedName = `Repeat Numbered ${suffix}`;
+  const unnumberedName = `Repeat Unnumbered ${suffix}`;
+  const pastedRows = [
+    "patient number\tname\tage\tsex\tphone",
+    `${patientNumber}\t${numberedName}\t46\tFemale\t98765 44444`,
+    `\t${unnumberedName}\t39\tMale\t98765 55555`,
+  ].join("\n");
+  await openPatientsPage(page);
+  const rows = page.getByLabel("Or paste patient rows");
+  await rows.fill(pastedRows);
+
+  await page.getByRole("button", { name: "Import 2 patients" }).click();
+  await expect(page.getByText("2 new patient records saved.")).toBeVisible();
+  await page.getByRole("button", { name: "Import 2 patients" }).click();
+  await expect(
+    page.getByText(
+      "0 new patient records saved · 1 existing record updated by number. 1 row was already saved or invalid.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Row 3: An identical patient record is already saved, so this row was skipped.",
+    ),
+  ).toBeVisible();
+
+  expect(await findPatients(page, numberedName)).toHaveLength(1);
+  expect(await findPatients(page, unnumberedName)).toHaveLength(1);
+});
+
+test("imports a tab-separated block pasted from Excel", async ({ page }) => {
+  const suffix = uniqueSuffix();
+  const name = `Excel Paste ${suffix}`;
+  await openPatientsPage(page);
+
+  await page
+    .getByLabel("Or paste patient rows")
+    .fill(
+      [
+        "Patient Name\tDOB\tM/F\tMobile No.",
+        `${name}\t31-Dec-1980\tF\t+91 98765 43210`,
+      ].join("\n"),
+    );
+  await expect(page.getByText("1 patient row ready to import.")).toBeVisible();
+  await page.getByRole("button", { name: "Import 1 patient" }).click();
+  await expect(page.getByText("1 new patient record saved.")).toBeVisible();
+
+  expect(await findPatients(page, name)).toEqual([
+    expect.objectContaining({
+      dateOfBirth: "1980-12-31",
+      dateOfBirthEstimated: false,
+      sex: "Female",
+      phone: "+91 98765 43210",
+    }),
+  ]);
 });
 
 test("choosing a saved patient fills their number and details; a new name starts a new patient", async ({
