@@ -382,4 +382,66 @@ const syncOutboxSources = [
         ), strftime('%Y-%m-%dT%H:%M:%fZ', created_at), NULL
       FROM catalog_entries;`,
   },
+  {
+    // A removed document is sent as well, so the Cloud copy drops it too.
+    table: 'patient_documents',
+    triggers: `CREATE TRIGGER IF NOT EXISTS clinic_sync_patient_document_insert
+      AFTER INSERT ON patient_documents BEGIN
+        INSERT INTO clinic_sync_outbox
+          (entity_kind, record_id, record_json, recorded_at, sent_at)
+        VALUES (
+          'patient-document', NEW.id,
+          json_object(
+            'id', NEW.id,
+            'patientId', NEW.patient_id,
+            'name', NEW.name,
+            'contentType', NEW.content_type,
+            'byteSize', NEW.byte_size,
+            'addedAt', NEW.added_at,
+            'removedAt', NULL
+          ),
+          NEW.added_at, NULL
+        )
+        ON CONFLICT(entity_kind, record_id) DO UPDATE SET
+          record_json = excluded.record_json,
+          recorded_at = excluded.recorded_at,
+          sent_at = NULL;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS clinic_sync_patient_document_delete
+      AFTER DELETE ON patient_documents BEGIN
+        INSERT INTO clinic_sync_outbox
+          (entity_kind, record_id, record_json, recorded_at, sent_at)
+        VALUES (
+          'patient-document', OLD.id,
+          json_object(
+            'id', OLD.id,
+            'patientId', OLD.patient_id,
+            'name', OLD.name,
+            'contentType', OLD.content_type,
+            'byteSize', OLD.byte_size,
+            'addedAt', OLD.added_at,
+            'removedAt', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          ),
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL
+        )
+        ON CONFLICT(entity_kind, record_id) DO UPDATE SET
+          record_json = excluded.record_json,
+          recorded_at = excluded.recorded_at,
+          sent_at = NULL;
+      END;`,
+    backfill: `INSERT OR IGNORE INTO clinic_sync_outbox
+        (entity_kind, record_id, record_json, recorded_at, sent_at)
+      SELECT 'patient-document', id,
+        json_object(
+            'id', id,
+            'patientId', patient_id,
+            'name', name,
+            'contentType', content_type,
+            'byteSize', byte_size,
+            'addedAt', added_at,
+            'removedAt', NULL
+          ), added_at, NULL
+      FROM patient_documents;`,
+  },
 ];

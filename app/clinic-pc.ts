@@ -8,6 +8,8 @@ import type {
   PrintSettings,
 } from "../desktop/shared/local-database-protocol";
 
+import type { OpenPatientDocumentResult } from "./patient-document-model";
+
 export type { ClinicPrinter, PrintPaper, PrintResult, PrintSettings };
 
 export type LocalBackup = {
@@ -74,6 +76,11 @@ export type ClinicPcPrinting = {
   printWithOptions(): Promise<PrintResult>;
 };
 
+export type ClinicPcPatientDocuments = {
+  /** Opens a copy of the document in the program Windows uses for its kind. */
+  open(name: string, bytes: Uint8Array): Promise<OpenPatientDocumentResult>;
+};
+
 export type ClinicPcUpdates = {
   state(): Promise<ClinicUpdateState>;
   check(): Promise<ClinicUpdateState>;
@@ -93,6 +100,7 @@ export type ClinicPcSync = {
 
 export type ClinicPc = {
   backups: ClinicPcBackups;
+  patientDocuments: ClinicPcPatientDocuments;
   printing: ClinicPcPrinting;
   sync: ClinicPcSync;
   updates: ClinicPcUpdates;

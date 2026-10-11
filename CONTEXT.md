@@ -78,6 +78,10 @@ The sequential number on every Receipt, assigned only by the Clinic PC.
 The A5 Issued document certifying a Patient's illness and fitness to resume duties; it carries no serial number.
 _Avoid_: Certificate number
 
+**Patient document**:
+A report, scan, or letter from outside the clinic that a doctor attaches to a Patient on the Clinic PC; unlike an Issued document, it can be removed.
+_Avoid_: Attachment, upload, patient file
+
 **Clinic catalog entry**:
 A complaint, finding, diagnosis, medicine, advice, or investigation that the doctors added beyond the built-in catalog; entries are only ever added, never edited.
 _Avoid_: Custom item

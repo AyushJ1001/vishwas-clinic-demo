@@ -8,6 +8,8 @@ The desktop app reuses the web app's UI (`app/`) and its API routes and database
 - `renderer/shims/` stand in for `cloudflare:workers` and the `next/*` modules in the desktop build. The `DB` binding is `renderer/local-d1.ts`, a D1-compatible handle that sends SQL to the main process.
 - `src/` is the main process. It serves the UI from the `clinic://app` scheme, blocks every remote request, and keeps Clinic records in `clinic.sqlite` under `%APPDATA%\Vishwas Clinic\data`. Set `CLINIC_DATA_DIR` to use another folder.
 
+Patient documents are kept inside `clinic.sqlite` and sent to the Cloud copy by Sync (ADR 0005). Opening one writes a copy to `opened-documents` in the same folder and hands it to Windows; the folder is emptied when the app starts and closes.
+
 To send Clinic record changes to the Cloud copy, set `CLINIC_CLOUD_URL` to
 the deployed site's origin and set `CLINIC_SYNC_DEVICE_KEY` to the same secret
 value configured for the Cloudflare Worker. The Clinic PC sends in the

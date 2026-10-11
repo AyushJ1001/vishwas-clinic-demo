@@ -69,6 +69,10 @@ export const updateChannels = {
   check: "clinic-update:check",
 } as const;
 
+export const patientDocumentChannels = {
+  open: "clinic-patient-documents:open",
+} as const;
+
 export const syncChannels = {
   status: "clinic-sync:status",
 } as const;
