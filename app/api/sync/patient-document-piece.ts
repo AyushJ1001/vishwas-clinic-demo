@@ -4,21 +4,22 @@ import {
   patientDocumentChunkBytes,
   patientDocumentChunkCount,
   patientDocumentMaxBytes,
-} from "../../../patient-document-model";
-import { storeSyncedPatientDocumentChunk } from "../../../../db/patient-documents";
-import { fromClinicPc } from "../device-key";
+} from "../../patient-document-model";
+import { patientDocumentPieceParams } from "../../sync-model";
+import { storeSyncedPatientDocumentChunk } from "../../../db/patient-documents";
+
+export function isPatientDocumentPiece(request: Request) {
+  return new URL(request.url).searchParams.has(patientDocumentPieceParams.document);
+}
 
 /**
  * Takes one piece of a Patient document from the Clinic PC. Sending a piece
  * again replaces it, so an upload cut off by a bad connection just resumes.
  */
-export async function POST(request: Request) {
-  if (!(await fromClinicPc(request))) {
-    return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
-  }
+export async function storePatientDocumentPiece(request: Request) {
   const params = new URL(request.url).searchParams;
-  const documentId = params.get("id") ?? "";
-  const chunkIndex = Number(params.get("chunk") ?? "");
+  const documentId = params.get(patientDocumentPieceParams.document) ?? "";
+  const chunkIndex = Number(params.get(patientDocumentPieceParams.chunk) ?? "");
   if (
     !/^[a-zA-Z0-9-]{8,120}$/.test(documentId) ||
     !Number.isSafeInteger(chunkIndex) ||

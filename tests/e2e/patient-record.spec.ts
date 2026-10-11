@@ -188,7 +188,7 @@ test("Sync brings a patient's documents to the Cloud copy, where a phone opens b
       },
     });
   const sendPiece = (index: number, headers: Record<string, string> = deviceKey) =>
-    page.request.post(`/api/sync/patient-documents?id=${documentId}&chunk=${index}`, {
+    page.request.post(`/api/sync?document=${documentId}&chunk=${index}`, {
       headers: { ...headers, "Content-Type": "application/octet-stream" },
       data: largePdf.subarray(index * 1024 * 1024, (index + 1) * 1024 * 1024),
     });

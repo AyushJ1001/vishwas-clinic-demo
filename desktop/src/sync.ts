@@ -4,7 +4,7 @@ import https from "node:https";
 import {
   clinicSyncBatchLimit,
   clinicSyncDeviceKeyHeader,
-  patientDocumentSyncPath,
+  patientDocumentPieceParams,
   type ClinicRecordChange,
   type ConfirmedClinicRecordChange,
   type ConfirmedPhoneIssuedRecord,
@@ -218,9 +218,12 @@ export class ClinicSync {
         ),
       ).rows as { bytes: Buffer }[];
       if (!piece) throw new Error("A Patient document is missing a piece.");
-      const endpoint = new URL(patientDocumentSyncPath, this.cloudAddress);
-      endpoint.searchParams.set("id", change.recordId);
-      endpoint.searchParams.set("chunk", String(index));
+      const endpoint = new URL("/api/sync", this.cloudAddress);
+      endpoint.searchParams.set(
+        patientDocumentPieceParams.document,
+        change.recordId,
+      );
+      endpoint.searchParams.set(patientDocumentPieceParams.chunk, String(index));
       await responseBody(
         endpoint,
         this.deviceKey,

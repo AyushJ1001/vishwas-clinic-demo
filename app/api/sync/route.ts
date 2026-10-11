@@ -15,6 +15,10 @@ import {
 } from "../../../db/sync";
 import { patientDocumentsMissingPieces } from "../../../db/patient-documents";
 import { fromClinicPc } from "./device-key";
+import {
+  isPatientDocumentPiece,
+  storePatientDocumentPiece,
+} from "./patient-document-piece";
 
 const maxRequestBytes = 1_000_000;
 
@@ -22,6 +26,7 @@ export async function POST(request: Request) {
   if (!(await fromClinicPc(request))) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
+  if (isPatientDocumentPiece(request)) return storePatientDocumentPiece(request);
   const declaredBytes = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredBytes) && declaredBytes > maxRequestBytes) {
     return NextResponse.json({ error: "Sync batch is too large" }, { status: 413 });

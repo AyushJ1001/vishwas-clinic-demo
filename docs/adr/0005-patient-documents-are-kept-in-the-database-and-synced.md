@@ -8,7 +8,7 @@ We chose the database over a folder of files because a backup is one SQLite file
 
 ## How a document reaches the Cloud copy
 
-Sync sends small JSON records, so a document's bytes go separately and first. The Clinic PC sends each piece to `/api/sync/patient-documents`, then announces the document in the ordinary batch. The Cloud copy refuses the announcement until every piece has arrived, so it never lists a document it cannot open. A removal is sent as the same record with the time it was removed, and the Cloud copy deletes the document and its bytes.
+Sync sends small JSON records, so a document's bytes go separately and first. The Clinic PC sends each piece to the Sync address itself (`/api/sync?document=…&chunk=…`, so whatever lets the Clinic PC through the Cloud copy's login covers the bytes too), then announces the document in the ordinary batch. The Cloud copy refuses the announcement until every piece has arrived, so it never lists a document it cannot open. A removal is sent as the same record with the time it was removed, and the Cloud copy deletes the document and its bytes.
 
 The Clinic PC remembers which pieces got through, so an upload cut off by a bad connection carries on where it stopped. Documents are sent after all other waiting records, and one that fails is skipped until the next exchange, so they never hold anything else back.
 

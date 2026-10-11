@@ -126,7 +126,7 @@ async function startCloudCopy() {
     request.on("data", (chunk: Buffer) => received.push(chunk));
     request.on("end", () => {
       const body = Buffer.concat(received);
-      if (url.pathname === "/api/sync/patient-documents") {
+      if (url.searchParams.has("document")) {
         const index = Number(url.searchParams.get("chunk"));
         if (index === 1 && refusals > 0) {
           refusals -= 1;
