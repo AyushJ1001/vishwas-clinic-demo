@@ -1,3 +1,5 @@
+import { defaultTitleForSex, type ReceiptTitle } from "./issued-document-model";
+
 export type ClinicDoctorName =
   | "Dr. Makarand Vishwas Apte"
   | "Dr. Gauri Makarand Apte";
@@ -65,6 +67,8 @@ export type Consultation = {
   linkedPriorVisit: PriorVisitSnapshot | null;
   doctorName: ClinicDoctorName;
   patient: ConsultationPatient;
+  // How the prescription addresses the patient: Mr., Mrs., and so on.
+  patientTitle: ReceiptTitle;
   consultationDate: string;
   vitals: ConsultationVitals;
   complaints: string[];
@@ -154,6 +158,7 @@ export function createEmptyConsultation(
     linkedPriorVisit: null,
     doctorName,
     patient: emptyConsultationPatient(),
+    patientTitle: defaultTitleForSex(emptyConsultationPatient().sex),
     consultationDate,
     vitals: {
       weight: "",
@@ -210,6 +215,7 @@ export function withCurrentPatientFields(consultation: Consultation): Consultati
       ? { ...priorVisit, patientId: priorVisit.patientId ?? "" }
       : null,
     ...missingFields(consultation, {
+      patientTitle: "" as ReceiptTitle,
       pastMedicalHistory: "",
       nextVisit: "",
     }),

@@ -1,9 +1,8 @@
-import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
 
+import type { PatientDocumentSyncRecord } from "../../patient-document-model";
 import {
   clinicSyncBatchLimit,
-  clinicSyncDeviceKeyHeader,
   type ClinicRecordChange,
   type ConfirmedPhoneIssuedRecord,
 } from "../../sync-model";
@@ -14,36 +13,20 @@ import {
   isConfirmedPhoneIssuedRecord,
   listWaitingPhoneIssuedRecords,
 } from "../../../db/sync";
+import { patientDocumentsMissingPieces } from "../../../db/patient-documents";
+import { fromClinicPc } from "./device-key";
+import {
+  isPatientDocumentPiece,
+  storePatientDocumentPiece,
+} from "./patient-document-piece";
 
 const maxRequestBytes = 1_000_000;
 
-async function constantTimeEqual(left: string, right: string) {
-  const encoder = new TextEncoder();
-  const [leftHash, rightHash] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(left)),
-    crypto.subtle.digest("SHA-256", encoder.encode(right)),
-  ]);
-  const leftBytes = new Uint8Array(leftHash);
-  const rightBytes = new Uint8Array(rightHash);
-  let difference = 0;
-  for (let index = 0; index < leftBytes.length; index += 1) {
-    difference |= leftBytes[index] ^ rightBytes[index];
-  }
-  return difference === 0;
-}
-
-async function authenticated(request: Request) {
-  const expected =
-    env.CLINIC_SYNC_DEVICE_KEY ?? process.env.CLINIC_SYNC_DEVICE_KEY;
-  const provided = request.headers.get(clinicSyncDeviceKeyHeader) ?? "";
-  if (!expected) return false;
-  return constantTimeEqual(provided, expected);
-}
-
 export async function POST(request: Request) {
-  if (!(await authenticated(request))) {
+  if (!(await fromClinicPc(request))) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
+  if (isPatientDocumentPiece(request)) return storePatientDocumentPiece(request);
   const declaredBytes = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredBytes) && declaredBytes > maxRequestBytes) {
     return NextResponse.json({ error: "Sync batch is too large" }, { status: 413 });
@@ -85,6 +68,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "The Sync batch is invalid" }, { status: 400 });
   }
   const changes = body.changes as ClinicRecordChange[];
+  // A Patient document is announced only after its bytes: the Clinic PC is
+  // told to send them again instead of the Cloud copy listing an empty file.
+  const announced = changes
+    .filter((change) => change.entityKind === "patient-document")
+    .map((change) => change.record as unknown as PatientDocumentSyncRecord)
+    .filter((document) => document.removedAt === null);
+  const missingPieces = await patientDocumentsMissingPieces(announced);
+  if (missingPieces.length) {
+    return NextResponse.json(
+      { error: "A Patient document's bytes have not all arrived", missingPieces },
+      { status: 409 },
+    );
+  }
   if (changes.length) await applyClinicRecordChanges(changes);
   await confirmPhoneIssuedRecords(collected as ConfirmedPhoneIssuedRecord[]);
   return NextResponse.json({

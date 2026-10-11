@@ -1,7 +1,13 @@
 "use client";
 
 import { SealCheck, UploadSimple } from "@phosphor-icons/react";
-import { useEffect, useId, useMemo, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   formatConsultationDate,
   type PatientImportSummary,
@@ -9,6 +15,7 @@ import {
 } from "../consultation-model";
 import { parsePatientImportText } from "../patient-import";
 
+import { PatientRecordView } from "./patient-record";
 import { PageHeader, Shell } from "./shell";
 
 export type ImportState = "idle" | "importing" | "done" | "failed";
@@ -267,7 +274,13 @@ export function PatientImportCard({ onImported }: { onImported: () => void }) {
   );
 }
 
-export function PatientDirectoryCard({ reloadKey }: { reloadKey: number }) {
+export function PatientDirectoryCard({
+  reloadKey,
+  onOpenPatient,
+}: {
+  reloadKey: number;
+  onOpenPatient: (patientId: string) => void;
+}) {
   const [search, setSearch] = useState("");
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [state, setState] = useState<DirectoryState>("loading");
@@ -335,6 +348,9 @@ export function PatientDirectoryCard({ reloadKey }: { reloadKey: number }) {
         </p>
       ) : (
         <div className="overflow-x-auto">
+          <p className="hint mb-2">
+            Choose a name to open the patient&apos;s record and documents.
+          </p>
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-rule text-graphite">
@@ -352,7 +368,16 @@ export function PatientDirectoryCard({ reloadKey }: { reloadKey: number }) {
                     {patient.number ?? "Pending patient number"}
                   </td>
                   <td className="px-3 py-2">
-                    <span className="font-semibold">{patient.name}</span>
+                    <a
+                      className="record-link"
+                      href={patientRecordHref(patient.id)}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        onOpenPatient(patient.id);
+                      }}
+                    >
+                      {patient.name}
+                    </a>
                     {patient.phoneIssued && (
                       <span className="mt-1 block text-xs text-graphite">
                         Phone-issued
@@ -386,18 +411,66 @@ export function PatientDirectoryCard({ reloadKey }: { reloadKey: number }) {
   );
 }
 
+function patientRecordHref(patientId: string) {
+  return `/patients?patient=${encodeURIComponent(patientId)}`;
+}
+
+// The open patient lives in the address, so Back returns to the directory
+// and a reload keeps the same record open. Opening one announces itself with
+// its own event: a made-up "popstate" would make the web router reload.
+const addressChanged = "clinic:address-changed";
+
+function subscribeToAddress(onChange: () => void) {
+  window.addEventListener("popstate", onChange);
+  window.addEventListener(addressChanged, onChange);
+  return () => {
+    window.removeEventListener("popstate", onChange);
+    window.removeEventListener(addressChanged, onChange);
+  };
+}
+
+function openPatientIdInAddress() {
+  return new URLSearchParams(window.location.search).get("patient");
+}
+
+function showInAddress(href: string) {
+  window.history.pushState(window.history.state, "", href);
+  window.dispatchEvent(new Event(addressChanged));
+  window.scrollTo(0, 0);
+}
+
 export function PatientsPage() {
   const [reloadKey, setReloadKey] = useState(0);
+  const openPatientId = useSyncExternalStore(
+    subscribeToAddress,
+    openPatientIdInAddress,
+    () => null,
+  );
   return (
     <Shell active="patients">
       <div className="page">
-        <PageHeader title="Patients" />
-        <section className="grid items-start gap-4 lg:grid-cols-12">
-          <PatientDirectoryCard reloadKey={reloadKey} />
-          <PatientImportCard
-            onImported={() => setReloadKey((key) => key + 1)}
+        {openPatientId && (
+          <PatientRecordView
+            key={openPatientId}
+            patientId={openPatientId}
+            onClose={() => showInAddress("/patients")}
           />
-        </section>
+        )}
+        {/* Kept in place behind an open record, so the search is still there. */}
+        <div hidden={Boolean(openPatientId)}>
+          <PageHeader title="Patients" />
+          <section className="grid items-start gap-4 lg:grid-cols-12">
+            <PatientDirectoryCard
+              reloadKey={reloadKey}
+              onOpenPatient={(patientId) =>
+                showInAddress(patientRecordHref(patientId))
+              }
+            />
+            <PatientImportCard
+              onImported={() => setReloadKey((key) => key + 1)}
+            />
+          </section>
+        </div>
       </div>
     </Shell>
   );

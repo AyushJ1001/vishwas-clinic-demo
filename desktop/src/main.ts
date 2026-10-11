@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   backupChannels,
   localDatabaseChannels,
+  patientDocumentChannels,
   printingChannels,
   syncChannels,
   type LocalQuery,
@@ -12,6 +13,7 @@ import {
 } from "../shared/local-database-protocol";
 import { Backups } from "./backups";
 import { LocalDatabase } from "./local-database";
+import { OpenedPatientDocuments } from "./opened-patient-documents";
 import { Printing } from "./printing";
 import { ClinicSync } from "./sync";
 import { Updates } from "./updates";
@@ -115,6 +117,13 @@ function connectBackups(backups: Backups) {
   );
 }
 
+function connectPatientDocuments(opened: OpenedPatientDocuments) {
+  ipcMain.handle(
+    patientDocumentChannels.open,
+    (_event, name: string, bytes: Uint8Array) => opened.open(name, bytes),
+  );
+}
+
 function connectPrinting(printing: Printing) {
   ipcMain.handle(printingChannels.listPrinters, (event) =>
     printing.listPrinters(event.sender),
@@ -201,6 +210,7 @@ if (!app.requestSingleInstanceLock()) {
     path.join(clinicDataDirectory, "clinic.sqlite"),
   );
   const backups = new Backups(database, clinicDataDirectory);
+  const openedPatientDocuments = new OpenedPatientDocuments(clinicDataDirectory);
   const printing = new Printing(clinicDataDirectory);
   const sync = new ClinicSync(database, clinicDataDirectory);
   const updates = new Updates(backups, clinicDataDirectory);
@@ -228,6 +238,7 @@ if (!app.requestSingleInstanceLock()) {
     blockRemoteContent();
     connectLocalDatabase(database);
     connectBackups(backups);
+    connectPatientDocuments(openedPatientDocuments);
     connectPrinting(printing);
     connectSync(sync);
     connectUpdates(updates);
@@ -244,6 +255,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("window-all-closed", () => app.quit());
   app.on("will-quit", () => {
     sync.stop();
+    openedPatientDocuments.clear();
     database.close();
   });
 }

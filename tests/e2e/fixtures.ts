@@ -26,6 +26,7 @@ export function sampleConsultation(): Consultation {
       age: "32",
       sex: "Female",
     },
+    patientTitle: "Mrs.",
     consultationDate: "",
     vitals: {
       weight: "62",

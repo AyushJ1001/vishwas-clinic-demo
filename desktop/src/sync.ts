@@ -7,6 +7,7 @@ import path from "node:path";
 import {
   clinicSyncBatchLimit,
   clinicSyncDeviceKeyHeader,
+  patientDocumentPieceParams,
   type ClinicRecordChange,
   type ConfirmedClinicRecordChange,
   type ConfirmedPhoneIssuedRecord,
@@ -16,6 +17,7 @@ import type {
   ClinicSyncConnectResult,
   ClinicSyncStatus,
 } from "../../app/clinic-pc";
+import { patientDocumentChunkCount } from "../../app/patient-document-model";
 import {
   consultationDraftsTableSql,
   medicalCertificateIndexesSql,
@@ -34,6 +36,15 @@ declare const __CLINIC_BUILT_IN_DEVICE_KEY__: string;
 const defaultCloudAddress = "https://vishwas-clinic-demo.ayush-j1001.workers.dev";
 const defaultIntervalMs = 5_000;
 const requestTimeoutMs = 5_000;
+// A megabyte of a Patient document over a weak connection needs longer.
+const documentPieceTimeoutMs = 60_000;
+const missingPiecesStatus = 409;
+
+class CloudCopyRefusal extends Error {
+  constructor(readonly status: number) {
+    super(`The Cloud copy returned ${status}.`);
+  }
+}
 const sentRetentionDays = 7;
 
 type OutboxRow = {
@@ -43,12 +54,6 @@ type OutboxRow = {
   recorded_at: string;
 };
 
-class CloudRefusal extends Error {
-  constructor(readonly statusCode: number) {
-    super(`The Cloud copy returned ${statusCode}.`);
-  }
-}
-
 function query(sql: string, params: unknown[] = []): LocalQuery {
   return { sql, params, mode: "all" };
 }
@@ -56,7 +61,8 @@ function query(sql: string, params: unknown[] = []): LocalQuery {
 function responseBody(
   url: URL,
   deviceKey: string,
-  body: string,
+  body: string | Buffer,
+  timeout = requestTimeoutMs,
 ): Promise<string> {
   const client = url.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
@@ -65,11 +71,14 @@ function responseBody(
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type":
+            typeof body === "string"
+              ? "application/json"
+              : "application/octet-stream",
           "Content-Length": Buffer.byteLength(body),
           [clinicSyncDeviceKeyHeader]: deviceKey,
         },
-        timeout: requestTimeoutMs,
+        timeout,
       },
       (response) => {
         let received = "";
@@ -79,9 +88,8 @@ function responseBody(
           if (received.length > 1_000_000) request.destroy();
         });
         response.on("end", () => {
-          const statusCode = response.statusCode ?? 500;
-          if (statusCode < 200 || statusCode >= 300) {
-            reject(new CloudRefusal(statusCode));
+          if ((response.statusCode ?? 500) < 200 || (response.statusCode ?? 500) >= 300) {
+            reject(new CloudCopyRefusal(response.statusCode ?? 500));
             return;
           }
           resolve(received);
@@ -138,6 +146,10 @@ export class ClinicSync {
   private readonly deviceKeyFile: string;
   private deviceKey = "";
   private deviceKeyRejected = false;
+
+  // The pieces of each waiting Patient document the Cloud copy already has,
+  // so an upload cut off by a bad connection carries on where it stopped.
+  private readonly sentDocumentPieces = new Map<string, Set<number>>();
 
   constructor(
     private readonly database: LocalDatabase,
@@ -203,7 +215,7 @@ export class ClinicSync {
         JSON.stringify({ changes: [], collected: [] }),
       );
     } catch (error) {
-      return error instanceof CloudRefusal && error.statusCode === 401
+      return error instanceof CloudCopyRefusal && error.status === 401
         ? { status: "wrong-key" }
         : { status: "unreachable" };
     }
@@ -235,13 +247,16 @@ export class ClinicSync {
     }
   }
 
+  // Patient documents go last: their bytes can be slow or fail to send, and
+  // must never crowd the other Clinic records out of a batch.
   private pendingChanges() {
     const result = this.database.query(
       query(
         `SELECT entity_kind, record_id, record_json, recorded_at
          FROM clinic_sync_outbox
          WHERE sent_at IS NULL
-         ORDER BY recorded_at ASC, entity_kind ASC, record_id ASC
+         ORDER BY entity_kind = 'patient-document' ASC,
+           recorded_at ASC, entity_kind ASC, record_id ASC
          LIMIT ?`,
         [clinicSyncBatchLimit],
       ),
@@ -252,6 +267,67 @@ export class ClinicSync {
       record: JSON.parse(row.record_json) as Record<string, unknown>,
       recordedAt: row.recorded_at,
     }));
+  }
+
+  /** Sends a Patient document's bytes ahead of the change that announces it. */
+  private async sendPatientDocumentPieces(change: ClinicRecordChange) {
+    const sent = this.sentDocumentPieces.get(change.recordId) ?? new Set<number>();
+    this.sentDocumentPieces.set(change.recordId, sent);
+    const pieces = patientDocumentChunkCount(Number(change.record.byteSize));
+    for (let index = 0; index < pieces; index += 1) {
+      if (sent.has(index)) continue;
+      const [piece] = this.database.query(
+        query(
+          "SELECT bytes FROM patient_document_chunks WHERE document_id = ? AND chunk_index = ?",
+          [change.recordId, index],
+        ),
+      ).rows as { bytes: Buffer }[];
+      if (!piece) throw new Error("A Patient document is missing a piece.");
+      const endpoint = new URL("/api/sync", this.cloudAddress);
+      endpoint.searchParams.set(
+        patientDocumentPieceParams.document,
+        change.recordId,
+      );
+      endpoint.searchParams.set(patientDocumentPieceParams.chunk, String(index));
+      await responseBody(
+        endpoint,
+        this.deviceKey,
+        piece.bytes,
+        documentPieceTimeoutMs,
+      );
+      if (this.stopped) return;
+      sent.add(index);
+    }
+  }
+
+  /**
+   * The waiting changes that can go now. A Patient document whose bytes do
+   * not get through waits for the next exchange without holding the rest back.
+   */
+  private async changesReadyToSend() {
+    const ready: ClinicRecordChange[] = [];
+    let documentHeldBack = false;
+    let unreachable = false;
+    for (const change of this.pendingChanges()) {
+      if (
+        change.entityKind === "patient-document" &&
+        change.record.removedAt === null
+      ) {
+        documentHeldBack ||= unreachable;
+        if (unreachable) continue;
+        try {
+          await this.sendPatientDocumentPieces(change);
+        } catch (error) {
+          documentHeldBack = true;
+          // A refusal is about this document; anything else is the
+          // connection, which is not worth trying again in this exchange.
+          unreachable = !(error instanceof CloudCopyRefusal);
+          continue;
+        }
+      }
+      ready.push(change);
+    }
+    return { changes: ready, documentHeldBack };
   }
 
   private ensurePhoneCollectionTables() {
@@ -521,13 +597,23 @@ export class ClinicSync {
     try {
       this.dropOldSentRows();
       if (!this.deviceKey) return;
-      const changes = this.pendingChanges();
+      const { changes, documentHeldBack } = await this.changesReadyToSend();
+      if (this.stopped) return;
       const endpoint = new URL("/api/sync", this.cloudAddress);
       const raw = await responseBody(
         endpoint,
         this.deviceKey,
         JSON.stringify({ changes, collected: [] }),
-      );
+      ).catch((error: unknown) => {
+        // The Cloud copy lacks bytes it was sent, so they all go again.
+        if (
+          error instanceof CloudCopyRefusal &&
+          error.status === missingPiecesStatus
+        ) {
+          this.sentDocumentPieces.clear();
+        }
+        throw error;
+      });
       this.deviceKeyRejected = false;
       const parsed = this.parseSyncResponse(raw);
       if (this.stopped) return;
@@ -556,6 +642,11 @@ export class ClinicSync {
       // The upload is settled before anything is collected, so a Phone-issued
       // record the Clinic PC cannot take in never holds back its own changes.
       const succeededAt = new Date().toISOString();
+      for (const change of confirmed) {
+        if (change.entityKind === "patient-document") {
+          this.sentDocumentPieces.delete(change.recordId);
+        }
+      }
       if (confirmed.length) {
         this.database.batch([
           ...confirmed.map((change) =>
@@ -574,7 +665,12 @@ export class ClinicSync {
           ),
         ]);
       }
-      if (!parsed.phoneIssued.length) return;
+      if (!parsed.phoneIssued.length) {
+        if (documentHeldBack) {
+          throw new Error("A Patient document could not be sent.");
+        }
+        return;
+      }
       this.ensurePhoneCollectionTables();
       // Each record is taken in on its own: one the Clinic PC cannot read is
       // left waiting on the Cloud copy and reported, not allowed to stop the rest.
@@ -623,6 +719,7 @@ export class ClinicSync {
         }
       }
       if (collectionFailed) throw new Error("A Phone-issued record could not be collected.");
+      if (documentHeldBack) throw new Error("A Patient document could not be sent.");
       if (collectionResults.some((record) => record.newlyCollected)) {
         this.database.query(
           query(
@@ -635,7 +732,7 @@ export class ClinicSync {
       }
     } catch (error) {
       if (this.stopped) return;
-      if (error instanceof CloudRefusal && error.statusCode === 401) {
+      if (error instanceof CloudCopyRefusal && error.status === 401) {
         // A key from an older setup gives way to the one this build carries.
         if (
           __CLINIC_BUILT_IN_DEVICE_KEY__ &&

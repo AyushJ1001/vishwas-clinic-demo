@@ -3,6 +3,7 @@ import type { ClinicPc } from "../../app/clinic-pc";
 import {
   backupChannels,
   localDatabaseChannels,
+  patientDocumentChannels,
   printingChannels,
   syncChannels,
   type ClinicDesktopBridge,
@@ -27,6 +28,10 @@ const clinicPc: ClinicPc = {
       ipcRenderer.invoke(backupChannels.restoreLocal, backupId),
     restoreUsb: (driveId, backupId, passphrase) =>
       ipcRenderer.invoke(backupChannels.restoreUsb, driveId, backupId, passphrase),
+  },
+  patientDocuments: {
+    open: (name, bytes) =>
+      ipcRenderer.invoke(patientDocumentChannels.open, name, bytes),
   },
   printing: {
     listPrinters: () => ipcRenderer.invoke(printingChannels.listPrinters),

@@ -3,6 +3,10 @@ import { env } from "cloudflare:workers";
 import { addMissingColumns } from "./add-column";
 import { catalogUpgradeColumns } from "./catalog";
 
+import {
+  isPatientDocumentType,
+  patientDocumentMaxBytes,
+} from "../app/patient-document-model";
 import type {
   ClinicRecordChange,
   ClinicRecordKind,
@@ -14,6 +18,7 @@ import {
   consultationDraftsTableSql,
   medicalCertificateIndexesSql,
   medicalCertificatesTableSql,
+  patientDocumentTablesSql,
   patientRecordIndexesSql,
   patientRecordsTableSql,
   patientRecordUpgradeColumns,
@@ -69,6 +74,7 @@ async function ensureSyncTables() {
       "CREATE INDEX IF NOT EXISTS idx_receipts_issued_on ON receipts (issued_on)",
     ),
     ...medicalCertificateIndexesSql.map((sql) => db.prepare(sql)),
+    ...patientDocumentTablesSql.map((sql) => db.prepare(sql)),
     db.prepare(`CREATE TABLE IF NOT EXISTS phone_issued_records (
       entity_kind TEXT NOT NULL,
       record_id TEXT NOT NULL,
@@ -268,6 +274,46 @@ function catalogStatement(change: ClinicRecordChange) {
   );
 }
 
+// A removed Patient document leaves the Cloud copy too, with its bytes. One
+// that was added is listed only now, after its bytes have arrived.
+function patientDocumentStatements(change: ClinicRecordChange) {
+  const record = change.record;
+  const version = [change.entityKind, change.recordId, change.recordedAt];
+  if (record.removedAt !== null) {
+    return [
+      env.DB.prepare(
+        `DELETE FROM patient_document_chunks
+         WHERE document_id = ? AND ${currentVersion}`,
+      ).bind(record.id, ...version),
+      env.DB.prepare(
+        `DELETE FROM patient_documents WHERE id = ? AND ${currentVersion}`,
+      ).bind(record.id, ...version),
+    ];
+  }
+  return [
+    env.DB.prepare(
+      `INSERT INTO patient_documents
+         (id, patient_id, name, content_type, byte_size, added_at)
+       SELECT ?, ?, ?, ?, ?, ?
+       WHERE ${currentVersion}
+       ON CONFLICT(id) DO UPDATE SET
+         patient_id = excluded.patient_id,
+         name = excluded.name,
+         content_type = excluded.content_type,
+         byte_size = excluded.byte_size,
+         added_at = excluded.added_at`,
+    ).bind(
+      record.id,
+      record.patientId,
+      record.name,
+      record.contentType,
+      record.byteSize,
+      record.addedAt,
+      ...version,
+    ),
+  ];
+}
+
 function recordStatement(change: ClinicRecordChange) {
   switch (change.entityKind) {
     case "patient":
@@ -280,6 +326,8 @@ function recordStatement(change: ClinicRecordChange) {
       return certificateStatement(change);
     case "catalog-entry":
       return catalogStatement(change);
+    case "patient-document":
+      return patientDocumentStatements(change);
   }
 }
 
@@ -290,7 +338,7 @@ export async function applyClinicRecordChanges(changes: ClinicRecordChange[]) {
     changes.flatMap((change) => [
       versionStatement(change, appliedAt),
       recordStatement(change),
-    ]),
+    ].flat()),
   );
 }
 
@@ -356,6 +404,19 @@ function recordMatchesKind(
       isString(record.doctor.name)
     );
   }
+  if (kind === "patient-document") {
+    return (
+      isString(record.patientId) &&
+      isString(record.name) &&
+      Boolean(record.name) &&
+      isPatientDocumentType(record.contentType) &&
+      Number.isSafeInteger(record.byteSize) &&
+      (record.byteSize as number) > 0 &&
+      (record.byteSize as number) <= patientDocumentMaxBytes &&
+      isString(record.addedAt) &&
+      (record.removedAt === null || isString(record.removedAt))
+    );
+  }
   return (
     isString(record.catalog) &&
     isString(record.groupName) &&
@@ -370,6 +431,7 @@ const kinds = new Set<ClinicRecordKind>([
   "receipt",
   "medical-certificate",
   "catalog-entry",
+  "patient-document",
 ]);
 
 export function isClinicRecordChange(value: unknown): value is ClinicRecordChange {
