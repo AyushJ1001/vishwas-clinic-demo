@@ -40,7 +40,6 @@
       "!node_modules/better-sqlite3/src/**"
     ],
     "win": {
-      "signAndEditExecutable": false,
       "icon": "resources/icon.ico"
     },
     "nsis": {

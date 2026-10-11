@@ -8,11 +8,19 @@ import {
 } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { readFile } from "node:fs/promises";
+import {
+  decodePDFRawStream,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFRawStream,
+} from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import {
   openDraft,
   patientWithEarlierPrescription,
   sampleConsultation,
+  todayInIndia,
 } from "./fixtures";
 
 async function openPrescription(page: Page, testName: string) {
@@ -750,7 +758,109 @@ test("oversized clinical, advice, and medicine items always advance without clip
   }
 });
 
-test("print is available only for a completed A5 prescription and prints only that document", async ({
+test("printing from the consultation needs only the patient's name", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.print = () => {
+      document.documentElement.dataset.printCalled = "true";
+    };
+  });
+  const sample = sampleConsultation();
+  const draftId = await openDraft(page, "print-name-only", {
+    ...sample,
+    consultationDate: todayInIndia(),
+    patient: { ...sample.patient, name: "", age: "" },
+    vitals: {
+      weight: "",
+      temperature: "",
+      pulse: "",
+      systolic: "",
+      diastolic: "",
+      spo2: "",
+    },
+    complaints: [],
+    examinationFindings: [],
+    provisionalDiagnosis: "",
+    advice: [],
+    medicines: [
+      { name: "Paracetamol 500 mg tablet", dose: "", duration: "", method: "" },
+    ],
+  });
+  const print = page.getByRole("button", { name: "Print prescription" });
+
+  await print.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Enter the patient's name.",
+  );
+  await expect(page.getByLabel("Patient name")).toBeFocused();
+  await expect(
+    page.getByRole("status", { name: "Prescription completed" }),
+  ).toHaveCount(0);
+
+  await page.getByLabel("Patient name").fill("Demo Patient Name Only");
+  await print.click();
+  await expect(
+    page.getByRole("status", { name: "Prescription completed" }),
+  ).toContainText("Demo Patient Name Only");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-print-called",
+    "true",
+  );
+  const completed = page.getByRole("article", {
+    name: "Completed prescription",
+  });
+  await expect(completed).toContainText("Paracetamol 500 mg tablet");
+  await expect(completed).not.toContainText("not set");
+
+  // A prescription left without a type is recorded as a new one.
+  const saved = await page.request.get(`/api/consultation-drafts/${draftId}`);
+  const { draft } = (await saved.json()) as {
+    draft: { completedSnapshot: { consultation: { visitType: string } } };
+  };
+  expect(draft.completedSnapshot.consultation.visitType).toBe("new");
+
+  // Reopening the completed prescription does not print it again.
+  await page.evaluate(() => {
+    delete document.documentElement.dataset.printCalled;
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("status", { name: "Prescription completed" }),
+  ).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(page.locator("html")).not.toHaveAttribute(
+    "data-print-called",
+    "true",
+  );
+});
+
+test("the clinic's address stays on one line of the letterhead", async ({
+  page,
+}) => {
+  await openPrescription(page, "address-one-line");
+  const address = page
+    .locator(".preview-wrap .rx-clinic-address")
+    .first();
+  await expect(address).toContainText("Shop No. 6");
+  await expect(address).toContainText("Pune 411038");
+  const box = await address.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const parent = element.parentElement!.getBoundingClientRect();
+    const text = range.getBoundingClientRect();
+    return {
+      lines: range.getClientRects().length,
+      overflowLeft: parent.left - text.left,
+      overflowRight: text.right - parent.right,
+    };
+  });
+  expect(box.lines).toBe(1);
+  expect(box.overflowLeft).toBeLessThanOrEqual(0.5);
+  expect(box.overflowRight).toBeLessThanOrEqual(0.5);
+});
+
+test("a completed A5 prescription prints only that document", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -763,9 +873,6 @@ test("print is available only for a completed A5 prescription and prints only th
     page.getByRole("navigation", { name: "Main" }).getByRole("link", {
       name: "Settings",
     }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Print prescription" }),
   ).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Download PDF" })).toHaveCount(
     0,
@@ -859,6 +966,47 @@ test("downloaded PDF is a readable A5 document with the completed Unicode conten
     expect(text).toContain(expected);
   }
   expect(requestedFonts.some((url) => url.includes("NotoSansSC"))).toBe(false);
+
+  // The address is one line inside the page margins.
+  const address = content.items.find(
+    (item) => "str" in item && item.str.startsWith("Shop No. 6"),
+  );
+  if (!address || !("str" in address)) throw new Error("Address not found");
+  expect(address.str).toMatch(/Pune 411038$/);
+  expect(address.transform[4]).toBeGreaterThanOrEqual(24);
+  expect(address.transform[4] + address.width).toBeLessThanOrEqual(
+    419.53 - 24,
+  );
+
+  // Every embedded font's glyph index must reach exactly the end of its
+  // glyph data. When it falls short, viewers draw most letters blank while
+  // the text above still reads correctly.
+  const embedded = await PDFDocument.load(bytes);
+  const fontFiles = embedded.context
+    .enumerateIndirectObjects()
+    .flatMap(([, object]) =>
+      object instanceof PDFDict && object.has(PDFName.of("FontFile2"))
+        ? [object.lookup(PDFName.of("FontFile2")) as PDFRawStream]
+        : [],
+    )
+    .map((stream) => Buffer.from(decodePDFRawStream(stream).decode()));
+  expect(fontFiles.length).toBeGreaterThanOrEqual(2);
+  for (const font of fontFiles) {
+    const tables = new Map<string, { offset: number; length: number }>();
+    for (let index = 0; index < font.readUInt16BE(4); index += 1) {
+      const record = 12 + index * 16;
+      tables.set(font.toString("latin1", record, record + 4), {
+        offset: font.readUInt32BE(record + 8),
+        length: font.readUInt32BE(record + 12),
+      });
+    }
+    const loca = tables.get("loca")!;
+    const longIndex = font.readInt16BE(tables.get("head")!.offset + 50) === 1;
+    const lastOffset = longIndex
+      ? font.readUInt32BE(loca.offset + loca.length - 4)
+      : font.readUInt16BE(loca.offset + loca.length - 2) * 2;
+    expect(lastOffset).toBe(tables.get("glyf")!.length);
+  }
 });
 
 test("downloaded PDF preserves a long multilingual patient identity without overlapping demographics", async ({
@@ -1203,13 +1351,11 @@ test("review lists blocking problems and takes focus to the selected field", asy
 
   const review = page.getByRole("dialog", { name: "Review prescription" });
   await expect(review).toBeVisible();
-  await expect(review).toContainText("Choose a prescription type.");
   await expect(review).toContainText("Enter the patient's name.");
   await expect(review).toContainText("Age must be a nonnegative whole number.");
   await expect(review).toContainText("Enter weight as a number.");
-  await expect(review).toContainText(
-    "Choose a dose for Paracetamol 500 mg tablet.",
-  );
+  // Only the name is required: an unchosen type or dose is not a problem.
+  await expect(review.getByRole("button", { name: /^Fix / })).toHaveCount(3);
   await expect(
     review.getByRole("button", { name: "Complete prescription" }),
   ).toBeDisabled();
@@ -1225,6 +1371,7 @@ test("review lists blocking problems and takes focus to the selected field", asy
 
 test("closing review restores focus to the review action", async ({ page }) => {
   await openPrescription(page, "review-close-focus");
+  await page.getByLabel("Patient name").fill("   ");
   const reviewButton = page.getByRole("button", {
     name: "Review prescription",
   });
@@ -1337,20 +1484,19 @@ test("an unlinked follow-up review lists every problem and routes clinical fixes
 }) => {
   await openPrescription(page, "followup-review-focus");
   await page.getByLabel("Patient name").fill("   ");
+  await page.getByLabel("Weight").fill("62kg");
   await page.getByRole("radio", { name: "Follow-up prescription" }).check();
   await expect(page.getByRole("combobox", { name: /^Earlier prescription/ })).toBeDisabled();
 
   await page.getByRole("button", { name: "Review prescription" }).click();
   const review = page.getByRole("dialog", { name: "Review prescription" });
   const problemActions = review.getByRole("list").first().getByRole("button");
-  await expect(problemActions).toHaveCount(8);
+  await expect(problemActions).toHaveCount(3);
   await expect(review).toContainText(
     "Choose the earlier prescription this follow-up continues.",
   );
   await expect(review).toContainText("Enter the patient's name.");
-  await expect(review).toContainText(
-    "Choose a dose for Paracetamol 500 mg tablet.",
-  );
+  await expect(review).toContainText("Enter weight as a number.");
 
   // Patient details can be fixed straight away...
   await review.getByRole("button", { name: "Fix patient name" }).click();
@@ -1359,11 +1505,11 @@ test("an unlinked follow-up review lists every problem and routes clinical fixes
   // ...but clinical fixes wait for the earlier prescription, which in turn
   // waits for a saved patient.
   const { patient } = await patientWithEarlierPrescription(page);
-  const doseFix = {
-    name: "Choose the earlier prescription before fixing Paracetamol 500 mg tablet dose",
+  const weightFix = {
+    name: "Choose the earlier prescription before fixing weight",
   };
   await page.getByRole("button", { name: "Review prescription" }).click();
-  await review.getByRole("button", doseFix).click();
+  await review.getByRole("button", weightFix).click();
   await expect(page.getByLabel("Patient name")).toBeFocused();
 
   await page.getByLabel("Patient name").fill(patient.name);
@@ -1372,7 +1518,7 @@ test("an unlinked follow-up review lists every problem and routes clinical fixes
     .getByRole("option", { name: new RegExp(patient.name) })
     .click();
   await page.getByRole("button", { name: "Review prescription" }).click();
-  await review.getByRole("button", doseFix).click();
+  await review.getByRole("button", weightFix).click();
   await expect(
     page.getByRole("combobox", { name: /^Earlier prescription/ }),
   ).toBeFocused();
@@ -1568,7 +1714,7 @@ test("phone keeps the current consultation and review action within thumb reach"
   });
   await expect(actions).toBeVisible();
   await expect(actions).toContainText("Test Patient Ananya Deshmukh");
-  await expect(actions).toContainText("Prescription type needed");
+  await expect(actions).toContainText("Type not chosen: new");
   await expect(actions).toContainText("Saved");
   await expect(
     page.locator('[role="status"]').filter({ hasText: "Saved" }),
@@ -1698,7 +1844,7 @@ test("desktop prioritizes the current consultation beside the live paper", async
   const context = page.getByRole("region", { name: "Current consultation" });
   await expect(context).toBeVisible();
   await expect(context).toContainText("Test Patient Ananya Deshmukh");
-  await expect(context).toContainText("Prescription type needed");
+  await expect(context).toContainText("Type not chosen: new");
   await expect(context).toContainText("Saved");
   await expect(
     context.getByRole("button", { name: "Review prescription" }),
@@ -2183,9 +2329,13 @@ test("consultation values appear unchanged in the draft prescription", async ({
   await expect(page.getByLabel(`${seededMedicine} dose`)).toHaveValue("");
   await expect(page.getByLabel(`${seededMedicine} duration`)).toHaveValue("");
   await expect(page.getByLabel(`${seededMedicine} method`)).toHaveValue("");
+  // Directions nobody chose leave no placeholder on the prescription.
   await expect(page.locator(".preview-wrap .prescription-pages")).toContainText(
-    "Dose not set · Method not set · Duration not set",
+    seededMedicine,
   );
+  await expect(
+    page.locator(".preview-wrap .prescription-pages"),
+  ).not.toContainText("not set");
 
   await page.getByLabel("Patient name").fill("Demo Patient Rivera");
   await page.getByLabel("Age").fill("47");
@@ -2802,10 +2952,26 @@ test("catalog picker exposes its field, state, options, and selected values", as
   const option = page.getByRole("option", { name: "Headache", exact: true });
   await expect(option).toHaveAttribute("aria-selected", "false");
   await option.click();
-  await expect(option).toHaveAttribute("aria-selected", "true");
   await expect(picker).toHaveAccessibleDescription(
     "Selected: Low-grade fever, Dry cough, Headache",
   );
+  // The search is cleared and kept ready for the next choice.
+  await expect(search).toHaveValue("");
+  await expect(search).toBeFocused();
+  await search.fill("Headache");
+  await expect(option).toHaveAttribute("aria-selected", "true");
+});
+
+test("the last picker on the page opens with its choices in view", async ({
+  page,
+}) => {
+  // The Clinic PC's screen: Medicines sits at the bottom of the form.
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openPrescription(page, "medicines-in-view");
+  await page.getByRole("combobox", { name: "Medicines", exact: true }).click();
+  await expect(
+    page.getByRole("option", { name: "Paracetamol 650 mg tablet" }),
+  ).toBeInViewport({ ratio: 1 });
 });
 
 test("keyboard users can open, search, navigate, select, remove, and dismiss", async ({
@@ -2834,7 +3000,10 @@ test("keyboard users can open, search, navigate, select, remove, and dismiss", a
   await expect(search).toHaveAttribute("aria-activedescendant", optionId!);
   await expect(picker).toHaveAttribute("aria-activedescendant", optionId!);
   await search.press("Enter");
-  await expect(option).toHaveAttribute("aria-selected", "true");
+  await expect(search).toHaveValue("");
+  await expect(picker).toHaveAccessibleDescription(
+    "Selected: Low-grade fever, Dry cough, Headache",
+  );
 
   await search.press("Escape");
   await expect(picker).toHaveAttribute("aria-expanded", "false");

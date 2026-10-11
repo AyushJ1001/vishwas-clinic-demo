@@ -7,13 +7,17 @@ import type {
   ClinicIdentitySnapshot,
   DoctorIdentitySnapshot,
 } from "../consultation-model";
+import { singleLineSize } from "../prescription-document";
 
 export function DocumentLetterhead({
   clinic,
   doctor,
+  fontSize,
 }: {
   clinic: ClinicIdentitySnapshot;
   doctor: DoctorIdentitySnapshot;
+  /** The page's text size, in points. */
+  fontSize: number;
 }) {
   return (
     <header className="rx-letterhead">
@@ -41,7 +45,12 @@ export function DocumentLetterhead({
         />
       </div>
       <div className="rx-clinic rx-block">
-        <p>{clinic.address}</p>
+        <p
+          className="rx-clinic-address"
+          style={{ fontSize: `${singleLineSize(clinic.address, fontSize)}pt` }}
+        >
+          {clinic.address}
+        </p>
         <p>{clinic.hours}</p>
         <p>{clinic.services}</p>
       </div>
