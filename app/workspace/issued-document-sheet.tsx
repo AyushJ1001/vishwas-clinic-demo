@@ -67,7 +67,15 @@ export function ReceiptSheet({
             Received with thanks a sum of rupees{" "}
             <b>{new Intl.NumberFormat("en-IN").format(receipt.amountPaise / 100)}</b>{" "}
             from <b>{titledName(receipt.title, receipt.patient.name)}</b> for the
-            consultation charges today.
+            consultation charges{" "}
+            {receipt.consultationOn && receipt.consultationOn !== receipt.issuedOn ? (
+              <>
+                on <b>{formatDocumentDate(receipt.consultationOn)}</b>
+              </>
+            ) : (
+              "today"
+            )}
+            .
           </p>
           <div className="issued-amount">
             <b>{formatRupees(receipt.amountPaise)}</b>

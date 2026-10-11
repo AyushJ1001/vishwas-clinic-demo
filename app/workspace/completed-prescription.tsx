@@ -315,7 +315,9 @@ export function CompletedPrescriptionView({
                     type="button"
                     className="btn btn-secondary w-full justify-start"
                     onClick={() =>
-                      window.location.assign(`/receipts?patient=${patientQuery}`)
+                      window.location.assign(
+                        `/receipts?patient=${patientQuery}&consultation=${encodeURIComponent(snapshot.consultation.consultationDate)}`,
+                      )
                     }
                   >
                     <Receipt size={18} weight="bold" />
