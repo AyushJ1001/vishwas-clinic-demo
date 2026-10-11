@@ -98,6 +98,8 @@ export function ReceiptPage() {
   const [issuedOn, setIssuedOn] = useState(() =>
     toLocalDateInputValue(new Date()),
   );
+  const [earlierConsultation, setEarlierConsultation] = useState(false);
+  const [consultationOn, setConsultationOn] = useState("");
   const [nextNumber, setNextNumber] = useState<number | null>(null);
   const [receipts, setReceipts] = useState<ReceiptSnapshot[]>([]);
   const [issued, setIssued] = useState<ReceiptSnapshot | null>(null);
@@ -122,7 +124,10 @@ export function ReceiptPage() {
 
   useEffect(() => {
     void loadRegister().catch(() => setState("error"));
-    const patientId = new URLSearchParams(window.location.search).get("patient");
+    const params = new URLSearchParams(window.location.search);
+    // A Receipt requested after the visit is dated today and names the visit.
+    const visitedOn = params.get("consultation") ?? "";
+    const patientId = params.get("patient");
     if (!patientId) return;
     void fetch(`/api/patients/${encodeURIComponent(patientId)}`)
       .then((response) => {
@@ -132,11 +137,19 @@ export function ReceiptPage() {
       .then(({ patient: record }) => {
         setPatient(documentPatientFromRecord(record));
         setTitle(defaultTitleForSex(record.sex));
+        if (
+          /^\d{4}-\d{2}-\d{2}$/.test(visitedOn) &&
+          visitedOn < toLocalDateInputValue(new Date())
+        ) {
+          setEarlierConsultation(true);
+          setConsultationOn(visitedOn);
+        }
       })
       .catch(() => setState("error"));
   }, []);
 
   const amountPaise = /^\d+$/.test(amount) ? Number(amount) * 100 : 0;
+  const earlierConsultationOn = earlierConsultation ? consultationOn : "";
   const draftReceipt = useMemo<ReceiptSnapshot>(
     () => ({
       id: documentId,
@@ -154,10 +167,20 @@ export function ReceiptPage() {
         age: patient.age,
         sex: patient.sex,
       },
+      ...(earlierConsultationOn ? { consultationOn: earlierConsultationOn } : {}),
       title,
       amountPaise,
     }),
-    [amountPaise, doctorName, documentId, issuedOn, nextNumber, patient, title],
+    [
+      amountPaise,
+      doctorName,
+      documentId,
+      earlierConsultationOn,
+      issuedOn,
+      nextNumber,
+      patient,
+      title,
+    ],
   );
 
   const startNew = () => {
@@ -166,6 +189,8 @@ export function ReceiptPage() {
     setTitle("");
     setAmount("");
     setIssuedOn(toLocalDateInputValue(new Date()));
+    setEarlierConsultation(false);
+    setConsultationOn("");
     setIssued(null);
     setState("idle");
     window.requestAnimationFrame(() =>
@@ -175,7 +200,12 @@ export function ReceiptPage() {
 
   const issue = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!patient.name.trim() || amountPaise <= 0 || !issuedOn) {
+    if (
+      !patient.name.trim() ||
+      amountPaise <= 0 ||
+      !issuedOn ||
+      (earlierConsultation && (!consultationOn || consultationOn > issuedOn))
+    ) {
       setState("error");
       return;
     }
@@ -189,6 +219,7 @@ export function ReceiptPage() {
           patient,
           doctorName,
           issuedOn,
+          ...(earlierConsultationOn ? { consultationOn: earlierConsultationOn } : {}),
           title,
           amountPaise,
         }),
@@ -305,13 +336,23 @@ export function ReceiptPage() {
                       <input className="input-field" type="number" inputMode="numeric" min="1" step="1" required value={amount} onChange={(event) => setAmount(event.target.value)} />
                     </label>
                     <label>
-                      <span className="field-label">Date</span>
+                      <span className="field-label">Receipt date</span>
                       <input className="input-field" type="date" required value={issuedOn} onChange={(event) => setIssuedOn(event.target.value)} />
                     </label>
+                    <label className="flex items-center gap-2 sm:col-span-2">
+                      <input type="checkbox" checked={earlierConsultation} onChange={(event) => setEarlierConsultation(event.target.checked)} />
+                      Consultation was on an earlier date
+                    </label>
+                    {earlierConsultation && (
+                      <label>
+                        <span className="field-label">Consultation date</span>
+                        <input className="input-field" type="date" required max={issuedOn} value={consultationOn} onChange={(event) => setConsultationOn(event.target.value)} />
+                      </label>
+                    )}
                   </div>
                   {state === "error" && (
                     <p role="alert" className="notice notice-error mt-3">
-                      Enter a patient, a positive whole-rupee amount, and a date, then try again.
+                      Enter a patient, a positive whole-rupee amount, and a date, then try again. A consultation date cannot be after the receipt date.
                     </p>
                   )}
                   <button type="submit" className="btn btn-primary mt-4" disabled={state === "issuing"}>

@@ -32,6 +32,8 @@ export type ReceiptSnapshot = IssuedDocumentBase & {
   documentVersion: "receipt-v1";
   layoutVersion: "a5-v1";
   receiptNumber: number;
+  /** Set only when the Receipt is issued on a later day than the Consultation. */
+  consultationOn?: string;
   title: ReceiptTitle;
   amountPaise: number;
 };

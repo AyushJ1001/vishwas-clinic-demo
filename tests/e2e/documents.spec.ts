@@ -110,10 +110,11 @@ test("receipt numbers are sequential and retrying an id returns the same receipt
     age: "42",
     sex: "Male",
   });
-  const issue = (id: string, amountRupees: number) =>
+  const issue = (id: string, amountRupees: number, consultationOn?: string) =>
     request.post("/api/receipts", {
       data: {
         id,
+        consultationOn,
         patient: {
           ...emptyConsultationPatient(),
           patientId: patient.id,
@@ -144,6 +145,16 @@ test("receipt numbers are sequential and retrying an id returns the same receipt
   // Sequential for the whole clinic: other receipts may be issued meanwhile.
   expect(second.receipt.receiptNumber).toBeGreaterThan(first.receipt.receiptNumber);
   expect(second.receipt.amountPaise).toBe(60_000);
+  expect(second.receipt).not.toHaveProperty("consultationOn");
+
+  // A Receipt requested later is dated when issued and names the visit date.
+  const laterResponse = await issue(`receipt-${suffix}-later`, 600, "2031-03-30");
+  expect(laterResponse.ok(), await laterResponse.text()).toBe(true);
+  expect((await laterResponse.json()).receipt).toMatchObject({
+    issuedOn: "2031-04-12",
+    consultationOn: "2031-03-30",
+  });
+  expect((await issue(`receipt-${suffix}-future`, 600, "2031-04-13")).status()).toBe(400);
 });
 
 test("certificate issue retries return the first frozen certificate", async ({

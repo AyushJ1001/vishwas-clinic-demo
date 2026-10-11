@@ -60,6 +60,7 @@ export async function POST(request: Request) {
   const amountPaise = body?.amountPaise;
   const doctorName = body?.doctorName;
   const title = body?.title;
+  const consultationOn = body?.consultationOn;
   if (
     !body ||
     !validId(body.id) ||
@@ -67,6 +68,8 @@ export async function POST(request: Request) {
     typeof doctorName !== "string" ||
     !(doctorName in clinicDoctors) ||
     !validDate(body.issuedOn) ||
+    (consultationOn !== undefined &&
+      (!validDate(consultationOn) || consultationOn > body.issuedOn)) ||
     typeof title !== "string" ||
     !receiptTitles.includes(title as (typeof receiptTitles)[number]) ||
     !Number.isSafeInteger(amountPaise) ||
@@ -74,7 +77,10 @@ export async function POST(request: Request) {
     (amountPaise as number) % 100 !== 0
   ) {
     return NextResponse.json(
-      { error: "Patient, date, title, and a positive whole-rupee amount are required" },
+      {
+        error:
+          "Patient, date, title, and a positive whole-rupee amount are required, and the consultation date cannot be after the receipt date",
+      },
       { status: 400 },
     );
   }
@@ -83,6 +89,7 @@ export async function POST(request: Request) {
     patient: body.patient,
     doctorName: doctorName as keyof typeof clinicDoctors,
     issuedOn: body.issuedOn,
+    consultationOn: consultationOn as string | undefined,
     title: title as (typeof receiptTitles)[number],
     amountPaise: amountPaise as number,
   });

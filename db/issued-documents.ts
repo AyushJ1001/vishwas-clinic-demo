@@ -84,6 +84,7 @@ export async function issueReceipt(input: {
   patient: ConsultationPatient;
   doctorName: ClinicDoctorName;
   issuedOn: string;
+  consultationOn?: string;
   title: ReceiptTitle;
   amountPaise: number;
 }) {
@@ -112,6 +113,9 @@ export async function issueReceipt(input: {
       age: patient.age,
       sex: patient.sex,
     },
+    ...(input.consultationOn && input.consultationOn !== input.issuedOn
+      ? { consultationOn: input.consultationOn }
+      : {}),
     title: input.title,
     amountPaise: input.amountPaise,
   };
