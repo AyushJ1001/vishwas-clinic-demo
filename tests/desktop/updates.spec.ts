@@ -1,12 +1,16 @@
 import { expect, test } from "@playwright/test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { version } from "../../desktop/package.json";
 import { launchClinicPc, openPage } from "./clinic-pc";
+
+// The running app reports the version from its own package.json.
+const { version } = JSON.parse(
+  readFileSync(new URL("../../desktop/package.json", import.meta.url), "utf8"),
+) as { version: string };
 
 let dataDirectory: string;
 
