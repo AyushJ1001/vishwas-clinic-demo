@@ -5,8 +5,8 @@ import type {
   PatientSex,
 } from "./consultation-model";
 
-export const receiptTitles = ["Mr.", "Mrs.", "Ms.", "Miss", "Master", "Smt.", ""] as const;
-export const certificateTitles = ["Mr.", "Mrs.", "Miss", "Master", "Smt.", ""] as const;
+export const receiptTitles = ["Mr.", "Mrs.", "Ms.", "Master", "Smt.", ""] as const;
+export const certificateTitles = ["Mr.", "Mrs.", "Ms.", "Master", "Smt.", ""] as const;
 
 export type ReceiptTitle = (typeof receiptTitles)[number];
 export type CertificateTitle = (typeof certificateTitles)[number];
