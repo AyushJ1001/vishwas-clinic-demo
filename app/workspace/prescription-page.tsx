@@ -27,6 +27,11 @@ import {
   withPrescriptionType,
 } from "../consultation-model";
 import {
+  defaultTitleForSex,
+  receiptTitles,
+  type ReceiptTitle,
+} from "../issued-document-model";
+import {
   validateConsultation,
   type ConsultationProblem,
 } from "../consultation-validation";
@@ -249,6 +254,10 @@ export function PrescriptionPage() {
           ...(unlink ? { patientId: "", patientNumber: null } : {}),
           [field]: value,
         },
+        patientTitle:
+          field === "sex"
+            ? defaultTitleForSex(value as PatientSex)
+            : current.patientTitle,
       };
     });
   };
@@ -283,6 +292,7 @@ export function PrescriptionPage() {
         sex: record.sex,
         phone: record.phone,
       },
+      patientTitle: defaultTitleForSex(record.sex),
     }));
   };
   const updateVital = (field: keyof Consultation["vitals"], value: string) => {
@@ -508,7 +518,7 @@ export function PrescriptionPage() {
                     onChange={(event) => updatePatient("phone", event.target.value)}
                   />
                 </label>
-                <label className="col-span-12 sm:col-span-5">
+                <label className="col-span-12 sm:col-span-4">
                   <span className="field-label">Date of birth</span>
                   <input
                     id="patient-date-of-birth"
@@ -531,7 +541,7 @@ export function PrescriptionPage() {
                     </FieldError>
                   )}
                 </label>
-                <label className="col-span-5 sm:col-span-2">
+                <label className="col-span-4 sm:col-span-2">
                   <span className="field-label">Age</span>
                   <input
                     id="patient-age"
@@ -559,7 +569,7 @@ export function PrescriptionPage() {
                     </FieldError>
                   )}
                 </label>
-                <label className="col-span-7 sm:col-span-5">
+                <label className="col-span-4 sm:col-span-3">
                   <span className="field-label">Gender</span>
                   <select
                     id="patient-sex"
@@ -583,6 +593,27 @@ export function PrescriptionPage() {
                       {errorFor("patient-sex")!}
                     </FieldError>
                   )}
+                </label>
+                <label className="col-span-4 sm:col-span-3">
+                  <span className="field-label">Title</span>
+                  <select
+                    id="patient-title"
+                    aria-label="Title"
+                    className="input-field"
+                    value={consultation.patientTitle}
+                    onChange={(event) =>
+                      setConsultation((current) => ({
+                        ...current,
+                        patientTitle: event.target.value as ReceiptTitle,
+                      }))
+                    }
+                  >
+                    {receiptTitles.map((value) => (
+                      <option key={value || "none"} value={value}>
+                        {value || "None"}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
             </div>

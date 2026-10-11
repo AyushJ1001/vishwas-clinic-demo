@@ -1,4 +1,5 @@
 import type { Consultation, PriorVisitSnapshot } from "./consultation-model";
+import { receiptTitles } from "./issued-document-model";
 
 export type ConsultationProblem = {
   key: string;
@@ -8,6 +9,7 @@ export type ConsultationProblem = {
 };
 
 const patientSexes = new Set(["Female", "Male", "Other"]);
+const patientTitles = new Set<string>(receiptTitles);
 const doctorNames = new Set([
   "Dr. Makarand Vishwas Apte",
   "Dr. Gauri Makarand Apte",
@@ -54,6 +56,9 @@ export function isConsultationShape(value: unknown): value is Consultation {
         Number.isSafeInteger(draft.patient.patientNumber)) &&
       typeof draft.patient.dateOfBirth === "string" &&
       typeof draft.patient.phone === "string" &&
+      // Drafts saved before prescriptions carried a title have none.
+      (draft.patientTitle === undefined ||
+        patientTitles.has(draft.patientTitle)) &&
       typeof draft.consultationDate === "string" &&
       draft.vitals &&
       [
@@ -111,6 +116,7 @@ export function consultationFingerprint(consultation: Consultation) {
       sex: consultation.patient.sex,
       phone: consultation.patient.phone,
     },
+    patientTitle: consultation.patientTitle ?? "",
     consultationDate: consultation.consultationDate,
     vitals: {
       weight: consultation.vitals.weight,

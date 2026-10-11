@@ -14,8 +14,8 @@ import type {
   PrescriptionDocumentPage,
 } from "./prescription-document";
 import {
-  formatPrescriptionPatientLine,
   formatPrescriptionVitals,
+  prescriptionNameLabel,
   prescriptionTypography,
   singleLineSize,
   type PrescriptionTextScale,
@@ -400,22 +400,18 @@ function drawPage(
   wrapped(documentPage.clinic.services, regular, "center");
   rule(maroon);
 
-  const nameLabel = "Name: ";
-  const nameIndent = textWidth(nameLabel, regular, fonts, fontSize);
-  line(nameLabel, regular);
-  wrapText(
-    documentPage.patient.name || "—",
-    bold,
-    fonts,
-    fontSize,
-    contentWidth - nameIndent,
-  ).forEach((row) => {
-    line(row, bold, "left", left + nameIndent);
+  const nameIndent = textWidth(prescriptionNameLabel, regular, fonts, fontSize);
+  line(prescriptionNameLabel, regular);
+  const nameTop = top;
+  documentPage.patientNameLines.forEach((row) => {
+    if (row) line(row, bold, "left", left + nameIndent);
     top -= lineHeight;
   });
-  line(formatPrescriptionPatientLine(documentPage.patient), regular);
-  line(`Date: ${documentPage.consultationDate}`, regular, "right");
-  top -= lineHeight;
+  // Drawn after the name so copied text keeps the name in one piece.
+  const afterName = top;
+  top = nameTop;
+  line(documentPage.patientDetails, regular, "right");
+  top = afterName;
   wrapped(formatPrescriptionVitals(documentPage.vitals).join(" · "), regular);
   rule();
 
