@@ -6,6 +6,7 @@ import type {
   DoctorIdentitySnapshot,
 } from "./consultation-model";
 import { formatConsultationDate } from "./consultation-model";
+import { titledName } from "./issued-document-model";
 
 export const prescriptionFooter = [
   "No substitutes · Bring the prescription at the next visit",
@@ -44,13 +45,23 @@ export const prescriptionTextScales: readonly PrescriptionTextScale[] = [
 export const emptyPrescriptionValue = "—";
 export const emptyPrescriptionList = "None entered";
 
-// The Patient number shares the age line; a patient seen for the first time
-// has none until the prescription is completed.
-export function formatPrescriptionPatientLine(patient: Consultation["patient"]) {
-  const ageAndGender = `Age/Gender: ${patient.age || emptyPrescriptionValue}/${patient.sex || emptyPrescriptionValue}`;
-  return patient.patientNumber !== null && patient.patientNumber !== undefined
-    ? `Patient no. ${patient.patientNumber} · ${ageAndGender}`
-    : ageAndGender;
+export const prescriptionNameLabel = "Name: ";
+
+// The Patient number, age, gender, and date share the name's line, so they
+// are abbreviated. A patient seen for the first time has no number until the
+// prescription is completed.
+export function formatPrescriptionPatientDetails(
+  patient: Consultation["patient"],
+  consultationDate: string,
+) {
+  const details = [
+    `A/G: ${patient.age || emptyPrescriptionValue}/${patient.sex ? patient.sex[0] : emptyPrescriptionValue}`,
+    `Date: ${consultationDate}`,
+  ];
+  if (patient.patientNumber !== null && patient.patientNumber !== undefined) {
+    details.unshift(`Pt. NO. ${patient.patientNumber}`);
+  }
+  return details.join(" · ");
 }
 
 export function formatPrescriptionVitals(vitals: Consultation["vitals"]) {
@@ -107,6 +118,10 @@ export type PrescriptionDocumentPage = {
   clinic: ClinicIdentitySnapshot;
   doctor: DoctorIdentitySnapshot;
   patient: Consultation["patient"];
+  // The titled name as wrapped beside the details; a line may be empty when
+  // nothing fits next to them.
+  patientNameLines: readonly string[];
+  patientDetails: string;
   consultationDate: string;
   vitals: Consultation["vitals"];
   clinical: readonly PrescriptionClinicalChunk[];
@@ -120,6 +135,7 @@ export type PrescriptionDocumentSource = {
   clinic: ClinicIdentitySnapshot;
   doctor: DoctorIdentitySnapshot;
   patient: Consultation["patient"];
+  patientTitle: string;
   consultationDate: string;
   vitals: Consultation["vitals"];
   complaints: readonly string[];
@@ -328,6 +344,30 @@ function wrappedLineCount(
   return text.trim() ? wrapMeasuredText(text, measure, weight).length : 0;
 }
 
+// The details sit at the right of the name's first line. Room is always kept
+// for a four-digit Patient number and a two-digit age, so the name wraps the
+// same way before and after the patient is numbered.
+function patientNameLines(
+  source: PrescriptionDocumentSource,
+  { measures }: PageLayout,
+) {
+  const widestDetails = formatPrescriptionPatientDetails(
+    {
+      ...source.patient,
+      patientNumber: Math.max(source.patient.patientNumber ?? 0, 1000),
+      age: source.patient.age.padStart(2, "0"),
+    },
+    source.consultationDate,
+  );
+  // One em separates the name from the details.
+  return wrapMeasuredText(
+    titledName(source.patientTitle, source.patient.name),
+    measures.fullWidth - measuredWidth(prescriptionNameLabel, "regular"),
+    "bold",
+    measuredWidth(widestDetails, "regular") + 1,
+  );
+}
+
 // The letterhead, patient details, and footer repeat on every page; whatever
 // height remains is the space available for clinical notes and the columns.
 function pageBodyCapacity(
@@ -348,12 +388,7 @@ function pageBodyCapacity(
     0,
   );
   const patientLines =
-    wrappedLineCount(
-      `Name: ${source.patient.name || emptyPrescriptionValue}`,
-      measures.fullWidth,
-      "bold",
-    ) +
-    1 +
+    patientNameLines(source, layout).length +
     wrappedLineCount(
       formatPrescriptionVitals(source.vitals).join(" · "),
       measures.fullWidth,
@@ -696,6 +731,11 @@ export function createPrescriptionDocumentPages(
     clinic: source.clinic,
     doctor: source.doctor,
     patient: source.patient,
+    patientNameLines: patientNameLines(source, createPageLayout(text)),
+    patientDetails: formatPrescriptionPatientDetails(
+      source.patient,
+      source.consultationDate,
+    ),
     consultationDate: source.consultationDate,
     vitals: source.vitals,
     ...content,
@@ -726,6 +766,7 @@ function freezePage(page: PrescriptionDocumentPage) {
   Object.freeze(page.clinic);
   Object.freeze(page.doctor);
   Object.freeze(page.patient);
+  Object.freeze(page.patientNameLines);
   Object.freeze(page.vitals);
   page.clinical.forEach(freezeChunk);
   page.leftColumn.forEach((section) => {
@@ -750,6 +791,7 @@ export function createCompletedPrescriptionDocument(
     clinic: { ...snapshot.clinic },
     doctor: { ...snapshot.doctor },
     patient: { ...consultation.patient },
+    patientTitle: consultation.patientTitle,
     consultationDate: formatConsultationDate(consultation.consultationDate),
     vitals: { ...consultation.vitals },
     complaints: [...consultation.complaints],

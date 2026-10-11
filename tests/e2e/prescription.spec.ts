@@ -105,9 +105,17 @@ async function completeSeededPrescription(page: Page, patientName: string) {
 }
 
 // A completed prescription adds the Patient number the draft did not have
-// yet; everything else must match what was reviewed.
+// yet; everything else must match what was reviewed. The sheet keeps room for
+// a four-digit number, but this database's run to nine digits, so the name
+// beside it may break at a different word.
 function withoutPatientNumber(texts: string[]) {
-  return texts.map((text) => text.replace(/Patient no\. \d+ · /gu, ""));
+  return texts.map((text) =>
+    text
+      .replace(/Pt\. NO\. \d+ · /gu, "")
+      .replace(/Name: [\s\S]*?(?=A\/G: )/gu, (name) =>
+        name.replace(/\s+/gu, " "),
+      ),
+  );
 }
 
 async function textWithoutPatientNumber(pages: Locator) {
@@ -628,7 +636,7 @@ test("overflow keeps identical two-page breaks and content across mobile review,
       .join(" ");
     pdfText.push(text);
     expect(text).toContain("VISHWAS CLINIC");
-    expect(text).toContain("Demo Patient 李 Zoë D’Souza");
+    expect(withoutLineBreaks(text)).toContain("Demo Patient 李 Zoë D’Souza");
     expect(text).toContain("No substitutes · Bring the prescription");
     expect(text).toContain(`Page ${pageNumber} of 2`);
   }
@@ -668,7 +676,7 @@ test("oversized clinical, advice, and medicine items always advance without clip
   expect(count).toBeGreaterThan(3);
   expect(count).toBeLessThan(20);
   await expect(pages.first()).toContainText("CLINICAL-START");
-  const completeText = (await pages.allInnerTexts()).join(" ");
+  const completeText = withoutPatientNumber(await pages.allInnerTexts()).join(" ");
   const completeCharacters = completeText.replace(/\s/gu, "");
   for (const marker of [
     "CLINICAL-START",
@@ -892,18 +900,18 @@ test("downloaded PDF preserves a long multilingual patient identity without over
         ]
       : [],
   );
-  const extractedText = textItems.map((item) => item.text).join(" ");
+  const extractedText = withoutLineBreaks(
+    textItems.map((item) => item.text).join(" "),
+  );
   expect(extractedText).toContain(patientName);
 
-  const ageAndGender = textItems.find((item) =>
-    /^Patient no\. \d+ · Age\/Gender:/u.test(item.text),
+  // The number, age, gender, and date sit at the right of the name's first
+  // line; the rest of a long name continues below them.
+  const details = textItems.find((item) =>
+    /^Pt\. NO\. \d+ · A\/G: \d+\/F · Date: /u.test(item.text),
   );
-  const consultationDate = textItems.find((item) =>
-    item.text.startsWith("Date:"),
-  );
-  expect(ageAndGender).toBeDefined();
-  expect(consultationDate).toBeDefined();
-  expect(ageAndGender!.right).toBeLessThanOrEqual(consultationDate!.x - 4);
+  expect(details).toBeDefined();
+  expect(details!.right).toBeLessThanOrEqual(395.6);
 
   const nameRows = textItems.filter(
     (item) =>
@@ -915,8 +923,15 @@ test("downloaded PDF preserves a long multilingual patient identity without over
   expect(Math.max(...nameRows.map((item) => item.right))).toBeLessThanOrEqual(
     395,
   );
-  expect(Math.min(...nameRows.map((item) => item.y))).toBeGreaterThan(
-    ageAndGender!.y + 4,
+  const firstNameRow = nameRows.filter(
+    (item) => Math.abs(item.y - details!.y) < 1,
+  );
+  expect(firstNameRow.length).toBeGreaterThan(0);
+  expect(
+    Math.max(...firstNameRow.map((item) => item.right)),
+  ).toBeLessThanOrEqual(details!.x - 4);
+  expect(Math.min(...nameRows.map((item) => item.y))).toBeLessThan(
+    details!.y - 4,
   );
   expect(
     requestedFonts.some(
@@ -2235,7 +2250,7 @@ test("consultation values appear unchanged in the draft prescription", async ({
 
   const preview = page.locator(".preview-wrap .prescription-pages");
   await expect(preview).toContainText("Demo Patient Rivera");
-  await expect(preview).toContainText("47/Other");
+  await expect(preview).toContainText("47/O");
   await expect(preview).toContainText("09/09/2026");
   await expect(preview).toContainText("Headache");
   await expect(preview).toContainText("Alert and oriented");
@@ -2307,7 +2322,7 @@ test("a follow-up needs a saved patient and one of their earlier prescriptions",
   await expect(page.getByLabel("Weight")).toBeEnabled();
   await expect(
     page.locator(".preview-wrap .prescription-pages"),
-  ).toContainText(`Patient no. ${patient.number}`);
+  ).toContainText(`Pt. NO. ${patient.number}`);
 });
 
 for (const viewport of [
@@ -2379,7 +2394,7 @@ for (const viewport of [
         extractedPages.push(content.items.map((item) => "str" in item ? item.str : "").join(" "));
       }
       const extractedText = extractedPages.join(" ");
-      for (const value of [patientName, "42/Other", "11/09/2026", "Alert and oriented", "After food", "5 days"]) {
+      for (const value of [patientName, "42/O", "11/09/2026", "Alert and oriented", "After food", "5 days"]) {
         expect(extractedText).toContain(value);
       }
       await page.reload();

@@ -98,7 +98,7 @@ test("a fresh Clinic PC starts empty and numbers its first patient 1", async () 
     .getByRole("button", { name: "Complete prescription" })
     .click();
   const completed = window.getByRole("article", { name: "Completed prescription" });
-  await expect(completed).toContainText("Patient no. 1 · Age/Gender: 41/Female");
+  await expect(completed).toContainText("Pt. NO. 1 · A/G: 41/F");
   await expect(
     window.getByRole("button", { name: "Download PDF" }),
   ).toBeEnabled({ timeout: 15_000 });

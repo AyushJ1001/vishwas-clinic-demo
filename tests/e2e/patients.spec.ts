@@ -430,7 +430,7 @@ test("completing for a new patient registers the next number, even when the name
   expect(registered.number).toBeGreaterThan(existing.number!);
   await expect(
     page.getByRole("article", { name: "Completed prescription" }),
-  ).toContainText(`Patient no. ${registered.number} · Age/Gender: 38/Female`);
+  ).toContainText(`Pt. NO. ${registered.number} · A/G: 38/F`);
 });
 
 test("a follow-up continues one of the chosen patient's own earlier prescriptions", async ({

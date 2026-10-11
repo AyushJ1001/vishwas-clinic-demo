@@ -13,9 +13,9 @@ import {
 } from "../consultation-model";
 import {
   createPrescriptionDocumentPages,
-  formatPrescriptionPatientLine,
   formatPrescriptionVitals,
   prescriptionFooter,
+  prescriptionNameLabel,
   prescriptionTypography,
   type PrescriptionDocumentPage,
 } from "../prescription-document";
@@ -44,6 +44,7 @@ export function createDraftPrescriptionPages(consultation: Consultation) {
     clinic: clinicIdentity,
     doctor: clinicDoctors[consultation.doctorName],
     patient: consultation.patient,
+    patientTitle: consultation.patientTitle,
     consultationDate: formatConsultationDate(consultation.consultationDate),
     vitals: consultation.vitals,
     complaints: consultation.complaints,
@@ -132,12 +133,18 @@ export function PrescriptionDocument({
             >
               <DocumentLetterhead clinic={page.clinic} doctor={page.doctor} />
               <div className="rx-patient rx-block">
-                <p>
-                  Name: <b>{page.patient.name || "—"}</b>
-                </p>
                 <p className="rx-patient-row">
-                  <span>{formatPrescriptionPatientLine(page.patient)}</span>
-                  <span>Date: {page.consultationDate}</span>
+                  <span>{prescriptionNameLabel}</span>
+                  <b>
+                    {page.patientNameLines.map((line, index) => (
+                      <span key={`${line}-${index}`} className="block">
+                        {line || "\u00a0"}{" "}
+                      </span>
+                    ))}
+                  </b>
+                  <span className="rx-patient-details">
+                    {page.patientDetails}
+                  </span>
                 </p>
                 <p>{formatPrescriptionVitals(page.vitals).join(" · ")}</p>
               </div>

@@ -1141,10 +1141,17 @@ select.input-field {
   text-align: center;
   text-wrap: balance;
 }
+/* The details sit at the right of the name's first line; later lines of a
+   long name run underneath them. */
 .rx-patient-row {
+  position: relative;
   display: flex;
-  justify-content: space-between;
-  gap: var(--rx-gap);
+  white-space: pre;
+}
+.rx-patient-details {
+  position: absolute;
+  top: 0;
+  right: 0;
 }
 .rx-section + .rx-section {
   margin-top: var(--rx-gap);
