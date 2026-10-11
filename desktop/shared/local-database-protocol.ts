@@ -75,4 +75,5 @@ export const patientDocumentChannels = {
 
 export const syncChannels = {
   status: "clinic-sync:status",
+  connect: "clinic-sync:connect",
 } as const;

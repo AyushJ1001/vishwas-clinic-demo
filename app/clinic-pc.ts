@@ -88,14 +88,19 @@ export type ClinicPcUpdates = {
 
 export type ClinicSyncStatus = {
   configured: boolean;
-  setupIssue: "cloud-address" | "device-key" | null;
+  setupIssue: "device-key" | "device-key-rejected" | null;
   pendingCount: number;
   lastSucceededAt: string | null;
   lastFailedAt: string | null;
 };
 
+export type ClinicSyncConnectResult = {
+  status: "connected" | "wrong-key" | "unreachable";
+};
+
 export type ClinicPcSync = {
   status(): Promise<ClinicSyncStatus>;
+  connect(deviceKey: string): Promise<ClinicSyncConnectResult>;
 };
 
 export type ClinicPc = {

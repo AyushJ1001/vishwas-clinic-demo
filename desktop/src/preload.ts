@@ -44,6 +44,7 @@ const clinicPc: ClinicPc = {
   },
   sync: {
     status: () => ipcRenderer.invoke(syncChannels.status),
+    connect: (deviceKey) => ipcRenderer.invoke(syncChannels.connect, deviceKey),
   },
   updates: {
     state: () => ipcRenderer.invoke(updateChannels.state),

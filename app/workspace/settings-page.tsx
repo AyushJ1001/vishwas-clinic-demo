@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   getClinicPc,
+  type ClinicPcSync,
   type ClinicPrinter,
   type ClinicSyncStatus,
   type ClinicUpdateState,
@@ -58,11 +59,11 @@ function syncTime(value: string) {
 }
 
 function syncLine(sync: ClinicSyncStatus) {
-  if (sync.setupIssue === "cloud-address") {
-    return "Not set up: no cloud address";
-  }
   if (sync.setupIssue === "device-key") {
-    return "Not set up: no device key";
+    return "Not connected to the cloud yet";
+  }
+  if (sync.setupIssue === "device-key-rejected") {
+    return "The cloud no longer accepts this computer's device key";
   }
   const waiting = `${sync.pendingCount} ${sync.pendingCount === 1 ? "change" : "changes"} waiting`;
   if (sync.pendingCount > 0 && sync.lastFailedAt) {
@@ -76,6 +77,97 @@ function syncLine(sync: ClinicSyncStatus) {
   return sync.lastSucceededAt
     ? `All changes sent · last synced ${syncTime(sync.lastSucceededAt)}`
     : "All changes sent · not synced yet";
+}
+
+function SyncPanel({
+  sync,
+  status,
+}: {
+  sync: ClinicPcSync;
+  status: ClinicSyncStatus;
+}) {
+  const [deviceKey, setDeviceKey] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+  const asking = status.setupIssue !== null;
+
+  const connect = async () => {
+    setConnecting(true);
+    setProblem(null);
+    setConnected(false);
+    try {
+      const result = await sync.connect(deviceKey);
+      if (result.status === "connected") {
+        setDeviceKey("");
+        setConnected(true);
+      } else if (result.status === "wrong-key") {
+        setProblem("The cloud did not accept that device key. Check it and try again.");
+      } else {
+        setProblem("The cloud could not be reached. Check the internet, then try again.");
+      }
+    } catch {
+      setProblem("The device key could not be saved. Try again.");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  return (
+    <section className="panel" aria-labelledby="sync-heading">
+      <div className="panel-section">
+        <h2 id="sync-heading" className="section-title">
+          Sync
+        </h2>
+        <p className="status-line mt-2" role="status">
+          {syncLine(status)}
+        </p>
+        {asking && (
+          <form
+            className="mt-4 grid max-w-xl gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (deviceKey.trim() && !connecting) void connect();
+            }}
+          >
+            <label>
+              <span className="field-label">Device key</span>
+              <input
+                type="password"
+                className="input-field"
+                value={deviceKey}
+                onChange={(event) => setDeviceKey(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <p className="hint">
+              Enter it once. This computer remembers it and sends Clinic
+              records to the cloud whenever there is internet.
+            </p>
+            <div>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={!deviceKey.trim() || connecting}
+              >
+                {connecting ? "Connecting…" : "Connect to the cloud"}
+              </button>
+            </div>
+          </form>
+        )}
+        {problem && (
+          <p role="alert" className="notice notice-error mt-3">
+            {problem}
+          </p>
+        )}
+        {connected && !asking && (
+          <p role="status" className="notice notice-done mt-3">
+            This computer is connected to the cloud.
+          </p>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export function SettingsPage() {
@@ -302,16 +394,7 @@ export function SettingsPage() {
         </section>
 
         {clinicPc && syncStatus && (
-          <section className="panel" aria-labelledby="sync-heading">
-            <div className="panel-section">
-              <h2 id="sync-heading" className="section-title">
-                Sync
-              </h2>
-              <p className="status-line mt-2" role="status">
-                {syncLine(syncStatus)}
-              </p>
-            </div>
-          </section>
+          <SyncPanel sync={clinicPc.sync} status={syncStatus} />
         )}
 
         {clinicPc && updateState && (

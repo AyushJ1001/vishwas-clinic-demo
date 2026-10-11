@@ -43,6 +43,14 @@ jobs:
       - name: Run desktop tests
         run: npm run test:desktop
 
+      # The tests above ran without the key, so they never reach the real
+      # Cloud copy. Only what gets packaged carries it.
+      - name: Build the device key into the app
+        working-directory: desktop
+        run: node build-main.mjs
+        env:
+          CLINIC_BUILT_IN_DEVICE_KEY: ${{ secrets.CLINIC_SYNC_DEVICE_KEY }}
+
       - name: Package installers
         working-directory: desktop
         run: npm run package:windows
