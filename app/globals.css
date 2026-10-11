@@ -831,8 +831,10 @@ select.input-field {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
-.mobile-review-label-short {
-  display: none;
+.mobile-consultation-buttons {
+  display: flex;
+  flex: none;
+  gap: 0.5rem;
 }
 .desktop-review-action {
   display: none;
@@ -880,14 +882,6 @@ select.input-field {
   .icon-button,
   .picker-search-clear {
     min-width: 44px;
-  }
-}
-@media (max-width: 380px) {
-  .mobile-review-label-short {
-    display: inline;
-  }
-  .mobile-review-label-long {
-    display: none;
   }
 }
 
@@ -1140,6 +1134,10 @@ select.input-field {
 .rx-clinic {
   text-align: center;
   text-wrap: balance;
+}
+/* Sized in the letterhead to fit the page width on one line. */
+.rx-clinic-address {
+  white-space: nowrap;
 }
 /* The details sit at the right of the name's first line; later lines of a
    long name run underneath them. */

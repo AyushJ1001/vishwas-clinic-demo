@@ -179,6 +179,13 @@ export function createEmptyConsultation(
   };
 }
 
+/** A prescription left without a type is completed as a new one. */
+export function withPrescriptionType(consultation: Consultation): Consultation {
+  return consultation.visitType
+    ? consultation
+    : { ...consultation, visitType: "new" };
+}
+
 export function emptyConsultationPatient(): ConsultationPatient {
   return {
     patientId: "",

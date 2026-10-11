@@ -196,7 +196,14 @@ export function CatalogPicker({
   };
   const openPicker = () => {
     setOpen(true);
-    requestAnimationFrame(() => searchRef.current?.focus());
+    requestAnimationFrame(() => {
+      searchRef.current?.focus();
+      // The last picker on a page opens below the fold: bring its choices
+      // into view instead of leaving only the search box showing.
+      searchRef.current
+        ?.closest(".picker-panel")
+        ?.scrollIntoView({ block: "nearest" });
+    });
   };
   const select = (item: string) => {
     if (multiple) {
@@ -205,6 +212,9 @@ export function CatalogPicker({
           ? values.filter((v) => v !== item)
           : [...values, item],
       );
+      // The search is done once its result is chosen: clear it for the next.
+      setQuery("");
+      setActiveOption("");
       requestAnimationFrame(() => searchRef.current?.focus());
     } else {
       onChange(item);

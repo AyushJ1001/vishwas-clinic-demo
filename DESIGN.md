@@ -73,7 +73,7 @@ A fixed frame: a 44 px maroon bar with the clinic name, the page tabs, and "Writ
 
 ```
 ▓ Vishwas Clinic │ Prescription  Patients  Receipts  Certificates  Summaries  Backups │ Writing as Dr. M. V. Apte ▾ ▓
-New prescription · Saved 3:02 pm                                    [Review and complete]
+New prescription · Saved 3:02 pm                              [Review] [Print prescription]
 ┌ Patient ──────────────────────────────────────┐  ┌──────────────┐
 │ Search name, number or phone      No. 1042      │  │  A5 sheet     │
 │ Date of birth  Age  Gender  Phone  Visit date   │  │  (live)       │

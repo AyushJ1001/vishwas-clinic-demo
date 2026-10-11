@@ -131,7 +131,11 @@ export function PrescriptionDocument({
               style={prescriptionPageStyle(page)}
               className="prescription-page"
             >
-              <DocumentLetterhead clinic={page.clinic} doctor={page.doctor} />
+              <DocumentLetterhead
+                clinic={page.clinic}
+                doctor={page.doctor}
+                fontSize={page.text.fontSize}
+              />
               <div className="rx-patient rx-block">
                 <p className="rx-patient-row">
                   <span>{prescriptionNameLabel}</span>

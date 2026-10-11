@@ -19,6 +19,7 @@ import {
   type Consultation,
   type CompletedPrescriptionSnapshot,
   type PriorVisitSnapshot,
+  withPrescriptionType,
 } from "./consultation-model";
 
 export type DraftSaveState =
@@ -227,8 +228,14 @@ export function useConsultationDraft(): {
   const completePrescription = useCallback(async () => {
     if (!hydratedRef.current || completedSnapshot) return;
     setCompletionState("completing");
+    const reviewedConsultation = withPrescriptionType(consultationRef.current);
+    if (reviewedConsultation !== consultationRef.current) {
+      consultationRef.current = reviewedConsultation;
+      editFingerprintRef.current = JSON.stringify(reviewedConsultation);
+      revisionRef.current += 1;
+      setConsultation(reviewedConsultation);
+    }
     const revision = revisionRef.current;
-    const reviewedConsultation = consultationRef.current;
     await performSave(reviewedConsultation, revision);
     try {
       const result = await repository.complete(revision, reviewedConsultation);

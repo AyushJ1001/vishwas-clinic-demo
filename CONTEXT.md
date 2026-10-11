@@ -69,7 +69,7 @@ _Avoid_: User, owner
 The A5 Issued document listing the Consultation's findings, advice, investigations, and medicines.
 
 **Receipt**:
-The A5 Issued document acknowledging a consultation payment; issued only on the Clinic PC.
+The A5 Issued document acknowledging a consultation payment; issued only on the Clinic PC. It is dated the day it is issued; when a Patient asks for it after the visit, it also names the earlier Consultation date.
 
 **Receipt number**:
 The sequential number on every Receipt, assigned only by the Clinic PC.

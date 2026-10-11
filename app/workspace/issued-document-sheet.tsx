@@ -11,9 +11,10 @@ import {
 } from "../issued-document-model";
 import { DocumentLetterhead, PageFrame } from "./document-sheet";
 
+const documentFontSize = 9;
 const documentPageStyle = {
   "--rx-margin": "24pt",
-  "--rx-font-size": "9pt",
+  "--rx-font-size": `${documentFontSize}pt`,
   "--rx-line-height": "13pt",
   "--rx-title-size": "14pt",
   "--rx-registration-size": "8pt",
@@ -42,7 +43,11 @@ export function ReceiptSheet({
           style={documentPageStyle}
           aria-label={ariaLabel}
         >
-          <DocumentLetterhead clinic={receipt.clinic} doctor={receipt.doctor} />
+          <DocumentLetterhead
+            clinic={receipt.clinic}
+            doctor={receipt.doctor}
+            fontSize={documentFontSize}
+          />
           <h3 className="issued-document-title">Receipt</h3>
           <dl className="issued-document-meta">
             <div>
@@ -62,7 +67,15 @@ export function ReceiptSheet({
             Received with thanks a sum of rupees{" "}
             <b>{new Intl.NumberFormat("en-IN").format(receipt.amountPaise / 100)}</b>{" "}
             from <b>{titledName(receipt.title, receipt.patient.name)}</b> for the
-            consultation charges today.
+            consultation charges{" "}
+            {receipt.consultationOn && receipt.consultationOn !== receipt.issuedOn ? (
+              <>
+                on <b>{formatDocumentDate(receipt.consultationOn)}</b>
+              </>
+            ) : (
+              "today"
+            )}
+            .
           </p>
           <div className="issued-amount">
             <b>{formatRupees(receipt.amountPaise)}</b>
@@ -105,6 +118,7 @@ export function MedicalCertificateSheet({
           <DocumentLetterhead
             clinic={certificate.clinic}
             doctor={certificate.doctor}
+            fontSize={documentFontSize}
           />
           <h3 className="issued-document-title">Medical certificate</h3>
           <dl className="issued-document-meta issued-document-meta-four">

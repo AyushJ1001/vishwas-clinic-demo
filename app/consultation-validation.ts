@@ -160,10 +160,6 @@ function isRealDate(value: string) {
   );
 }
 
-function hasText(items: string[]) {
-  return items.some((item) => item.trim().length > 0);
-}
-
 function isNonnegativeNumber(value: string) {
   return /^\d+(?:\.\d+)?$/.test(value) && Number.isFinite(Number(value));
 }
@@ -215,7 +211,10 @@ export function validateConsultation(
   if (!consultation.patient.name.trim()) {
     add("patient-name", "patient-name", "patient name", "Enter the patient's name.");
   }
-  if (!isNonnegativeWholeNumber(consultation.patient.age)) {
+  // Only the name is required. Everything else may be left empty; what is
+  // filled in still has to make sense.
+  const age = consultation.patient.age.trim();
+  if (age && !isNonnegativeWholeNumber(age)) {
     add(
       "patient-age",
       "patient-age",
@@ -309,30 +308,9 @@ export function validateConsultation(
     );
   }
 
-  if (!hasText(consultation.complaints)) {
-    add("complaints", "complaints", "major complaints", "Choose at least one major complaint.");
-  }
-  if (!hasText(consultation.examinationFindings)) {
-    add("findings", "examination-findings", "examination findings", "Choose at least one examination finding.");
-  }
-  if (!consultation.provisionalDiagnosis.trim()) {
-    add("diagnosis", "provisional-diagnosis", "provisional diagnosis", "Choose a provisional diagnosis.");
-  }
-
   consultation.medicines.forEach((medicine, index) => {
-    const prefix = `medicine-${index}`;
     if (!medicine.name.trim()) {
-      add(`${prefix}-name`, "medicines", "medicines", "Remove the unnamed medicine or choose it again.");
-    }
-    for (const field of ["dose", "duration", "method"] as const) {
-      if (!medicine[field].trim()) {
-        add(
-          `${prefix}-${field}`,
-          `${prefix}-${field}`,
-          `${medicine.name || `medicine ${index + 1}`} ${field}`,
-          `Choose a ${field} for ${medicine.name || `medicine ${index + 1}`}.`,
-        );
-      }
+      add(`medicine-${index}-name`, "medicines", "medicines", "Remove the unnamed medicine or choose it again.");
     }
   });
 

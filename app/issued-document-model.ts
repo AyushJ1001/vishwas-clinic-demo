@@ -5,8 +5,8 @@ import type {
   PatientSex,
 } from "./consultation-model";
 
-export const receiptTitles = ["Mr.", "Mrs.", "Ms.", "Miss", "Master", "Smt.", ""] as const;
-export const certificateTitles = ["Mr.", "Mrs.", "Miss", "Master", "Smt.", ""] as const;
+export const receiptTitles = ["Mr.", "Mrs.", "Ms.", "Master", "Smt.", ""] as const;
+export const certificateTitles = ["Mr.", "Mrs.", "Ms.", "Master", "Smt.", ""] as const;
 
 export type ReceiptTitle = (typeof receiptTitles)[number];
 export type CertificateTitle = (typeof certificateTitles)[number];
@@ -32,6 +32,8 @@ export type ReceiptSnapshot = IssuedDocumentBase & {
   documentVersion: "receipt-v1";
   layoutVersion: "a5-v1";
   receiptNumber: number;
+  /** Set only when the Receipt is issued on a later day than the Consultation. */
+  consultationOn?: string;
   title: ReceiptTitle;
   amountPaise: number;
 };
