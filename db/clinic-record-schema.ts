@@ -56,6 +56,26 @@ export const medicalCertificateIndexesSql = [
   "CREATE INDEX IF NOT EXISTS idx_medical_certificates_issued_on ON medical_certificates (issued_on)",
 ] as const;
 
+// ADR 0005: `bytes` holds raw bytes on the Clinic PC and base64 text on the
+// Cloud copy, where D1 moves text far more cheaply than a BLOB.
+export const patientDocumentTablesSql = [
+  `CREATE TABLE IF NOT EXISTS patient_documents (
+    id TEXT PRIMARY KEY NOT NULL,
+    patient_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    byte_size INTEGER NOT NULL,
+    added_at TEXT NOT NULL
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_patient_documents_patient ON patient_documents (patient_id, added_at)",
+  `CREATE TABLE IF NOT EXISTS patient_document_chunks (
+    document_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    bytes BLOB NOT NULL,
+    PRIMARY KEY (document_id, chunk_index)
+  )`,
+] as const;
+
 export const phoneCollectionsTableSql = `CREATE TABLE IF NOT EXISTS clinic_phone_collections (
   entity_kind TEXT NOT NULL,
   record_id TEXT NOT NULL,

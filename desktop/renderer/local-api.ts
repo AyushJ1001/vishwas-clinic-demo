@@ -2,6 +2,9 @@ import * as catalogRoute from "../../app/api/catalog/route";
 import * as consultationDraftRoute from "../../app/api/consultation-drafts/[id]/route";
 import * as completeConsultationDraftRoute from "../../app/api/consultation-drafts/[id]/complete/route";
 import * as importPatientsRoute from "../../app/api/patients/import/route";
+import * as patientDocumentRoute from "../../app/api/patients/[id]/documents/[documentId]/route";
+import * as patientDocumentsRoute from "../../app/api/patients/[id]/documents/route";
+import * as patientHistoryRoute from "../../app/api/patients/[id]/history/route";
 import * as patientRoute from "../../app/api/patients/[id]/route";
 import * as patientsRoute from "../../app/api/patients/route";
 import * as priorVisitsRoute from "../../app/api/prior-visits/route";
@@ -38,6 +41,21 @@ const localRoutes: {
   },
   { pattern: /^\/api\/medical-certificates$/, module: medicalCertificatesRoute },
   { pattern: /^\/api\/patients\/import$/, module: importPatientsRoute },
+  {
+    pattern: /^\/api\/patients\/([^/]+)\/documents\/([^/]+)$/,
+    params: ["id", "documentId"],
+    module: patientDocumentRoute,
+  },
+  {
+    pattern: /^\/api\/patients\/([^/]+)\/documents$/,
+    params: ["id"],
+    module: patientDocumentsRoute,
+  },
+  {
+    pattern: /^\/api\/patients\/([^/]+)\/history$/,
+    params: ["id"],
+    module: patientHistoryRoute,
+  },
   {
     pattern: /^\/api\/patients\/([^/]+)$/,
     params: ["id"],

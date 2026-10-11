@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
+  blob,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -93,6 +95,34 @@ export const patientRecords = sqliteTable(
     index("idx_patient_records_name").on(table.nameNormalized),
     uniqueIndex("idx_patient_records_source_draft").on(table.sourceDraftId),
   ],
+);
+
+// ADR 0005: a report, scan or letter attached to a Patient. Its bytes are
+// kept in pieces, because D1 refuses a row larger than 2 MB: raw on the
+// Clinic PC, base64 text on the Cloud copy.
+export const patientDocuments = sqliteTable(
+  "patient_documents",
+  {
+    id: text("id").primaryKey(),
+    patientId: text("patient_id").notNull(),
+    name: text("name").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    addedAt: text("added_at").notNull(),
+  },
+  (table) => [
+    index("idx_patient_documents_patient").on(table.patientId, table.addedAt),
+  ],
+);
+
+export const patientDocumentChunks = sqliteTable(
+  "patient_document_chunks",
+  {
+    documentId: text("document_id").notNull(),
+    chunkIndex: integer("chunk_index").notNull(),
+    bytes: blob("bytes", { mode: "buffer" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.documentId, table.chunkIndex] })],
 );
 
 // Issued documents are immutable snapshots. Receipt numbers are assigned by

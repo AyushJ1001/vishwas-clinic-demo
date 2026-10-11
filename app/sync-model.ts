@@ -4,6 +4,7 @@ export const clinicRecordKinds = [
   "receipt",
   "medical-certificate",
   "catalog-entry",
+  "patient-document",
 ] as const;
 
 export type ClinicRecordKind = (typeof clinicRecordKinds)[number];
@@ -43,3 +44,6 @@ export type ConfirmedPhoneIssuedRecord = Pick<
 export const clinicSyncDeviceKeyHeader = "X-Clinic-Device-Key";
 export const phoneIssuedHeader = "X-Clinic-Phone-Issued";
 export const clinicSyncBatchLimit = 50;
+// Where the Clinic PC sends a Patient document's bytes, a piece at a time,
+// before the batch that announces the document.
+export const patientDocumentSyncPath = "/api/sync/patient-documents";

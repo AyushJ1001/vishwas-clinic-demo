@@ -79,6 +79,17 @@ export async function listRecentReceipts(limit = 30) {
   return rows.results.map(parseReceipt);
 }
 
+export async function listReceiptsForPatient(patientId: string, limit = 50) {
+  await ensureIssuedDocumentTables();
+  const rows = await env.DB.prepare(
+    `SELECT snapshot_json FROM receipts WHERE patient_id = ?
+     ORDER BY created_at DESC, receipt_number DESC LIMIT ?`,
+  )
+    .bind(patientId, limit)
+    .all<ReceiptRow>();
+  return rows.results.map(parseReceipt);
+}
+
 export async function issueReceipt(input: {
   id: string;
   patient: ConsultationPatient;
@@ -165,6 +176,20 @@ export async function listRecentMedicalCertificates(limit = 30) {
      ORDER BY created_at DESC LIMIT ?`,
   )
     .bind(limit)
+    .all<CertificateRow>();
+  return rows.results.map(parseCertificate);
+}
+
+export async function listMedicalCertificatesForPatient(
+  patientId: string,
+  limit = 50,
+) {
+  await ensureIssuedDocumentTables();
+  const rows = await env.DB.prepare(
+    `SELECT snapshot_json FROM medical_certificates WHERE patient_id = ?
+     ORDER BY created_at DESC LIMIT ?`,
+  )
+    .bind(patientId, limit)
     .all<CertificateRow>();
   return rows.results.map(parseCertificate);
 }
