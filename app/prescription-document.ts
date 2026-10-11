@@ -66,7 +66,10 @@ export function formatPrescriptionVitals(vitals: Consultation["vitals"]) {
 export function formatMedicineDirections(
   medicine: Pick<CompletedMedicineSnapshot, "dose" | "method" | "duration">,
 ) {
-  return `${medicine.dose || "Dose not set"} · ${medicine.method || "Method not set"} · ${medicine.duration || "Duration not set"}`;
+  // Directions are optional; only what was chosen is printed.
+  return [medicine.dose, medicine.method, medicine.duration]
+    .filter((part) => part.trim())
+    .join(" · ");
 }
 
 export type PrescriptionTextLine = {
@@ -258,6 +261,24 @@ function measuredWidth(text: string, weight: FontWeight) {
   );
 }
 
+const smallestSingleLineSize = 6;
+
+/**
+ * The largest size, up to `fontSize`, at which `text` stays on one full-width
+ * line. The clinic's address is kept on one line this way instead of wrapping.
+ */
+export function singleLineSize(text: string, fontSize: number) {
+  const width = measuredWidth(text.trim(), "regular");
+  let size = fontSize;
+  while (
+    size > smallestSingleLineSize &&
+    width * size > contentWidth * wrapSafety
+  ) {
+    size -= 0.25;
+  }
+  return size;
+}
+
 function splitToken(token: string, measure: number, weight: FontWeight) {
   const pieces: string[] = [];
   let piece = "";
@@ -339,13 +360,10 @@ function pageBodyCapacity(
     2 +
     (source.doctor.mobile ? 1 : 0) +
     wrappedLineCount(source.doctor.specialty, measures.doctor);
-  const clinicLines = [
-    source.clinic.address,
-    source.clinic.hours,
-    source.clinic.services,
-  ].reduce(
+  // The address is sized to stay on one line.
+  const clinicLines = [source.clinic.hours, source.clinic.services].reduce(
     (lines, text) => lines + wrappedLineCount(text, measures.fullWidth),
-    0,
+    source.clinic.address.trim() ? 1 : 0,
   );
   const patientLines =
     wrappedLineCount(
@@ -604,10 +622,12 @@ function buildQueues(source: PrescriptionDocumentSource, layout: PageLayout) {
           "strong",
         ),
         ...textLines(medicine.composition, measures.medicineColumn, "muted"),
-        ...textLines(
-          formatMedicineDirections(medicine),
-          measures.medicineColumn,
-        ),
+        ...(formatMedicineDirections(medicine)
+          ? textLines(
+              formatMedicineDirections(medicine),
+              measures.medicineColumn,
+            )
+          : []),
       ],
       cursor: 0,
     }),

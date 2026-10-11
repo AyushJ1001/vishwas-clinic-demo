@@ -11,9 +11,10 @@ import {
 } from "../issued-document-model";
 import { DocumentLetterhead, PageFrame } from "./document-sheet";
 
+const documentFontSize = 9;
 const documentPageStyle = {
   "--rx-margin": "24pt",
-  "--rx-font-size": "9pt",
+  "--rx-font-size": `${documentFontSize}pt`,
   "--rx-line-height": "13pt",
   "--rx-title-size": "14pt",
   "--rx-registration-size": "8pt",
@@ -42,7 +43,11 @@ export function ReceiptSheet({
           style={documentPageStyle}
           aria-label={ariaLabel}
         >
-          <DocumentLetterhead clinic={receipt.clinic} doctor={receipt.doctor} />
+          <DocumentLetterhead
+            clinic={receipt.clinic}
+            doctor={receipt.doctor}
+            fontSize={documentFontSize}
+          />
           <h3 className="issued-document-title">Receipt</h3>
           <dl className="issued-document-meta">
             <div>
@@ -105,6 +110,7 @@ export function MedicalCertificateSheet({
           <DocumentLetterhead
             clinic={certificate.clinic}
             doctor={certificate.doctor}
+            fontSize={documentFontSize}
           />
           <h3 className="issued-document-title">Medical certificate</h3>
           <dl className="issued-document-meta issued-document-meta-four">

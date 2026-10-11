@@ -40,9 +40,12 @@ export type PdfOutputState =
 
 export function CompletedPrescriptionView({
   snapshot,
+  printOnOpen = false,
   onStartAnother,
 }: {
   snapshot: CompletedPrescriptionSnapshot;
+  /** Print as soon as the completed prescription is on screen. */
+  printOnOpen?: boolean;
   onStartAnother: () => Promise<void>;
 }) {
   const [nextConsultationState, setNextConsultationState] = useState<
@@ -77,6 +80,21 @@ export function CompletedPrescriptionView({
   const documentPrinting = useDocumentPrinting(
     "The print dialog did not open. Try again or download the PDF.",
   );
+  const printedOnOpenRef = useRef(false);
+  const { print } = documentPrinting;
+  useEffect(() => {
+    if (!printOnOpen || printedOnOpenRef.current) return;
+    // Wait for the completed page to be painted: that is what gets printed.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        printedOnOpenRef.current = true;
+        print();
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+    // `print` is a new function on every render; this runs once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printOnOpen]);
   const completedStatusRef = useRef<HTMLDivElement>(null);
   const downloadButtonRef = useRef<HTMLButtonElement>(null);
   const retryPdfButtonRef = useRef<HTMLButtonElement>(null);

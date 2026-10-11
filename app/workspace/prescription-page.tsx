@@ -1,6 +1,12 @@
 "use client";
 
-import { Check, FloppyDisk, WarningCircle, X } from "@phosphor-icons/react";
+import {
+  Check,
+  FloppyDisk,
+  Printer,
+  WarningCircle,
+  X,
+} from "@phosphor-icons/react";
 import { useMemo, useRef, useState } from "react";
 import {
   advice,
@@ -18,6 +24,7 @@ import {
   type PatientRecord,
   type PatientSex,
   type PrescribedMedicine,
+  withPrescriptionType,
 } from "../consultation-model";
 import {
   validateConsultation,
@@ -43,7 +50,7 @@ import { Shell } from "./shell";
 export function getVisitTypeLabel(visitType: Consultation["visitType"]) {
   if (visitType === "new") return "New consultation";
   if (visitType === "followup") return "Follow-up consultation";
-  return "Prescription type needed";
+  return "Type not chosen: new";
 }
 
 const doseOptions = ["1–0–1", "1–0–0", "0–0–1", "1–1–1", "0–1–0", "As needed"];
@@ -87,15 +94,19 @@ function ConsultationHeader({
   savedAt,
   patientName,
   visitType,
+  completing,
   onSave,
   onReview,
+  onPrint,
 }: {
   state: DraftSaveState;
   savedAt: string | null;
   patientName: string;
   visitType: Consultation["visitType"];
+  completing: boolean;
   onSave: () => Promise<void>;
   onReview: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onPrint: () => void;
 }) {
   const isFailed = state === "failed";
   return (
@@ -136,11 +147,20 @@ function ConsultationHeader({
         </button>
         <button
           type="button"
-          className="btn btn-primary desktop-review-action"
-          disabled={state === "loading"}
+          className="btn btn-secondary desktop-review-action"
+          disabled={state === "loading" || completing}
           onClick={onReview}
         >
           Review prescription
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary desktop-review-action"
+          disabled={state === "loading" || completing}
+          onClick={onPrint}
+        >
+          <Printer size={16} weight="bold" aria-hidden="true" />
+          {completing ? "Completing prescription…" : "Print prescription"}
         </button>
       </div>
     </section>
@@ -166,8 +186,10 @@ export function PrescriptionPage() {
   } = useConsultationDraft();
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewAttempted, setReviewAttempted] = useState(false);
+  const [printAttempted, setPrintAttempted] = useState(false);
+  const [printOnCompletion, setPrintOnCompletion] = useState(false);
   const reviewProblems = useMemo(
-    () => validateConsultation(consultation),
+    () => validateConsultation(withPrescriptionType(consultation)),
     [consultation],
   );
   const errorFor = (fieldId: string) =>
@@ -190,6 +212,23 @@ export function PrescriptionPage() {
       field?.scrollIntoView({ block: "center" });
       field?.focus();
     });
+  };
+  // Completes the prescription and sends it to the printer in one step.
+  const printPrescription = () => {
+    setReviewAttempted(true);
+    setPrintAttempted(true);
+    const [problem] = reviewProblems;
+    if (problem) {
+      // The earlier prescription can only be chosen once the patient is.
+      const waitsForPatient =
+        problem.fieldId === "prior-visit" && !consultation.patient.patientId;
+      focusProblem(
+        waitsForPatient ? { ...problem, fieldId: "patient-name" } : problem,
+      );
+      return;
+    }
+    setPrintOnCompletion(true);
+    void completePrescription();
   };
   const clinicalEntryBlocked =
     saveState === "loading" ||
@@ -287,10 +326,13 @@ export function PrescriptionPage() {
       >
         <CompletedPrescriptionView
           snapshot={completedSnapshot}
+          printOnOpen={printOnCompletion}
           onStartAnother={async () => {
             await startAnotherConsultation();
             setReviewOpen(false);
             setReviewAttempted(false);
+            setPrintAttempted(false);
+            setPrintOnCompletion(false);
             window.requestAnimationFrame(() =>
               document.getElementById("prescription-type-new")?.focus(),
             );
@@ -316,9 +358,21 @@ export function PrescriptionPage() {
           savedAt={savedAt}
           patientName={patient.name}
           visitType={consultation.visitType}
+          completing={completionState === "completing"}
           onSave={saveDraft}
           onReview={openReview}
+          onPrint={printPrescription}
         />
+        {printAttempted && !reviewOpen && reviewProblems.length > 0 && (
+          <p role="alert" className="notice notice-error mb-3 font-semibold">
+            {reviewProblems[0].message}
+          </p>
+        )}
+        {completionState === "failed" && !reviewOpen && (
+          <p role="alert" className="notice notice-error mb-3 font-semibold">
+            Prescription could not be completed. Your draft is still here.
+          </p>
+        )}
         <div className="rx-workspace">
           <section aria-label="Consultation form" className="panel rx-form">
             <div className="panel-section">
@@ -985,16 +1039,27 @@ export function PrescriptionPage() {
             </span>
           </p>
         </div>
-        <button
-          type="button"
-          aria-label="Review prescription"
-          className="btn btn-primary"
-          disabled={saveState === "loading"}
-          onClick={openReview}
-        >
-          <span className="mobile-review-label-short">Review</span>
-          <span className="mobile-review-label-long">Review prescription</span>
-        </button>
+        <div className="mobile-consultation-buttons">
+          <button
+            type="button"
+            aria-label="Review prescription"
+            className="btn btn-secondary"
+            disabled={saveState === "loading" || completionState === "completing"}
+            onClick={openReview}
+          >
+            Review
+          </button>
+          <button
+            type="button"
+            aria-label="Print prescription"
+            className="btn btn-primary"
+            disabled={saveState === "loading" || completionState === "completing"}
+            onClick={printPrescription}
+          >
+            <Printer size={16} weight="bold" aria-hidden="true" />
+            Print
+          </button>
+        </div>
       </aside>
       {reviewOpen && (
         <PrescriptionReviewDialog

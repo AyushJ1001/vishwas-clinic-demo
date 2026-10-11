@@ -17,6 +17,7 @@ import {
   formatPrescriptionPatientLine,
   formatPrescriptionVitals,
   prescriptionTypography,
+  singleLineSize,
   type PrescriptionTextScale,
 } from "./prescription-document";
 
@@ -222,6 +223,49 @@ function drawPlannedLines(
   return top - lines.length * lineHeight;
 }
 
+type GlyphBytes = Uint8Array & {
+  constructor: {
+    alloc(size: number): GlyphBytes;
+    concat(parts: GlyphBytes[]): GlyphBytes;
+  };
+};
+type FontSubset = {
+  glyf: GlyphBytes[];
+  offset: number;
+  _addGlyph?: (glyphId: number) => number;
+};
+
+// fontkit copies each glyph into an embedded font at its original length, but
+// the glyph index it writes can only point at even offsets. Noto Sans has
+// odd-length glyphs, so every glyph after one was read a byte early and drawn
+// blank: the PDF's text stayed selectable while the page showed scattered
+// letters. Padding each glyph to an even length keeps the index true.
+const evenGlyphFontkit: typeof fontkit = {
+  ...fontkit,
+  create(...args: Parameters<typeof fontkit.create>) {
+    const font = fontkit.create(...args);
+    const createSubset = font.createSubset.bind(font);
+    font.createSubset = () => {
+      const subset = createSubset();
+      const padded = subset as unknown as FontSubset;
+      const addGlyph = padded._addGlyph?.bind(padded);
+      if (!addGlyph) return subset;
+      padded._addGlyph = (glyphId) => {
+        const index = addGlyph(glyphId);
+        const glyph = padded.glyf[index];
+        if (glyph.length % 2) {
+          const Bytes = glyph.constructor;
+          padded.glyf[index] = Bytes.concat([glyph, Bytes.alloc(1)]);
+          padded.offset += 1;
+        }
+        return index;
+      };
+      return subset;
+    };
+    return font;
+  },
+};
+
 function drawPage(
   pdfPage: PDFPage,
   documentPage: PrescriptionDocumentPage,
@@ -336,7 +380,22 @@ function drawPage(
   }
   rule(maroon);
 
-  wrapped(documentPage.clinic.address, regular, "center");
+  const address = documentPage.clinic.address.trim();
+  if (address) {
+    // One line, at the size that fits the page width, as on screen.
+    const addressSize = singleLineSize(address, fontSize);
+    drawText(
+      pdfPage,
+      address,
+      (pageWidth - textWidth(address, regular, fonts, addressSize)) / 2,
+      top - baselineOffset(addressSize, lineHeight),
+      addressSize,
+      regular,
+      fonts,
+      ink,
+    );
+    top -= lineHeight;
+  }
   wrapped(documentPage.clinic.hours, regular, "center");
   wrapped(documentPage.clinic.services, regular, "center");
   rule(maroon);
@@ -529,7 +588,7 @@ export async function generatePrescriptionPdf(
         : Promise.resolve(null),
     ]);
   const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
+  pdf.registerFontkit(evenGlyphFontkit);
   pdf.setTitle(`Prescription for ${document.pages[0].patient.name}`);
   pdf.setSubject(`Completed prescription ${document.snapshotId}`);
   pdf.setCreator("Vishwas Clinic");
