@@ -442,3 +442,40 @@ test("a Phone-issued record the Clinic PC cannot read holds nothing else back", 
   await app.close();
   await stop(cloud.server);
 });
+
+test("a device key entered in Settings connects this PC and is remembered", async () => {
+  const cloud = await startCloudCopy();
+  const environment = {
+    CLINIC_CLOUD_URL: cloud.url,
+    CLINIC_SYNC_DEVICE_KEY: "",
+    CLINIC_SYNC_INTERVAL_MS: "100",
+  };
+  let app = await launchClinicPc(dataDirectory, environment);
+  let window = await openPage(app, "/settings");
+  const sync = () => window.getByRole("region", { name: "Sync" });
+
+  await expect(sync()).toContainText("Not connected to the cloud yet");
+  await sync().getByLabel("Device key").fill("not-the-key");
+  await sync().getByRole("button", { name: "Connect to the cloud" }).click();
+  await expect(sync().getByRole("alert")).toContainText(
+    "did not accept that device key",
+  );
+
+  await sync().getByLabel("Device key").fill(deviceKey);
+  await sync().getByRole("button", { name: "Connect to the cloud" }).click();
+  await expect(sync()).toContainText("This computer is connected to the cloud.");
+  await expect(sync()).toContainText("All changes sent");
+  await app.close();
+
+  app = await launchClinicPc(dataDirectory, environment);
+  window = await app.firstWindow();
+  await expect(window.getByRole("status")).toContainText("Saved", {
+    timeout: 15_000,
+  });
+  await completePrescription(window, `Settings Sync ${Date.now().toString(36)}`);
+  await expect
+    .poll(() => cloud.received.map((change) => change.entityKind).sort())
+    .toEqual(["patient", "prescription"]);
+  await app.close();
+  await stop(cloud.server);
+});

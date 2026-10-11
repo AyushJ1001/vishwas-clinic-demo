@@ -1,5 +1,8 @@
+import { safeStorage } from "electron";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import path from "node:path";
 
 import {
   clinicSyncBatchLimit,
@@ -9,7 +12,10 @@ import {
   type ConfirmedPhoneIssuedRecord,
   type PhoneIssuedRecord,
 } from "../../app/sync-model";
-import type { ClinicSyncStatus } from "../../app/clinic-pc";
+import type {
+  ClinicSyncConnectResult,
+  ClinicSyncStatus,
+} from "../../app/clinic-pc";
 import {
   consultationDraftsTableSql,
   medicalCertificateIndexesSql,
@@ -22,6 +28,10 @@ import {
 import type { LocalQuery } from "../shared/local-database-protocol";
 import type { LocalDatabase } from "./local-database";
 
+declare const __CLINIC_BUILT_IN_DEVICE_KEY__: string;
+
+// The deployed Cloud copy. CLINIC_CLOUD_URL points tests at a stand-in.
+const defaultCloudAddress = "https://vishwas-clinic-demo.ayush-j1001.workers.dev";
 const defaultIntervalMs = 5_000;
 const requestTimeoutMs = 5_000;
 const sentRetentionDays = 7;
@@ -32,6 +42,12 @@ type OutboxRow = {
   record_json: string;
   recorded_at: string;
 };
+
+class CloudRefusal extends Error {
+  constructor(readonly statusCode: number) {
+    super(`The Cloud copy returned ${statusCode}.`);
+  }
+}
 
 function query(sql: string, params: unknown[] = []): LocalQuery {
   return { sql, params, mode: "all" };
@@ -63,8 +79,9 @@ function responseBody(
           if (received.length > 1_000_000) request.destroy();
         });
         response.on("end", () => {
-          if ((response.statusCode ?? 500) < 200 || (response.statusCode ?? 500) >= 300) {
-            reject(new Error(`The Cloud copy returned ${response.statusCode}.`));
+          const statusCode = response.statusCode ?? 500;
+          if (statusCode < 200 || statusCode >= 300) {
+            reject(new CloudRefusal(statusCode));
             return;
           }
           resolve(received);
@@ -116,13 +133,25 @@ export class ClinicSync {
   private running = false;
   private stopped = true;
   private timer: NodeJS.Timeout | null = null;
-  private readonly cloudAddress = process.env.CLINIC_CLOUD_URL?.trim() ?? "";
-  private readonly deviceKey = process.env.CLINIC_SYNC_DEVICE_KEY ?? "";
+  private readonly cloudAddress =
+    process.env.CLINIC_CLOUD_URL?.trim() || defaultCloudAddress;
+  private readonly deviceKeyFile: string;
+  private deviceKey = "";
+  private deviceKeyRejected = false;
 
-  constructor(private readonly database: LocalDatabase) {}
+  constructor(
+    private readonly database: LocalDatabase,
+    dataDirectory: string,
+  ) {
+    this.deviceKeyFile = path.join(dataDirectory, "sync-device-key.bin");
+  }
 
   start() {
     this.stopped = false;
+    this.deviceKey =
+      process.env.CLINIC_SYNC_DEVICE_KEY ||
+      this.storedDeviceKey() ||
+      __CLINIC_BUILT_IN_DEVICE_KEY__;
     const configuredInterval = Number(process.env.CLINIC_SYNC_INTERVAL_MS);
     const interval =
       Number.isSafeInteger(configuredInterval) && configuredInterval >= 50
@@ -149,10 +178,10 @@ export class ClinicSync {
     ).rows[0] as
       | { last_succeeded_at: string | null; last_failed_at: string | null }
       | undefined;
-    const setupIssue = !this.cloudAddress
-      ? "cloud-address"
-      : !this.deviceKey
-        ? "device-key"
+    const setupIssue = !this.deviceKey
+      ? "device-key"
+      : this.deviceKeyRejected
+        ? "device-key-rejected"
         : null;
     return {
       configured: setupIssue === null,
@@ -161,6 +190,49 @@ export class ClinicSync {
       lastSucceededAt: state?.last_succeeded_at ?? null,
       lastFailedAt: state?.last_failed_at ?? null,
     };
+  }
+
+  /** Checks a device key with the Cloud copy and keeps it if it is accepted. */
+  async connect(deviceKey: string): Promise<ClinicSyncConnectResult> {
+    const candidate = typeof deviceKey === "string" ? deviceKey.trim() : "";
+    if (!candidate) return { status: "wrong-key" };
+    try {
+      await responseBody(
+        new URL("/api/sync", this.cloudAddress),
+        candidate,
+        JSON.stringify({ changes: [], collected: [] }),
+      );
+    } catch (error) {
+      return error instanceof CloudRefusal && error.statusCode === 401
+        ? { status: "wrong-key" }
+        : { status: "unreachable" };
+    }
+    // Kept on this PC (protected by Windows for this user where available)
+    // so the key is typed once.
+    const stored = safeStorage.isEncryptionAvailable()
+      ? Buffer.concat([Buffer.from("E"), safeStorage.encryptString(candidate)])
+      : Buffer.concat([Buffer.from("P"), Buffer.from(candidate)]);
+    writeFileSync(this.deviceKeyFile, stored);
+    this.deviceKey = candidate;
+    this.deviceKeyRejected = false;
+    this.database.query(
+      query("UPDATE clinic_sync_state SET last_failed_at = NULL WHERE singleton = 1"),
+    );
+    void this.tick();
+    return { status: "connected" };
+  }
+
+  private storedDeviceKey() {
+    if (!existsSync(this.deviceKeyFile)) return null;
+    try {
+      const stored = readFileSync(this.deviceKeyFile);
+      const body = stored.subarray(1);
+      return stored[0] === "E".charCodeAt(0)
+        ? safeStorage.decryptString(body)
+        : body.toString();
+    } catch {
+      return null;
+    }
   }
 
   private pendingChanges() {
@@ -448,7 +520,7 @@ export class ClinicSync {
     this.running = true;
     try {
       this.dropOldSentRows();
-      if (!this.cloudAddress || !this.deviceKey) return;
+      if (!this.deviceKey) return;
       const changes = this.pendingChanges();
       const endpoint = new URL("/api/sync", this.cloudAddress);
       const raw = await responseBody(
@@ -456,6 +528,7 @@ export class ClinicSync {
         this.deviceKey,
         JSON.stringify({ changes, collected: [] }),
       );
+      this.deviceKeyRejected = false;
       const parsed = this.parseSyncResponse(raw);
       if (this.stopped) return;
       const expected = new Set(
@@ -560,8 +633,19 @@ export class ClinicSync {
           ),
         );
       }
-    } catch {
+    } catch (error) {
       if (this.stopped) return;
+      if (error instanceof CloudRefusal && error.statusCode === 401) {
+        // A key from an older setup gives way to the one this build carries.
+        if (
+          __CLINIC_BUILT_IN_DEVICE_KEY__ &&
+          this.deviceKey !== __CLINIC_BUILT_IN_DEVICE_KEY__
+        ) {
+          this.deviceKey = __CLINIC_BUILT_IN_DEVICE_KEY__;
+        } else {
+          this.deviceKeyRejected = true;
+        }
+      }
       const failedAt = new Date().toISOString();
       this.database.query(
         query(

@@ -139,6 +139,9 @@ function connectUpdates(updates: Updates) {
 
 function connectSync(sync: ClinicSync) {
   ipcMain.handle(syncChannels.status, () => sync.status());
+  ipcMain.handle(syncChannels.connect, (_event, deviceKey: string) =>
+    sync.connect(deviceKey),
+  );
 }
 
 function keepDailyBackups(backups: Backups) {
@@ -199,7 +202,7 @@ if (!app.requestSingleInstanceLock()) {
   );
   const backups = new Backups(database, clinicDataDirectory);
   const printing = new Printing(clinicDataDirectory);
-  const sync = new ClinicSync(database);
+  const sync = new ClinicSync(database, clinicDataDirectory);
   const updates = new Updates(backups, clinicDataDirectory);
   let mainWindow: BrowserWindow | null = null;
 

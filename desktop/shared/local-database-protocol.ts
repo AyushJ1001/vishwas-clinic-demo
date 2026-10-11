@@ -71,4 +71,5 @@ export const updateChannels = {
 
 export const syncChannels = {
   status: "clinic-sync:status",
+  connect: "clinic-sync:connect",
 } as const;

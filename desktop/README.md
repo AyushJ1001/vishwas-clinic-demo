@@ -8,10 +8,16 @@ The desktop app reuses the web app's UI (`app/`) and its API routes and database
 - `renderer/shims/` stand in for `cloudflare:workers` and the `next/*` modules in the desktop build. The `DB` binding is `renderer/local-d1.ts`, a D1-compatible handle that sends SQL to the main process.
 - `src/` is the main process. It serves the UI from the `clinic://app` scheme, blocks every remote request, and keeps Clinic records in `clinic.sqlite` under `%APPDATA%\Vishwas Clinic\data`. Set `CLINIC_DATA_DIR` to use another folder.
 
-To send Clinic record changes to the Cloud copy, set `CLINIC_CLOUD_URL` to
-the deployed site's origin and set `CLINIC_SYNC_DEVICE_KEY` to the same secret
-value configured for the Cloudflare Worker. The Clinic PC sends in the
-background; neither setting is needed for offline work.
+An installed copy sends Clinic record changes to the Cloud copy with no setup.
+The Cloud copy's address is built in, and so is the device key: the repository
+secret `CLINIC_SYNC_DEVICE_KEY`, which the deploy workflow sets on the
+Cloudflare Worker and the installer workflow builds into the app. Anyone with
+an installer can read that key out of it.
+
+A build made without the key (a dev build, or a fork's) asks for it under
+Settings, checks it with the Cloud copy and keeps it in `sync-device-key.bin`
+in the data folder. Set `CLINIC_CLOUD_URL` and `CLINIC_SYNC_DEVICE_KEY` to
+point a dev or test build somewhere else.
 
 ## Commands
 
